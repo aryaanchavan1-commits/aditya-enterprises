@@ -83,6 +83,7 @@ async function initSchema() {
     try { await turso.execute(sql); } catch (e) {}
   }
   await seedIfEmpty();
+  await migrateLegacyData();
 }
 
 async function seedIfEmpty() {
@@ -141,4 +142,62 @@ async function all(sql, params = []) {
   return await query(sql, params);
 }
 
-module.exports = { getDb, query, run, get, all, dataDir: DATA_DIR };
+function cleanValue(val) {
+  if (typeof val !== 'string') return val;
+  let parsed = val;
+  for (let i = 0; i < 10; i++) {
+    try {
+      const obj = JSON.parse(parsed);
+      if (obj && typeof obj === 'object' && 'value' in obj) {
+        parsed = obj.value;
+      } else {
+        break;
+      }
+    } catch (e) {
+      break;
+    }
+  }
+  if (typeof parsed === 'string' && parsed !== val) return cleanValue(parsed);
+  return parsed;
+}
+
+function cleanRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  const clean = {};
+  for (const [k, v] of Object.entries(row)) {
+    clean[k] = cleanValue(v);
+  }
+  return clean;
+}
+
+async function migrateLegacyData() {
+  try {
+    const r = await turso.execute("SELECT id, name, description, hsn_code, serial_number, barcode, image, barcode_image FROM products WHERE name LIKE '{%' LIMIT 1");
+    if (r.rows.length === 0) return;
+    const allProducts = await turso.execute('SELECT id, name, description, hsn_code, serial_number, barcode, image, barcode_image FROM products');
+    for (const row of allProducts.rows) {
+      const updates = [];
+      const params = [];
+      for (const col of ['name', 'description', 'hsn_code', 'serial_number', 'barcode', 'image', 'barcode_image']) {
+        const cleaned = cleanValue(row[col]);
+        if (cleaned !== row[col]) {
+          updates.push(`${col} = ?`);
+          params.push(cleaned);
+        }
+      }
+      if (updates.length > 0) {
+        params.push(row.id);
+        await turso.execute({ sql: `UPDATE products SET ${updates.join(', ')} WHERE id = ?`, args: params });
+      }
+    }
+    const allSettings = await turso.execute('SELECT key, value FROM settings');
+    for (const row of allSettings.rows) {
+      const cleaned = cleanValue(row.value);
+      if (cleaned !== row.value) {
+        await turso.execute({ sql: 'UPDATE settings SET value = ? WHERE key = ?', args: [cleaned, row.key] });
+      }
+    }
+  } catch (e) { console.warn('Legacy migration:', e.message); }
+}
+
+module.exports = { getDb, query, run, get, all, dataDir: DATA_DIR, cleanRow, cleanValue };

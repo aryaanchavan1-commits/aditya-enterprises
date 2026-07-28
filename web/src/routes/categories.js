@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { get, all, run } = require('../db');
+const { get, all, run, cleanRow } = require('../db');
 
 router.get('/', async (req, res) => {
   try {
@@ -8,8 +8,8 @@ router.get('/', async (req, res) => {
     const result = [];
     for (const cat of categories) {
       result.push({
-        ...cat,
-        subcategories: await all('SELECT * FROM subcategories WHERE category_id = ? ORDER BY id', [cat.id]),
+        ...cleanRow(cat),
+        subcategories: (await all('SELECT * FROM subcategories WHERE category_id = ? ORDER BY id', [cat.id])).map(cleanRow),
         product_count: (await get('SELECT COUNT(*) as c FROM products WHERE category_id = ?', [cat.id])).c
       });
     }

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { get, all, run } = require('../db');
+const { get, all, run, cleanRow } = require('../db');
 const bwipjs = require('bwip-js');
 const path = require('path');
 const fs = require('fs');
@@ -23,7 +23,8 @@ router.get('/', async (req, res) => {
     if (subcategory_id) { sql += ` AND p.subcategory_id = ?`; params.push(subcategory_id); }
     if (low_stock === 'true') { sql += ` AND p.quantity <= 5`; }
     sql += ` ORDER BY p.updated_at DESC`;
-    res.json({ success: true, data: await all(sql, params) });
+    const data = (await all(sql, params)).map(cleanRow);
+    res.json({ success: true, data });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
@@ -31,7 +32,7 @@ router.get('/:id', async (req, res) => {
   try {
     const product = await get(`SELECT p.*, c.name as category_name, sc.name as subcategory_name FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN subcategories sc ON p.subcategory_id = sc.id WHERE p.id = ?`, [req.params.id]);
     if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
-    res.json({ success: true, data: product });
+    res.json({ success: true, data: cleanRow(product) });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
