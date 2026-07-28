@@ -29,7 +29,10 @@ class SyncService @Inject constructor(
         private const val KEY_LAST_SYNC = "last_sync_time"
     }
 
-    fun isSyncConfigured(): Boolean = syncManager.isConfigured
+    fun isSyncConfigured(): Boolean {
+        kotlinx.coroutines.runBlocking { syncManager.configureFromSettings() }
+        return syncManager.isConfigured
+    }
 
     fun lastSyncTime(): Long? {
         val time = prefs.getLong(KEY_LAST_SYNC, -1L)

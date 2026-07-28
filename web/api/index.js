@@ -108,8 +108,11 @@ app.get('/api/status', async (req, res) => {
   });
 });
 
-app.use('/api/*', (req, res) => {
-  res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
+  }
+  next();
 });
 
 app.use((err, req, res, next) => {

@@ -37,6 +37,7 @@ import com.arynoxtech.erp.ui.screens.lock.LockScreen
 import com.arynoxtech.erp.ui.screens.settings.SettingsViewModel
 import com.arynoxtech.erp.service.SyncService
 import com.arynoxtech.erp.ui.theme.ArynoxTechERPTheme
+import com.arynoxtech.erp.data.local.datastore.SettingsDataStore
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

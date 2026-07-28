@@ -70,7 +70,9 @@ class SettingsViewModel @Inject constructor(
         val isSaving: Boolean = false,
         val error: String? = null,
         val successMessage: String? = null,
-        val fatalError: String? = null
+        val fatalError: String? = null,
+        val tursoUrl: String = "",
+        val tursoAuthToken: String = ""
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -129,7 +131,9 @@ class SettingsViewModel @Inject constructor(
                     groqApiKey = settings.groqApiKey,
                     isAiEnabled = settings.isAiEnabled,
                     themeMode = settings.themeMode,
-                    language = settings.language
+                    language = settings.language,
+                    tursoUrl = settings.tursoUrl,
+                    tursoAuthToken = settings.tursoAuthToken
                 ) }
                 groqAiService.setApiKey(settings.groqApiKey)
             }
@@ -233,6 +237,19 @@ class SettingsViewModel @Inject constructor(
                 connectedDevice = null,
                 successMessage = "Disconnected"
             ) }
+        }
+    }
+
+    fun saveTursoCredentials(url: String, token: String) {
+        _uiState.update { it.copy(isSaving = true) }
+        settingsDataStore.update { it.copy(tursoUrl = url, tursoAuthToken = token) }
+        _uiState.update {
+            it.copy(
+                isSaving = false,
+                tursoUrl = url,
+                tursoAuthToken = token,
+                successMessage = "Database credentials saved"
+            )
         }
     }
 

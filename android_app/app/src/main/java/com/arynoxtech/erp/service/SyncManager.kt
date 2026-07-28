@@ -2,11 +2,12 @@ package com.arynoxtech.erp.service
 
 import android.util.Log
 import com.arynoxtech.erp.data.local.*
-import com.arynoxtech.erp.data.supabase.SupabaseClient
+import com.arynoxtech.erp.data.local.datastore.SettingsDataStore
+import com.arynoxtech.erp.data.turso.EntitySqlMapper
+import com.arynoxtech.erp.data.turso.TursoClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,7 +21,8 @@ data class SyncProgress(
 
 @Singleton
 class SyncManager @Inject constructor(
-    private val supabase: SupabaseClient,
+    private val tursoClient: TursoClient,
+    private val settingsDataStore: SettingsDataStore,
     private val connectivityObserver: ConnectivityObserver,
     private val productDao: ProductDao,
     private val categoryDao: CategoryDao,
@@ -34,12 +36,18 @@ class SyncManager @Inject constructor(
 ) {
 
     val isOnline: Boolean get() = connectivityObserver.isCurrentlyOnline()
-    val isConfigured: Boolean get() = supabase.isConfigured()
+    val isConfigured: Boolean get() = tursoClient.isConfigured()
+
+    suspend fun configureFromSettings() {
+        val settings = settingsDataStore.settings.first()
+        tursoClient.configure(settings.tursoUrl, settings.tursoAuthToken)
+    }
 
     suspend fun pullAll(): Result<SyncProgress> = withContext(Dispatchers.IO) {
-        if (!supabase.isConfigured()) {
-            Log.w("SyncManager", "Supabase not configured")
-            return@withContext Result.success(SyncProgress(message = "Supabase not configured"))
+        configureFromSettings()
+        if (!tursoClient.isConfigured()) {
+            Log.w("SyncManager", "Turso not configured - go to Settings and enter database credentials")
+            return@withContext Result.success(SyncProgress(message = "Turso not configured"))
         }
         try {
             pullProducts()
@@ -59,7 +67,8 @@ class SyncManager @Inject constructor(
     }
 
     suspend fun pushAll(): Result<SyncProgress> = withContext(Dispatchers.IO) {
-        if (!isOnline || !supabase.isConfigured()) {
+        configureFromSettings()
+        if (!isOnline || !tursoClient.isConfigured()) {
             Log.w("SyncManager", "Offline or not configured")
             return@withContext Result.success(SyncProgress(message = "Offline or not configured"))
         }
@@ -80,8 +89,8 @@ class SyncManager @Inject constructor(
         val products = productDao.getAll().first()
         Log.d("SyncManager", "pushProducts: ${products.size} products")
         if (products.isNotEmpty()) {
-            val records = products.map { supabase.productToJson(it) }
-            val result = supabase.upsert("products", records)
+            val statements = products.map { EntitySqlMapper.productToSql(it) }
+            val result = tursoClient.executeBatch(statements)
             Log.d("SyncManager", "pushProducts result: ${result.isSuccess}")
             if (result.isFailure) Log.e("SyncManager", "pushProducts error: ${result.exceptionOrNull()?.message}")
         }
@@ -91,8 +100,8 @@ class SyncManager @Inject constructor(
         val items = categoryDao.getAll().first()
         Log.d("SyncManager", "pushCategories: ${items.size} categories")
         if (items.isNotEmpty()) {
-            val records = items.map { supabase.categoryToJson(it) }
-            val result = supabase.upsert("categories", records)
+            val statements = items.map { EntitySqlMapper.categoryToSql(it) }
+            val result = tursoClient.executeBatch(statements)
             Log.d("SyncManager", "pushCategories result: ${result.isSuccess}")
             if (result.isFailure) Log.e("SyncManager", "pushCategories error: ${result.exceptionOrNull()?.message}")
         }
@@ -102,8 +111,8 @@ class SyncManager @Inject constructor(
         val items = brandDao.getAll().first()
         Log.d("SyncManager", "pushBrands: ${items.size} brands")
         if (items.isNotEmpty()) {
-            val records = items.map { supabase.brandToJson(it) }
-            val result = supabase.upsert("brands", records)
+            val statements = items.map { EntitySqlMapper.brandToSql(it) }
+            val result = tursoClient.executeBatch(statements)
             Log.d("SyncManager", "pushBrands result: ${result.isSuccess}")
             if (result.isFailure) Log.e("SyncManager", "pushBrands error: ${result.exceptionOrNull()?.message}")
         }
@@ -113,8 +122,8 @@ class SyncManager @Inject constructor(
         val items = supplierDao.getAll().first()
         Log.d("SyncManager", "pushSuppliers: ${items.size} suppliers")
         if (items.isNotEmpty()) {
-            val records = items.map { supabase.supplierToJson(it) }
-            val result = supabase.upsert("suppliers", records)
+            val statements = items.map { EntitySqlMapper.supplierToSql(it) }
+            val result = tursoClient.executeBatch(statements)
             Log.d("SyncManager", "pushSuppliers result: ${result.isSuccess}")
             if (result.isFailure) Log.e("SyncManager", "pushSuppliers error: ${result.exceptionOrNull()?.message}")
         }
@@ -124,285 +133,365 @@ class SyncManager @Inject constructor(
         val items = customerDao.getAll().first()
         Log.d("SyncManager", "pushCustomers: ${items.size} customers")
         if (items.isNotEmpty()) {
-            val records = items.map { supabase.customerToJson(it) }
-            val result = supabase.upsert("customers", records)
+            val statements = items.map { EntitySqlMapper.customerToSql(it) }
+            val result = tursoClient.executeBatch(statements)
             Log.d("SyncManager", "pushCustomers result: ${result.isSuccess}")
             if (result.isFailure) Log.e("SyncManager", "pushCustomers error: ${result.exceptionOrNull()?.message}")
         }
     }
 
     private suspend fun pullProducts() {
-        val result = supabase.fetchAll("products")
+        val result = tursoClient.execute("SELECT * FROM products")
         if (result.isFailure) {
             Log.e("SyncManager", "pullProducts error: ${result.exceptionOrNull()?.message}")
             return
         }
-        val rows = result.getOrNull() ?: return
+        val data = result.getOrNull() ?: return
+        if (data.size < 2) return
+        val cols = data[0] as? List<String> ?: return
+        val rows = data[1] as? List<List<Any?>> ?: return
         Log.d("SyncManager", "pullProducts: ${rows.size} rows")
-        rows.forEach { json ->
-            val entity = supabase.jsonToProduct(json)
+        rows.forEach { vals ->
+            val entity = rowToProduct(cols, vals)
             if (entity != null) productDao.upsert(entity)
         }
     }
 
     private suspend fun pullCategories() {
-        val result = supabase.fetchAll("categories")
-        if (result.isFailure) {
-            Log.e("SyncManager", "pullCategories error: ${result.exceptionOrNull()?.message}"); return
-        }
-        val rows = result.getOrNull() ?: return
-        Log.d("SyncManager", "pullCategories: ${rows.size} rows")
-        rows.forEach { json ->
-            val entity = supabase.jsonToCategory(json)
-            if (entity != null) categoryDao.insert(entity)
+        val result = tursoClient.execute("SELECT * FROM categories")
+        if (result.isFailure) { Log.e("SyncManager", "pullCategories error: ${result.exceptionOrNull()?.message}"); return }
+        val data = result.getOrNull() ?: return
+        if (data.size < 2) return
+        val cols = data[0] as? List<String> ?: return
+        val rows = data[1] as? List<List<Any?>> ?: return
+        rows.forEach { vals ->
+            rowToCategory(cols, vals)?.let { categoryDao.insert(it) }
         }
     }
 
     private suspend fun pullBrands() {
-        val result = supabase.fetchAll("brands")
-        if (result.isFailure) {
-            Log.e("SyncManager", "pullBrands error: ${result.exceptionOrNull()?.message}"); return
-        }
-        val rows = result.getOrNull() ?: return
-        Log.d("SyncManager", "pullBrands: ${rows.size} rows")
-        rows.forEach { json ->
-            val entity = supabase.jsonToBrand(json)
-            if (entity != null) brandDao.insertAll(listOf(entity))
+        val result = tursoClient.execute("SELECT * FROM brands")
+        if (result.isFailure) { Log.e("SyncManager", "pullBrands error: ${result.exceptionOrNull()?.message}"); return }
+        val data = result.getOrNull() ?: return
+        if (data.size < 2) return
+        val cols = data[0] as? List<String> ?: return
+        val rows = data[1] as? List<List<Any?>> ?: return
+        rows.forEach { vals ->
+            rowToBrand(cols, vals)?.let { brandDao.insertAll(listOf(it)) }
         }
     }
 
     private suspend fun pullSuppliers() {
-        val result = supabase.fetchAll("suppliers")
-        if (result.isFailure) {
-            Log.e("SyncManager", "pullSuppliers error: ${result.exceptionOrNull()?.message}"); return
-        }
-        val rows = result.getOrNull() ?: return
-        Log.d("SyncManager", "pullSuppliers: ${rows.size} rows")
-        rows.forEach { json ->
-            val entity = supabase.jsonToSupplier(json)
-            if (entity != null) supplierDao.insert(entity)
+        val result = tursoClient.execute("SELECT * FROM suppliers")
+        if (result.isFailure) { Log.e("SyncManager", "pullSuppliers error: ${result.exceptionOrNull()?.message}"); return }
+        val data = result.getOrNull() ?: return
+        if (data.size < 2) return
+        val cols = data[0] as? List<String> ?: return
+        val rows = data[1] as? List<List<Any?>> ?: return
+        rows.forEach { vals ->
+            rowToSupplier(cols, vals)?.let { supplierDao.insert(it) }
         }
     }
 
     private suspend fun pullCustomers() {
-        val result = supabase.fetchAll("customers")
-        if (result.isFailure) {
-            Log.e("SyncManager", "pullCustomers error: ${result.exceptionOrNull()?.message}"); return
-        }
-        val rows = result.getOrNull() ?: return
-        Log.d("SyncManager", "pullCustomers: ${rows.size} rows")
-        rows.forEach { json ->
-            val entity = supabase.jsonToCustomer(json)
-            if (entity != null) customerDao.insert(entity)
+        val result = tursoClient.execute("SELECT * FROM customers")
+        if (result.isFailure) { Log.e("SyncManager", "pullCustomers error: ${result.exceptionOrNull()?.message}"); return }
+        val data = result.getOrNull() ?: return
+        if (data.size < 2) return
+        val cols = data[0] as? List<String> ?: return
+        val rows = data[1] as? List<List<Any?>> ?: return
+        rows.forEach { vals ->
+            rowToCustomer(cols, vals)?.let { customerDao.insert(it) }
         }
     }
 
     private suspend fun pullSales() {
-        val result = supabase.fetchAll("sales")
-        result.getOrNull()?.forEach { json ->
-            val entity = jsonToSale(json)
-            if (entity != null) saleDao.insertSale(entity)
+        val result = tursoClient.execute("SELECT * FROM sales")
+        result.getOrNull()?.let { data ->
+            if (data.size >= 2) {
+                val cols = data[0] as? List<String> ?: return@let
+                val rows = data[1] as? List<List<Any?>> ?: return@let
+                rows.forEach { rowToSale(cols, it)?.let { saleDao.insertSale(it) } }
+            }
         }
-        val itemsResult = supabase.fetchAll("sale_items")
-        itemsResult.getOrNull()?.forEach { json ->
-            val entity = jsonToSaleItem(json)
-            if (entity != null) saleDao.insertSaleItem(entity)
+        val itemsResult = tursoClient.execute("SELECT * FROM sale_items")
+        itemsResult.getOrNull()?.let { data ->
+            if (data.size >= 2) {
+                val cols = data[0] as? List<String> ?: return@let
+                val rows = data[1] as? List<List<Any?>> ?: return@let
+                rows.forEach { rowToSaleItem(cols, it)?.let { saleDao.insertSaleItem(it) } }
+            }
         }
     }
 
     private suspend fun pullPurchases() {
-        val result = supabase.fetchAll("purchases")
-        result.getOrNull()?.forEach { json ->
-            val entity = jsonToPurchase(json)
-            if (entity != null) purchaseDao.insertPurchase(entity)
+        val result = tursoClient.execute("SELECT * FROM purchases")
+        result.getOrNull()?.let { data ->
+            if (data.size >= 2) {
+                val cols = data[0] as? List<String> ?: return@let
+                val rows = data[1] as? List<List<Any?>> ?: return@let
+                rows.forEach { rowToPurchase(cols, it)?.let { purchaseDao.insertPurchase(it) } }
+            }
         }
-        val itemsResult = supabase.fetchAll("purchase_items")
-        itemsResult.getOrNull()?.forEach { json ->
-            val entity = jsonToPurchaseItem(json)
-            if (entity != null) purchaseDao.insertPurchaseItem(entity)
+        val itemsResult = tursoClient.execute("SELECT * FROM purchase_items")
+        itemsResult.getOrNull()?.let { data ->
+            if (data.size >= 2) {
+                val cols = data[0] as? List<String> ?: return@let
+                val rows = data[1] as? List<List<Any?>> ?: return@let
+                rows.forEach { rowToPurchaseItem(cols, it)?.let { purchaseDao.insertPurchaseItem(it) } }
+            }
         }
     }
 
     private suspend fun pullStockMovements() {
-        val result = supabase.fetchAll("stock_movements")
-        result.getOrNull()?.let { rows ->
-            val entities = rows.mapNotNull { jsonToStockMovement(it) }
-            if (entities.isNotEmpty()) stockMovementDao.insertAll(entities)
+        val result = tursoClient.execute("SELECT * FROM stock_movements")
+        result.getOrNull()?.let { data ->
+            if (data.size >= 2) {
+                val cols = data[0] as? List<String> ?: return@let
+                val rows = data[1] as? List<List<Any?>> ?: return@let
+                val entities = rows.mapNotNull { rowToStockMovement(cols, it) }
+                if (entities.isNotEmpty()) stockMovementDao.insertAll(entities)
+            }
         }
     }
 
     private suspend fun pullCashBook() {
-        supabase.fetchAll("cash_book").getOrNull()?.forEach { json ->
-            jsonToCashBook(json)?.let { accountingDao.insertCashEntry(it) }
+        tursoClient.execute("SELECT * FROM cash_book").getOrNull()?.let { data ->
+            if (data.size >= 2) {
+                val cols = data[0] as? List<String> ?: return@let
+                val rows = data[1] as? List<List<Any?>> ?: return@let
+                rows.forEach { rowToCashBook(cols, it)?.let { accountingDao.insertCashEntry(it) } }
+            }
         }
-        supabase.fetchAll("expenses").getOrNull()?.forEach { json ->
-            jsonToExpense(json)?.let { accountingDao.insertExpense(it) }
+        tursoClient.execute("SELECT * FROM expenses").getOrNull()?.let { data ->
+            if (data.size >= 2) {
+                val cols = data[0] as? List<String> ?: return@let
+                val rows = data[1] as? List<List<Any?>> ?: return@let
+                rows.forEach { rowToExpense(cols, it)?.let { accountingDao.insertExpense(it) } }
+            }
         }
-        supabase.fetchAll("incomes").getOrNull()?.forEach { json ->
-            jsonToIncome(json)?.let { accountingDao.insertIncome(it) }
+        tursoClient.execute("SELECT * FROM incomes").getOrNull()?.let { data ->
+            if (data.size >= 2) {
+                val cols = data[0] as? List<String> ?: return@let
+                val rows = data[1] as? List<List<Any?>> ?: return@let
+                rows.forEach { rowToIncome(cols, it)?.let { accountingDao.insertIncome(it) } }
+            }
         }
     }
 
-    private fun jsonToSale(json: JSONObject): SaleEntity? {
-        return try {
-            SaleEntity(
-                id = json.optString("id", ""),
-                invoiceNumber = json.optString("invoiceNumber", ""),
-                customerId = if (json.has("customerId") && !json.isNull("customerId")) json.optString("customerId") else null,
-                customerName = json.optString("customerName", ""),
-                customerPhone = json.optString("customerPhone", ""),
-                customerGstin = json.optString("customerGstin", ""),
-                saleDate = json.optLong("saleDate", 0L),
-                subtotal = json.optDouble("subtotal", 0.0),
-                discountAmount = json.optDouble("discountAmount", 0.0),
-                taxAmount = json.optDouble("taxAmount", 0.0),
-                cgstTotal = json.optDouble("cgstTotal", 0.0),
-                sgstTotal = json.optDouble("sgstTotal", 0.0),
-                igstTotal = json.optDouble("igstTotal", 0.0),
-                roundOff = json.optDouble("roundOff", 0.0),
-                totalAmount = json.optDouble("totalAmount", 0.0),
-                paidAmount = json.optDouble("paidAmount", 0.0),
-                balanceAmount = json.optDouble("balanceAmount", 0.0),
-                paymentMethod = json.optString("paymentMethod", ""),
-                paymentStatus = json.optString("paymentStatus", ""),
-                status = json.optString("status", ""),
-                notes = json.optString("notes", ""),
-                createdAt = json.optLong("createdAt", 0L)
-            )
-        } catch (e: Exception) { null }
+    private fun str(cols: List<String>, vals: List<Any?>, name: String): String =
+        strOrNull(cols, vals, name) ?: ""
+
+    private fun strOrNull(cols: List<String>, vals: List<Any?>, name: String): String? {
+        val idx = cols.indexOf(name)
+        if (idx < 0 || idx >= vals.size) return null
+        return vals[idx]?.toString()
     }
 
-    private fun jsonToSaleItem(json: JSONObject): SaleItemEntity? {
-        return try {
-            SaleItemEntity(
-                id = json.optString("id", ""),
-                saleId = json.optString("saleId", ""),
-                productId = json.optString("productId", ""),
-                productName = json.optString("productName", ""),
-                productSku = json.optString("productSku", ""),
-                quantity = json.optDouble("quantity", 0.0),
-                unitPrice = json.optDouble("unitPrice", 0.0),
-                discountPercent = json.optDouble("discountPercent", 0.0),
-                discountAmount = json.optDouble("discountAmount", 0.0),
-                taxableAmount = json.optDouble("taxableAmount", 0.0),
-                gstRate = json.optDouble("gstRate", 0.0),
-                cgstAmount = json.optDouble("cgstAmount", 0.0),
-                sgstAmount = json.optDouble("sgstAmount", 0.0),
-                igstAmount = json.optDouble("igstAmount", 0.0),
-                totalAmount = json.optDouble("totalAmount", 0.0)
-            )
-        } catch (e: Exception) { null }
+    private fun dbl(cols: List<String>, vals: List<Any?>, name: String): Double {
+        val idx = cols.indexOf(name)
+        if (idx < 0 || idx >= vals.size) return 0.0
+        val v = vals[idx]
+        return when (v) {
+            is Number -> v.toDouble()
+            is String -> v.toDoubleOrNull() ?: 0.0
+            else -> 0.0
+        }
     }
 
-    private fun jsonToPurchase(json: JSONObject): PurchaseEntity? {
-        return try {
-            PurchaseEntity(
-                id = json.optString("id", ""),
-                purchaseNumber = json.optString("purchaseNumber", ""),
-                supplierId = if (json.has("supplierId") && !json.isNull("supplierId")) json.optString("supplierId") else null,
-                supplierName = json.optString("supplierName", ""),
-                purchaseDate = json.optLong("purchaseDate", 0L),
-                subtotal = json.optDouble("subtotal", 0.0),
-                discountAmount = json.optDouble("discountAmount", 0.0),
-                taxAmount = json.optDouble("taxAmount", 0.0),
-                shippingCost = json.optDouble("shippingCost", 0.0),
-                otherCharges = json.optDouble("otherCharges", 0.0),
-                totalAmount = json.optDouble("totalAmount", 0.0),
-                paidAmount = json.optDouble("paidAmount", 0.0),
-                balanceAmount = json.optDouble("balanceAmount", 0.0),
-                paymentStatus = json.optString("paymentStatus", ""),
-                status = json.optString("status", ""),
-                notes = json.optString("notes", ""),
-                createdAt = json.optLong("createdAt", 0L)
-            )
-        } catch (e: Exception) { null }
+    private fun int(cols: List<String>, vals: List<Any?>, name: String): Int {
+        val idx = cols.indexOf(name)
+        if (idx < 0 || idx >= vals.size) return 0
+        val v = vals[idx]
+        return when (v) {
+            is Number -> v.toInt()
+            is String -> v.toIntOrNull() ?: 0
+            else -> 0
+        }
     }
 
-    private fun jsonToPurchaseItem(json: JSONObject): PurchaseItemEntity? {
-        return try {
-            PurchaseItemEntity(
-                id = json.optString("id", ""),
-                purchaseId = json.optString("purchaseId", ""),
-                productId = json.optString("productId", ""),
-                productName = json.optString("productName", ""),
-                quantity = json.optDouble("quantity", 0.0),
-                unitPrice = json.optDouble("unitPrice", 0.0),
-                discount = json.optDouble("discount", 0.0),
-                taxAmount = json.optDouble("taxAmount", 0.0),
-                totalAmount = json.optDouble("totalAmount", 0.0),
-                receivedQuantity = json.optDouble("receivedQuantity", 0.0)
-            )
-        } catch (e: Exception) { null }
+    private fun lng(cols: List<String>, vals: List<Any?>, name: String): Long? {
+        val idx = cols.indexOf(name)
+        if (idx < 0 || idx >= vals.size) return null
+        val v = vals[idx] ?: return null
+        return when (v) {
+            is Number -> v.toLong()
+            is String -> v.toLongOrNull()
+            else -> null
+        }
     }
 
-    private fun jsonToStockMovement(json: JSONObject): StockMovementEntity? {
-        return try {
-            StockMovementEntity(
-                id = json.optString("id", ""),
-                productId = json.optString("productId", ""),
-                productName = json.optString("productName", ""),
-                movementType = json.optString("movementType", ""),
-                quantity = json.optDouble("quantity", 0.0),
-                beforeStock = json.optDouble("beforeStock", 0.0),
-                afterStock = json.optDouble("afterStock", 0.0),
-                referenceId = json.optString("referenceId", ""),
-                referenceType = json.optString("referenceType", ""),
-                notes = json.optString("notes", ""),
-                createdAt = json.optLong("createdAt", 0L)
-            )
-        } catch (e: Exception) { null }
+    private fun bool(cols: List<String>, vals: List<Any?>, name: String): Boolean {
+        val idx = cols.indexOf(name)
+        if (idx < 0 || idx >= vals.size) return true
+        val v = vals[idx]
+        return when (v) {
+            is Boolean -> v
+            is Number -> v.toInt() != 0
+            is String -> v == "1" || v.equals("true", ignoreCase = true)
+            else -> true
+        }
     }
 
-    private fun jsonToCashBook(json: JSONObject): CashBookEntity? {
-        return try {
-            CashBookEntity(
-                id = json.optString("id", ""),
-                date = json.optLong("date", 0L),
-                voucherNumber = json.optString("voucherNumber", ""),
-                transactionType = json.optString("transactionType", ""),
-                category = json.optString("category", ""),
-                description = json.optString("description", ""),
-                amount = json.optDouble("amount", 0.0),
-                balance = json.optDouble("balance", 0.0),
-                referenceId = json.optString("referenceId", ""),
-                notes = json.optString("notes", "")
-            )
-        } catch (e: Exception) { null }
+    private fun rowToProduct(cols: List<String>, vals: List<Any?>): ProductEntity? {
+        if (vals.isEmpty()) return null
+        return ProductEntity(
+            id = str(cols, vals, "id"), name = str(cols, vals, "name"), sku = str(cols, vals, "sku"),
+            hsnCode = str(cols, vals, "hsnCode"), barcode = str(cols, vals, "barcode"),
+            description = str(cols, vals, "description"), category = str(cols, vals, "category"),
+            subCategory = str(cols, vals, "subCategory"), brand = str(cols, vals, "brand"),
+            unit = str(cols, vals, "unit"), purchasePrice = dbl(cols, vals, "purchasePrice"),
+            sellingPrice = dbl(cols, vals, "sellingPrice"), mrp = dbl(cols, vals, "mrp"),
+            discount = dbl(cols, vals, "discount"), tax = dbl(cols, vals, "tax"),
+            gstRate = dbl(cols, vals, "gstRate"), minimumStock = dbl(cols, vals, "minimumStock"),
+            maximumStock = dbl(cols, vals, "maximumStock"), openingStock = dbl(cols, vals, "openingStock"),
+            currentStock = dbl(cols, vals, "currentStock"), warehouse = str(cols, vals, "warehouse"),
+            supplier = str(cols, vals, "supplier"), location = str(cols, vals, "location"),
+            expiryDate = lng(cols, vals, "expiryDate"), manufacturingDate = lng(cols, vals, "manufacturingDate"),
+            batchNumber = str(cols, vals, "batchNumber"), notes = str(cols, vals, "notes"),
+            images = str(cols, vals, "images"), isActive = bool(cols, vals, "isActive"),
+            createdAt = lng(cols, vals, "createdAt") ?: 0L, updatedAt = lng(cols, vals, "updatedAt") ?: 0L
+        )
     }
 
-    private fun jsonToExpense(json: JSONObject): ExpenseEntity? {
-        return try {
-            ExpenseEntity(
-                id = json.optString("id", ""),
-                date = json.optLong("date", 0L),
-                category = json.optString("category", ""),
-                subCategory = json.optString("subCategory", ""),
-                description = json.optString("description", ""),
-                amount = json.optDouble("amount", 0.0),
-                paymentMethod = json.optString("paymentMethod", ""),
-                vendor = json.optString("vendor", ""),
-                receiptNumber = json.optString("receiptNumber", ""),
-                gstAmount = json.optDouble("gstAmount", 0.0),
-                notes = json.optString("notes", "")
-            )
-        } catch (e: Exception) { null }
+    private fun rowToCategory(cols: List<String>, vals: List<Any?>): CategoryEntity? {
+        if (vals.isEmpty()) return null
+        return CategoryEntity(id = str(cols, vals, "id"), name = str(cols, vals, "name"), description = str(cols, vals, "description"))
     }
 
-    private fun jsonToIncome(json: JSONObject): IncomeEntity? {
-        return try {
-            IncomeEntity(
-                id = json.optString("id", ""),
-                date = json.optLong("date", 0L),
-                category = json.optString("category", ""),
-                subCategory = json.optString("subCategory", ""),
-                description = json.optString("description", ""),
-                amount = json.optDouble("amount", 0.0),
-                paymentMethod = json.optString("paymentMethod", ""),
-                customer = json.optString("customer", ""),
-                invoiceNumber = json.optString("invoiceNumber", ""),
-                gstAmount = json.optDouble("gstAmount", 0.0),
-                notes = json.optString("notes", "")
-            )
-        } catch (e: Exception) { null }
+    private fun rowToBrand(cols: List<String>, vals: List<Any?>): BrandEntity? {
+        if (vals.isEmpty()) return null
+        return BrandEntity(id = str(cols, vals, "id"), name = str(cols, vals, "name"), description = str(cols, vals, "description"))
+    }
+
+    private fun rowToSupplier(cols: List<String>, vals: List<Any?>): SupplierEntity? {
+        if (vals.isEmpty()) return null
+        return SupplierEntity(
+            id = str(cols, vals, "id"), name = str(cols, vals, "name"), code = str(cols, vals, "code"),
+            contactPerson = str(cols, vals, "contactPerson"), email = str(cols, vals, "email"),
+            phone = str(cols, vals, "phone"), alternatePhone = str(cols, vals, "alternatePhone"),
+            gstin = str(cols, vals, "gstin"), pan = str(cols, vals, "pan"),
+            address = str(cols, vals, "address"), city = str(cols, vals, "city"),
+            state = str(cols, vals, "state"), pincode = str(cols, vals, "pincode"),
+            creditLimit = dbl(cols, vals, "creditLimit"), creditDays = int(cols, vals, "creditDays"),
+            isActive = bool(cols, vals, "isActive"), notes = str(cols, vals, "notes"),
+            createdAt = lng(cols, vals, "createdAt") ?: 0L
+        )
+    }
+
+    private fun rowToCustomer(cols: List<String>, vals: List<Any?>): CustomerEntity? {
+        if (vals.isEmpty()) return null
+        return CustomerEntity(
+            id = str(cols, vals, "id"), name = str(cols, vals, "name"), code = str(cols, vals, "code"),
+            type = str(cols, vals, "type"), email = str(cols, vals, "email"), phone = str(cols, vals, "phone"),
+            gstin = str(cols, vals, "gstin"), address = str(cols, vals, "address"),
+            city = str(cols, vals, "city"), state = str(cols, vals, "state"),
+            pincode = str(cols, vals, "pincode"), creditLimit = dbl(cols, vals, "creditLimit"),
+            creditDays = int(cols, vals, "creditDays"), isActive = bool(cols, vals, "isActive"),
+            notes = str(cols, vals, "notes"), createdAt = lng(cols, vals, "createdAt") ?: 0L
+        )
+    }
+
+    private fun rowToSale(cols: List<String>, vals: List<Any?>): SaleEntity? {
+        if (vals.isEmpty()) return null
+        return SaleEntity(
+            id = str(cols, vals, "id"), invoiceNumber = str(cols, vals, "invoiceNumber"),
+            customerId = strOrNull(cols, vals, "customerId"), customerName = str(cols, vals, "customerName"),
+            customerPhone = str(cols, vals, "customerPhone"), customerGstin = str(cols, vals, "customerGstin"),
+            saleDate = lng(cols, vals, "saleDate") ?: 0L, subtotal = dbl(cols, vals, "subtotal"),
+            discountAmount = dbl(cols, vals, "discountAmount"), taxAmount = dbl(cols, vals, "taxAmount"),
+            cgstTotal = dbl(cols, vals, "cgstTotal"), sgstTotal = dbl(cols, vals, "sgstTotal"),
+            igstTotal = dbl(cols, vals, "igstTotal"), roundOff = dbl(cols, vals, "roundOff"),
+            totalAmount = dbl(cols, vals, "totalAmount"), paidAmount = dbl(cols, vals, "paidAmount"),
+            balanceAmount = dbl(cols, vals, "balanceAmount"), paymentMethod = str(cols, vals, "paymentMethod"),
+            paymentStatus = str(cols, vals, "paymentStatus"), status = str(cols, vals, "status"),
+            notes = str(cols, vals, "notes"), createdAt = lng(cols, vals, "createdAt") ?: 0L
+        )
+    }
+
+    private fun rowToSaleItem(cols: List<String>, vals: List<Any?>): SaleItemEntity? {
+        if (vals.isEmpty()) return null
+        return SaleItemEntity(
+            id = str(cols, vals, "id"), saleId = str(cols, vals, "saleId"), productId = str(cols, vals, "productId"),
+            productName = str(cols, vals, "productName"), productSku = str(cols, vals, "productSku"),
+            quantity = dbl(cols, vals, "quantity"), unitPrice = dbl(cols, vals, "unitPrice"),
+            discountPercent = dbl(cols, vals, "discountPercent"), discountAmount = dbl(cols, vals, "discountAmount"),
+            taxableAmount = dbl(cols, vals, "taxableAmount"), gstRate = dbl(cols, vals, "gstRate"),
+            cgstAmount = dbl(cols, vals, "cgstAmount"), sgstAmount = dbl(cols, vals, "sgstAmount"),
+            igstAmount = dbl(cols, vals, "igstAmount"), totalAmount = dbl(cols, vals, "totalAmount")
+        )
+    }
+
+    private fun rowToPurchase(cols: List<String>, vals: List<Any?>): PurchaseEntity? {
+        if (vals.isEmpty()) return null
+        return PurchaseEntity(
+            id = str(cols, vals, "id"), purchaseNumber = str(cols, vals, "purchaseNumber"),
+            supplierId = strOrNull(cols, vals, "supplierId"), supplierName = str(cols, vals, "supplierName"),
+            purchaseDate = lng(cols, vals, "purchaseDate") ?: 0L, subtotal = dbl(cols, vals, "subtotal"),
+            discountAmount = dbl(cols, vals, "discountAmount"), taxAmount = dbl(cols, vals, "taxAmount"),
+            shippingCost = dbl(cols, vals, "shippingCost"), otherCharges = dbl(cols, vals, "otherCharges"),
+            totalAmount = dbl(cols, vals, "totalAmount"), paidAmount = dbl(cols, vals, "paidAmount"),
+            balanceAmount = dbl(cols, vals, "balanceAmount"), paymentStatus = str(cols, vals, "paymentStatus"),
+            status = str(cols, vals, "status"), notes = str(cols, vals, "notes"),
+            createdAt = lng(cols, vals, "createdAt") ?: 0L
+        )
+    }
+
+    private fun rowToPurchaseItem(cols: List<String>, vals: List<Any?>): PurchaseItemEntity? {
+        if (vals.isEmpty()) return null
+        return PurchaseItemEntity(
+            id = str(cols, vals, "id"), purchaseId = str(cols, vals, "purchaseId"),
+            productId = str(cols, vals, "productId"), productName = str(cols, vals, "productName"),
+            quantity = dbl(cols, vals, "quantity"), unitPrice = dbl(cols, vals, "unitPrice"),
+            discount = dbl(cols, vals, "discount"), taxAmount = dbl(cols, vals, "taxAmount"),
+            totalAmount = dbl(cols, vals, "totalAmount"), receivedQuantity = dbl(cols, vals, "receivedQuantity")
+        )
+    }
+
+    private fun rowToStockMovement(cols: List<String>, vals: List<Any?>): StockMovementEntity? {
+        if (vals.isEmpty()) return null
+        return StockMovementEntity(
+            id = str(cols, vals, "id"), productId = str(cols, vals, "productId"),
+            productName = str(cols, vals, "productName"), movementType = str(cols, vals, "movementType"),
+            quantity = dbl(cols, vals, "quantity"), beforeStock = dbl(cols, vals, "beforeStock"),
+            afterStock = dbl(cols, vals, "afterStock"), referenceId = str(cols, vals, "referenceId"),
+            referenceType = str(cols, vals, "referenceType"), notes = str(cols, vals, "notes"),
+            createdAt = lng(cols, vals, "createdAt") ?: 0L
+        )
+    }
+
+    private fun rowToCashBook(cols: List<String>, vals: List<Any?>): CashBookEntity? {
+        if (vals.isEmpty()) return null
+        return CashBookEntity(
+            id = str(cols, vals, "id"), date = lng(cols, vals, "date") ?: 0L,
+            voucherNumber = str(cols, vals, "voucherNumber"), transactionType = str(cols, vals, "transactionType"),
+            category = str(cols, vals, "category"), description = str(cols, vals, "description"),
+            amount = dbl(cols, vals, "amount"), balance = dbl(cols, vals, "balance"),
+            referenceId = str(cols, vals, "referenceId"), notes = str(cols, vals, "notes")
+        )
+    }
+
+    private fun rowToExpense(cols: List<String>, vals: List<Any?>): ExpenseEntity? {
+        if (vals.isEmpty()) return null
+        return ExpenseEntity(
+            id = str(cols, vals, "id"), date = lng(cols, vals, "date") ?: 0L,
+            category = str(cols, vals, "category"), subCategory = str(cols, vals, "subCategory"),
+            description = str(cols, vals, "description"), amount = dbl(cols, vals, "amount"),
+            paymentMethod = str(cols, vals, "paymentMethod"), vendor = str(cols, vals, "vendor"),
+            receiptNumber = str(cols, vals, "receiptNumber"), gstAmount = dbl(cols, vals, "gstAmount"),
+            notes = str(cols, vals, "notes")
+        )
+    }
+
+    private fun rowToIncome(cols: List<String>, vals: List<Any?>): IncomeEntity? {
+        if (vals.isEmpty()) return null
+        return IncomeEntity(
+            id = str(cols, vals, "id"), date = lng(cols, vals, "date") ?: 0L,
+            category = str(cols, vals, "category"), subCategory = str(cols, vals, "subCategory"),
+            description = str(cols, vals, "description"), amount = dbl(cols, vals, "amount"),
+            paymentMethod = str(cols, vals, "paymentMethod"), customer = str(cols, vals, "customer"),
+            invoiceNumber = str(cols, vals, "invoiceNumber"), gstAmount = dbl(cols, vals, "gstAmount"),
+            notes = str(cols, vals, "notes")
+        )
     }
 }

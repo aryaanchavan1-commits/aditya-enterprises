@@ -271,9 +271,13 @@ fun SettingsScreen(
                 lastSyncTime = uiState.lastSyncTime,
                 syncStatus = uiState.syncStatus,
                 isLoading = uiState.isLoading,
+                isSaving = uiState.isSaving,
+                tursoUrl = uiState.tursoUrl,
+                tursoAuthToken = uiState.tursoAuthToken,
                 onTest = viewModel::testSyncConnection,
                 onToggleSync = viewModel::toggleAutoSync,
-                onSyncNow = viewModel::syncNow
+                onSyncNow = viewModel::syncNow,
+                onSaveTurso = viewModel::saveTursoCredentials
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -843,12 +847,63 @@ private fun SyncSection(
     lastSyncTime: String,
     syncStatus: String,
     isLoading: Boolean,
+    isSaving: Boolean,
+    tursoUrl: String,
+    tursoAuthToken: String,
     onTest: () -> Unit,
     onToggleSync: (Boolean) -> Unit,
-    onSyncNow: () -> Unit
+    onSyncNow: () -> Unit,
+    onSaveTurso: (String, String) -> Unit
 ) {
-    ExpandableCard(title = "Cloud Sync", icon = Icons.Default.CloudSync) {
+    var url by remember(tursoUrl) { mutableStateOf(tursoUrl) }
+    var token by remember(tursoAuthToken) { mutableStateOf(tursoAuthToken) }
+    var showToken by remember { mutableStateOf(false) }
+
+    ExpandableCard(title = "Database Credentials", icon = Icons.Default.CloudSync) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                label = { Text("Turso Database URL") },
+                placeholder = { Text("https://your-db.turso.io") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = token,
+                onValueChange = { token = it },
+                label = { Text("Auth Token") },
+                placeholder = { Text("Paste your Turso auth token") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { showToken = !showToken }) {
+                        Icon(
+                            imageVector = if (showToken) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (showToken) "Hide token" else "Show token"
+                        )
+                    }
+                }
+            )
+
+            Button(
+                onClick = { onSaveTurso(url, token) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = url.isNotBlank() && token.isNotBlank() && !isSaving
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Save Credentials")
+                }
+            }
+
             if (syncStatus.isNotEmpty()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
