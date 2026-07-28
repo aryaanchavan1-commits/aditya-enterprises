@@ -28,7 +28,7 @@ export default function Categories() {
 
   const updateCategory = async (id, name) => {
     try {
-      const r = await fetch(`${API}/categories/${id}`, {
+      const r = await fetch(`${API}/category?id=${id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
@@ -39,7 +39,7 @@ export default function Categories() {
 
   const addSubcategory = async (catId, name) => {
     try {
-      const r = await fetch(`${API}/categories/${catId}/subcategories`, {
+      const r = await fetch(`${API}/subcategory?catId=${catId}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
@@ -50,7 +50,7 @@ export default function Categories() {
 
   const updateSubcategory = async (catId, subId, name) => {
     try {
-      const r = await fetch(`${API}/categories/${catId}/subcategories/${subId}`, {
+      const r = await fetch(`${API}/subcategory?catId=${catId}&subId=${subId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
       });
@@ -62,7 +62,7 @@ export default function Categories() {
   const deleteSubcategory = async (catId, subId) => {
     if (!confirm('Delete this subcategory?')) return;
     try {
-      const r = await fetch(`${API}/categories/${catId}/subcategories/${subId}`, { method: 'DELETE' });
+      const r = await fetch(`${API}/subcategory?catId=${catId}&subId=${subId}`, { method: 'DELETE' });
       const d = await r.json();
       if (d.success) { showToast('Subcategory deleted'); loadCategories(); }
     } catch (err) { showToast('Delete failed', 'error'); }
