@@ -12,6 +12,8 @@ export default function SalesPOS() {
   const [paymentMode, setPaymentMode] = useState('cash');
   const [toast, setToast] = useState(null);
   const [lastInvoice, setLastInvoice] = useState(null);
+  const [isGst, setIsGst] = useState(true);
+  const [companyName, setCompanyName] = useState('Aditya Enterprises');
   const printRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
@@ -22,6 +24,13 @@ export default function SalesPOS() {
   useEffect(() => {
     fetch(`${API}/products`)
       .then(r => r.json()).then(d => { if (d.success) setProducts(d.data); });
+    fetch(`${API}/settings`)
+      .then(r => r.json()).then(d => {
+        if (d.success) {
+          setCompanyName(d.data.company_name || 'Aditya Enterprises');
+          setCustomer(prev => ({ ...prev, gstin: d.data.company_gstin || '' }));
+        }
+      });
   }, []);
 
   const filteredProducts = products.filter(p =>
@@ -69,9 +78,9 @@ export default function SalesPOS() {
   const cartDiscount = cart.reduce((sum, item) => sum + ((item.sell_price * item.quantity) * (item.discount_percent / 100)), 0);
   const afterDiscount = cartSubtotal - cartDiscount;
   const isInterState = customer.gstin && customer.gstin.substring(0, 2) !== '27';
-  const cgstTotal = isInterState ? 0 : afterDiscount * (9 / 100);
-  const sgstTotal = isInterState ? 0 : afterDiscount * (9 / 100);
-  const igstTotal = isInterState ? afterDiscount * (18 / 100) : 0;
+  const cgstTotal = !isGst ? 0 : (isInterState ? 0 : afterDiscount * (9 / 100));
+  const sgstTotal = !isGst ? 0 : (isInterState ? 0 : afterDiscount * (9 / 100));
+  const igstTotal = !isGst ? 0 : (isInterState ? afterDiscount * (18 / 100) : 0);
   const grandTotal = afterDiscount + cgstTotal + sgstTotal + igstTotal;
 
   const handleCheckout = async () => {
@@ -94,7 +103,8 @@ export default function SalesPOS() {
           customer_phone: customer.phone,
           customer_gstin: customer.gstin,
           customer_address: customer.address,
-          payment_mode: paymentMode
+          payment_mode: paymentMode,
+          is_gst: isGst
         })
       });
       const d = await r.json();
@@ -186,18 +196,27 @@ export default function SalesPOS() {
                 <input value={customer.phone} onChange={e => setCustomer({...customer, phone: e.target.value})} />
               </div>
               <div className="form-group">
-                <label>GSTIN</label>
-                <input value={customer.gstin} onChange={e => setCustomer({...customer, gstin: e.target.value})} placeholder="e.g. 27XXXXX1234Z1" />
+                <label>GSTIN (auto-filled from company)</label>
+                <input value={customer.gstin} onChange={e => setCustomer({...customer, gstin: e.target.value})} placeholder={companyName} />
               </div>
             </div>
-            <div className="form-group">
-              <label>Payment Mode</label>
-              <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
-                <option value="cash">Cash</option>
-                <option value="upi">UPI</option>
-                <option value="card">Card</option>
-                <option value="credit">Credit</option>
-              </select>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Payment Mode</label>
+                <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)}>
+                  <option value="cash">Cash</option>
+                  <option value="upi">UPI</option>
+                  <option value="card">Card</option>
+                  <option value="credit">Credit</option>
+                </select>
+              </div>
+              <div className="form-group" style={{display:'flex', flexDirection:'column', justifyContent:'center'}}>
+                <label>Bill Type</label>
+                <div style={{display:'flex', gap:4}}>
+                  <button className={`btn btn-sm ${isGst ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsGst(true)}>GST</button>
+                  <button className={`btn btn-sm ${!isGst ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsGst(false)}>Non-GST</button>
+                </div>
+              </div>
             </div>
 
             <div style={{maxHeight:300, overflowY:'auto', marginBottom:12}}>
@@ -231,17 +250,17 @@ export default function SalesPOS() {
                   <span>Discount:</span><span style={{color:'#27ae60'}}>-Rs.{cartDiscount.toFixed(2)}</span>
                 </div>
               )}
-              {cgstTotal > 0 && (
+              {isGst && cgstTotal > 0 && (
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}>
                   <span>CGST @9%:</span><span>Rs.{cgstTotal.toFixed(2)}</span>
                 </div>
               )}
-              {sgstTotal > 0 && (
+              {isGst && sgstTotal > 0 && (
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}>
                   <span>SGST @9%:</span><span>Rs.{sgstTotal.toFixed(2)}</span>
                 </div>
               )}
-              {igstTotal > 0 && (
+              {isGst && igstTotal > 0 && (
                 <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}>
                   <span>IGST @18%:</span><span>Rs.{igstTotal.toFixed(2)}</span>
                 </div>

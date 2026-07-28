@@ -45,6 +45,10 @@ router.post('/', async (req, res) => {
     const saleDate = new Date().toISOString().split('T')[0];
     let subtotal = 0, discountTotal = 0, cgstTotal = 0, sgstTotal = 0, igstTotal = 0, cessTotal = 0, grandTotal = 0;
 
+    const settings = {};
+    const allSettings = await all('SELECT * FROM settings');
+    allSettings.forEach(s => settings[s.key] = s.value);
+
     for (const item of items) {
       const product = await get('SELECT * FROM products WHERE id = ?', [item.product_id]);
       if (!product) continue;
@@ -52,16 +56,19 @@ router.post('/', async (req, res) => {
       const lineTotal = item.sell_price * item.quantity;
       const lineDiscount = lineTotal * (item.discount_percent || 0) / 100;
       const afterDiscount = lineTotal - lineDiscount;
-      const settings = {};
-      const allSettings = await all('SELECT * FROM settings');
-      allSettings.forEach(s => settings[s.key] = s.value);
-      const rate = parseInt(data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27' ? (settings['igst_rate'] || 18) : (settings['gst_rate'] || 18));
-      const isInterState = data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27';
-      const halfRate = rate / 2;
-      const cgst = isInterState ? 0 : afterDiscount * (halfRate / 100);
-      const sgst = isInterState ? 0 : afterDiscount * (halfRate / 100);
-      const igst = isInterState ? afterDiscount * (rate / 100) : 0;
-      subtotal += lineTotal; discountTotal += lineDiscount; cgstTotal += cgst; sgstTotal += sgst; igstTotal += igst; grandTotal += afterDiscount + cgst + sgst + igst;
+      subtotal += lineTotal; discountTotal += lineDiscount;
+      if (data.is_gst !== false) {
+        const rate = parseInt(data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27' ? (settings['igst_rate'] || 18) : (settings['gst_rate'] || 18));
+        const isInterState = data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27';
+        const halfRate = rate / 2;
+        const cgst = isInterState ? 0 : afterDiscount * (halfRate / 100);
+        const sgst = isInterState ? 0 : afterDiscount * (halfRate / 100);
+        const igst = isInterState ? afterDiscount * (rate / 100) : 0;
+        cgstTotal += cgst; sgstTotal += sgst; igstTotal += igst;
+        grandTotal += afterDiscount + cgst + sgst + igst;
+      } else {
+        grandTotal += afterDiscount;
+      }
     }
     grandTotal = Math.round(grandTotal * 100) / 100;
 
@@ -81,6 +88,7 @@ router.post('/', async (req, res) => {
 
     const sale = await get('SELECT * FROM sales WHERE invoice_number = ?', [invoiceNum]);
     sale.items = JSON.parse(sale.items || '[]');
+    sale.is_gst = data.is_gst !== false;
     res.json({ success: true, data: sale, message: 'Sale completed' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
