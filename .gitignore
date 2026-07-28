@@ -1,0 +1,149 @@
+# ============================================
+# ArynoxTech ERP Suite 2026 - Git Ignore
+# ============================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.eggs/
+*.manifest
+*.spec
+*.pyo
+.python-version
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+*.venv
+
+# --- Node.js ---
+node_modules/
+**/node_modules/
+npm-debug.log*
+
+# --- Gradle / Android build ---
+.gradle/
+**/.gradle/
+*.apk
+*.aab
+*.jks
+local.properties
+*.keystore
+
+# --- Electron / Desktop release ---
+app/release/
+electron-builder.yml
+dist/
+release/
+
+# --- Environment files with secrets ---
+.env
+.env.local
+.env.production
+*.env
+!env.example
+!.env.example
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.sublime-workspace
+*.sublime-project
+
+# --- Database files ---
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# --- Logs ---
+*.log
+logs/
+Logs/
+
+# --- Build / Distribution (PyInstaller) ---
+build/
+dist/
+*.exe
+*.dll
+*.pyd
+*.manifest
+*.spec
+!alembic.ini
+
+# --- Flutter / Dart ---
+.dart_tool/
+.packages
+build/
+*.iml
+*.ipr
+*.iws
+
+# Frontend build artifacts
+frontend/build/
+frontend/.dart_tool/
+frontend/.pub/
+frontend/pubspec.lock
+
+# ArynoxTechERP Frontend
+ArynoxTechERP/frontend/build/
+ArynoxTechERP/frontend/.dart_tool/
+ArynoxTechERP/frontend/.pub/
+ArynoxTechERP/frontend/pubspec.lock
+
+# --- Data directories (runtime data) ---
+Data/
+Database/
+Images/
+Backups/
+Reports/
+Exports/
+Invoices/
+Barcodes/
+AI/
+Config/
+Logs/
+
+# --- Release binaries ---
+ArynoxTechERP/release/*.exe
+ArynoxTechERP/release/*.dll
+ArynoxTechERP/release/data/
+
+# --- OS files ---
+Desktop.ini
+Thumbs.db
+
+# --- Testing ---
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# --- Misc ---
+*.tmp
+*.temp
+*.bak
+*.zip
+*.7z
+*.rar
+.cache/

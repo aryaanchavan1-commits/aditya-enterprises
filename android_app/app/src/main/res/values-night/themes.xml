@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ArynoxTechERP" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#60A5FA</item>
+        <item name="android:colorPrimaryDark">#1E3A8A</item>
+        <item name="android:colorAccent">#67E8F9</item>
+        <item name="android:windowBackground">#0F172A</item>
+        <item name="android:statusBarColor">#0F172A</item>
+        <item name="android:navigationBarColor">#1E293B</item>
+    </style>
+</resources>

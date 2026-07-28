@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aditya Enterprises ERP</string>
+    <string name="app_title">Aditya Enterprises</string>
+    <string name="app_subtitle">ERP System</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_inventory">Inventory</string>
+    <string name="nav_sales">Sales</string>
+    <string name="nav_purchase">Purchase</string>
+    <string name="nav_accounting">Accounting</string>
+    <string name="nav_reports">Reports</string>
+    <string name="nav_ai">AI Assistant</string>
+    <string name="nav_barcode">Barcode</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_more">More</string>
+    <string name="nav_more_options">More Options</string>
+
+    <!-- Greetings -->
+    <string name="greeting_morning">Good Morning</string>
+    <string name="greeting_afternoon">Good Afternoon</string>
+    <string name="greeting_evening">Good Evening</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">Dashboard</string>
+    <string name="total_products">Total Products</string>
+    <string name="low_stock">Low Stock</string>
+    <string name="todays_sales">Today\'s Sales</string>
+    <string name="monthly_revenue">Monthly Revenue</string>
+    <string name="sales_trend">Sales Trend (Last 7 Days)</string>
+    <string name="inventory_distribution">Inventory Distribution</string>
+    <string name="in_stock">In Stock</string>
+    <string name="out_of_stock">Out of Stock</string>
+    <string name="no_sales_data">No sales data available</string>
+    <string name="no_recent_sales">No recent sales</string>
+    <string name="quick_actions">Quick Actions</string>
+    <string name="new_sale">New Sale</string>
+    <string name="add_product">Add Product</string>
+    <string name="purchase_order">Purchase Order</string>
+    <string name="recent_sales">Recent Sales</string>
+    <string name="view_all">View All</string>
+    <string name="total">Total</string>
+
+    <!-- Inventory -->
+    <string name="inventory_title">Inventory</string>
+    <string name="search_products">Search products</string>
+    <string name="all_products">All Products</string>
+    <string name="add_new_product">Add New Product</string>
+    <string name="edit_product">Edit Product</string>
+    <string name="product_name">Product Name</string>
+    <string name="sku">SKU</string>
+    <string name="barcode">Barcode</string>
+    <string name="category">Category</string>
+    <string name="brand">Brand</string>
+    <string name="unit">Unit</string>
+    <string name="purchase_price">Purchase Price</string>
+    <string name="selling_price">Selling Price</string>
+    <string name="mrp">MRP</string>
+    <string name="gst_rate">GST Rate</string>
+    <string name="current_stock">Current Stock</string>
+    <string name="minimum_stock">Minimum Stock</string>
+    <string name="no_products">No products found</string>
+    <string name="scan_barcode">Scan Barcode</string>
+    <string name="print_barcode">Print Barcode</string>
+
+    <!-- Sales -->
+    <string name="sales_title">Sales</string>
+    <string name="pos_title">Point of Sale</string>
+    <string name="invoice_title">Invoice</string>
+    <string name="invoice_number">Invoice Number</string>
+    <string name="customer_name">Customer Name</string>
+    <string name="payment_status">Payment Status</string>
+    <string name="total_amount">Total Amount</string>
+    <string name="subtotal">Subtotal</string>
+    <string name="discount">Discount</string>
+    <string name="tax">Tax</string>
+    <string name="grand_total">Grand Total</string>
+
+    <!-- Purchase -->
+    <string name="purchase_title">Purchase</string>
+    <string name="add_purchase">Add Purchase</string>
+    <string name="edit_purchase">Edit Purchase</string>
+    <string name="supplier_name">Supplier Name</string>
+    <string name="purchase_date">Purchase Date</string>
+    <string name="purchase_invoice">Purchase Invoice</string>
+
+    <!-- Accounting -->
+    <string name="accounting_title">Accounting</string>
+
+    <!-- Reports -->
+    <string name="reports_title">Reports</string>
+    <string name="export_pdf">Export PDF</string>
+    <string name="export_excel">Export Excel</string>
+    <string name="sales_report">Sales Report</string>
+    <string name="purchase_report">Purchase Report</string>
+    <string name="profit_loss">Profit &amp; Loss</string>
+    <string name="balance_sheet">Balance Sheet</string>
+    <string name="gst_report">GST Report</string>
+    <string name="report_generated">Report generated successfully</string>
+    <string name="report_saved_to">Saved to Downloads</string>
+    <string name="share">Share</string>
+
+    <!-- AI Assistant -->
+    <string name="ai_title">AI Assistant</string>
+    <string name="ai_chat">Chat</string>
+    <string name="ai_agent">Agent</string>
+    <string name="ai_type_message">Type your message</string>
+    <string name="ai_send">Send</string>
+    <string name="ai_clear_chat">Clear chat</string>
+    <string name="ai_analyze_inventory">Analyze Inventory</string>
+    <string name="ai_analyze_sales">Analyze Sales</string>
+    <string name="ai_analyze_accounting">Analyze Accounting</string>
+    <string name="ai_generate_report">Generate Report</string>
+    <string name="ai_forecast">Forecast</string>
+    <string name="ai_loading">Thinking</string>
+    <string name="ai_select_model">Select Model</string>
+
+    <!-- Barcode -->
+    <string name="barcode_title">Barcode Scanner</string>
+    <string name="barcode_scanning">Scanning</string>
+    <string name="barcode_result">Barcode Result</string>
+    <string name="barcode_not_found">Product not found for this barcode</string>
+    <string name="barcode_generate">Generate Barcode</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="app_settings">App Settings</string>
+    <string name="app_password">App Password</string>
+    <string name="set_password">Set App Password</string>
+    <string name="password_enabled">Enabled</string>
+    <string name="password_disabled">Disabled</string>
+    <string name="theme">Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_system">System</string>
+    <string name="company_details">Company Details</string>
+    <string name="company_name">Company Name</string>
+    <string name="address">Address</string>
+    <string name="phone">Phone</string>
+    <string name="email">Email</string>
+    <string name="gstin">GSTIN</string>
+    <string name="pan">PAN</string>
+    <string name="bank_details">Bank Details</string>
+    <string name="bank_name">Bank Name</string>
+    <string name="account_number">Account Number</string>
+    <string name="ifsc_code">IFSC Code</string>
+    <string name="upi_id">UPI ID</string>
+    <string name="bluetooth_devices">Bluetooth Devices</string>
+    <string name="scan_devices">Scan for devices</string>
+    <string name="connected">Connected</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="gst_configuration">GST Configuration</string>
+    <string name="default_gst_rate">Default GST Rate</string>
+    <string name="turso_sync">Turso Cloud Sync</string>
+    <string name="database_url">Database URL</string>
+    <string name="auth_token">Auth Token</string>
+    <string name="test_connection">Test Connection</string>
+    <string name="auto_sync">Auto-sync</string>
+    <string name="last_sync">Last sync</string>
+    <string name="sync_now">Sync Now</string>
+    <string name="ai_configuration">AI Configuration</string>
+    <string name="groq_api_key">Groq API Key</string>
+    <string name="save_api_key">Save API Key</string>
+    <string name="data_management">Data Management</string>
+    <string name="export_all_data">Export All Data</string>
+    <string name="import_data">Import Data</string>
+    <string name="clear_local_data">Clear Local Data</string>
+    <string name="clear_data_warning">This will delete all local data including products, sales, purchases, and settings. This action cannot be undone. Continue?</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="clear">Clear</string>
+    <string name="dismiss">Dismiss</string>
+
+    <!-- Lock Screen -->
+    <string name="lock_title">Enter app password to continue</string>
+    <string name="unlock">Unlock</string>
+    <string name="incorrect_password">Incorrect password</string>
+
+    <!-- Language -->
+    <string name="language">Language</string>
+    <string name="lang_english">English</string>
+    <string name="lang_hindi">हिंदी</string>
+    <string name="lang_marathi">मराठी</string>
+    <string name="language_select">Select Language</string>
+
+    <!-- Common -->
+    <string name="loading">Loading</string>
+    <string name="error_occurred">An error occurred</string>
+    <string name="retry">Retry</string>
+    <string name="success">Success</string>
+    <string name="confirm">Confirm</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="search">Search</string>
+    <string name="filter">Filter</string>
+    <string name="sort">Sort</string>
+    <string name="no_data">No data available</string>
+    <string name="network_error">Network error. Please check your connection.</string>
+    <string name="app_version">App version</string>
+    <string name="notifications">Notifications</string>
+    <string name="menu">Menu</string>
+    <string name="back">Back</string>
+    <string name="close">Close</string>
+
+    <!-- Sync -->
+    <string name="syncing">Syncing</string>
+    <string name="sync_successful">Sync successful</string>
+    <string name="sync_failed">Sync failed</string>
+    <string name="sync_configured">Sync configured</string>
+    <string name="connected_label">Connected</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="testing">Testing</string>
+</resources>
