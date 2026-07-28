@@ -244,12 +244,16 @@ class SettingsViewModel @Inject constructor(
     fun saveTursoCredentials(url: String, token: String) {
         _uiState.update { it.copy(isSaving = true) }
         settingsDataStore.update { it.copy(tursoUrl = url, tursoAuthToken = token) }
+        viewModelScope.launch {
+            syncService.configureFromSettings()
+            syncService.syncAllWithPush()
+        }
         _uiState.update {
             it.copy(
                 isSaving = false,
                 tursoUrl = url,
                 tursoAuthToken = token,
-                successMessage = "Database credentials saved"
+                successMessage = "Database credentials saved, sync started"
             )
         }
     }

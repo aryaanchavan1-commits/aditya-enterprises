@@ -89,8 +89,8 @@ app.use('/api/purchases', require('../src/routes/purchases'));
 app.use('/api/crm', require('../src/routes/crm'));
 app.use('/api/services', require('../src/routes/services'));
 
-app.get('/api/debug/:id', (req, res) => {
-  res.json({ params: req.params, url: req.url, path: req.path, originalUrl: req.originalUrl });
+app.get('/api/test/:id', (req, res) => {
+  res.json({ id: req.params.id, url: req.url, path: req.path, originalUrl: req.originalUrl });
 });
 
 app.get('/api/status', async (req, res) => {

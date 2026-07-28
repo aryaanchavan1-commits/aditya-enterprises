@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
                         Log.w("SyncLoop", "DATABASE FULL WARNING: ${it.message}")
                     }
                 }
-                delay(30000)
+                delay(5000)
             }
         }
 
