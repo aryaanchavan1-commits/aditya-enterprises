@@ -105,9 +105,10 @@ export default function GSTInvoices() {
                     <td>{s.igst_total > 0 ? `Rs.${s.igst_total.toFixed(2)}` : '-'}</td>
                     <td><strong>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></td>
                     <td><span className="badge badge-info">{s.payment_mode}</span></td>
-                    <td style={{display:'flex', gap:4}}>
+                    <td style={{display:'flex', gap:4, flexWrap:'wrap'}}>
                       <button className="btn btn-sm btn-info" onClick={() => window.open(`${API}/sales/${s.id}/receipt`, '_blank')}>Receipt</button>
                       <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>GST Bill</button>
+                      <button className="btn btn-sm btn-success" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`*Aditya Enterprises - Invoice ${s.invoice_number}*\nDate: ${s.sale_date}\nCustomer: ${s.customer_name}\nTotal: Rs.${Number(s.grand_total).toLocaleString('en-IN')}\n\nView Bill: ${window.location.origin}${API}/gst/bill/${s.id}\nThank you!`)}`, '_blank')}>Share</button>
                     </td>
                   </tr>
                 ))}

@@ -10,6 +10,8 @@ import GSTInvoices from './components/GSTInvoices';
 import AIChat from './components/AIChat';
 import Settings from './components/Settings';
 import Reports from './components/Reports';
+import CRM from './components/CRM';
+import Servicing from './components/Servicing';
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -52,6 +54,8 @@ function App() {
     { path: '/purchases', label: 'Purchases', icon: 'R' },
     { path: '/invoices', label: 'GST & Invoices', icon: 'I' },
     { path: '/reports', label: 'Reports', icon: 'T' },
+    { path: '/crm', label: 'CRM', icon: 'M' },
+    { path: '/services', label: 'Servicing', icon: 'V' },
     { path: '/ai', label: 'AI Assistant', icon: 'A' },
     { path: '/settings', label: 'Settings', icon: 'G' },
   ];
@@ -113,6 +117,8 @@ function App() {
               <Route path="/purchases" element={<Purchases />} />
               <Route path="/invoices" element={<GSTInvoices />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/crm" element={<CRM />} />
+              <Route path="/services" element={<Servicing />} />
               <Route path="/ai" element={<AIChat />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

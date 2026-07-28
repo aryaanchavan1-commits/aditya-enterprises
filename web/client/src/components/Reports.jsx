@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const API = '/api';
 
@@ -8,8 +8,12 @@ export default function Reports() {
   const [monthlyData, setMonthlyData] = useState(null);
   const [productData, setProductData] = useState(null);
   const [customerData, setCustomerData] = useState(null);
+  const [balanceData, setBalanceData] = useState(null);
+  const [lowStockData, setLowStockData] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedMonth, setSelectedMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`);
+  const [balanceYear, setBalanceYear] = useState(String(new Date().getFullYear()));
+  const [balanceMonth, setBalanceMonth] = useState('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -47,27 +51,40 @@ export default function Reports() {
       .finally(() => setLoading(false));
   };
 
+  const loadBalanceSheet = () => {
+    setLoading(true);
+    let url = `${API}/reports/balance-sheet?year=${balanceYear}`;
+    if (balanceMonth) url += `&month=${balanceMonth}`;
+    fetch(url).then(r => r.json()).then(d => { if (d.success) setBalanceData(d.data); }).catch(() => showToast('Failed to load balance sheet', 'error')).finally(() => setLoading(false));
+  };
+
+  const loadLowStock = () => {
+    setLoading(true);
+    fetch(`${API}/reports/low-stock`).then(r => r.json()).then(d => { if (d.success) setLowStockData(d.data); }).catch(() => showToast('Failed', 'error')).finally(() => setLoading(false));
+  };
+
   useEffect(() => {
     if (activeTab === 'daily') loadDaily();
     else if (activeTab === 'monthly') loadMonthly();
     else if (activeTab === 'products') loadProducts();
     else if (activeTab === 'customers') loadCustomers();
-  }, [activeTab, selectedDate, selectedMonth]);
-
-  const downloadPDF = (url) => { window.open(`${API}${url}`, '_blank'); };
-  const downloadCSV = () => { window.open(`${API}/reports/csv?start_date=${selectedMonth}-01`, '_blank'); };
+    else if (activeTab === 'balance') loadBalanceSheet();
+    else if (activeTab === 'lowstock') loadLowStock();
+  }, [activeTab, selectedDate, selectedMonth, balanceYear, balanceMonth]);
 
   const formatINR = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const whatsappShare = (text) => { window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank'); };
 
   return (
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
-      <h2 style={{marginBottom:20}}>Sales Reports</h2>
+      <h2 style={{marginBottom:20}}>Reports</h2>
 
-      <div style={{display:'flex', gap:8, marginBottom:20}}>
-        {['daily','monthly','products','customers'].map(t => (
-          <button key={t} className={`btn ${activeTab===t?'btn-primary':'btn-outline'}`} onClick={()=>setActiveTab(t)}>
-            {t === 'daily' ? 'Daily Report' : t === 'monthly' ? 'Monthly Report' : t === 'products' ? 'By Product' : 'By Customer'}
+      <div style={{display:'flex', gap:6, marginBottom:20, flexWrap:'wrap'}}>
+        {['daily','monthly','balance','lowstock','products','customers'].map(t => (
+          <button key={t} className={`btn btn-sm ${activeTab===t?'btn-primary':'btn-outline'}`} onClick={()=>setActiveTab(t)}>
+            {t === 'daily' ? 'Daily Sales' : t === 'monthly' ? 'Monthly Sales' : t === 'balance' ? 'Balance Sheet' : t === 'lowstock' ? 'Low Stock' : t === 'products' ? 'By Product' : 'By Customer'}
           </button>
         ))}
       </div>
@@ -77,18 +94,17 @@ export default function Reports() {
           <div className="card" style={{marginBottom:16}}>
             <div className="form-row" style={{alignItems:'end'}}>
               <div className="form-group">
-                <label>Select Date</label>
+                <label>Select Date (click to view sales)</label>
                 <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
               </div>
               <div className="form-group" style={{display:'flex', gap:8, alignItems:'end'}}>
                 <button className="btn btn-info btn-sm" onClick={loadDaily}>Refresh</button>
-                <button className="btn btn-warning btn-sm" onClick={() => downloadPDF(`/reports/daily/pdf?date=${selectedDate}`)}>
-                  Download PDF
-                </button>
+                <button className="btn btn-warning btn-sm" onClick={() => window.open(`${API}/reports/daily/pdf?date=${selectedDate}`, '_blank')}>PDF</button>
+                <button className="btn btn-success btn-sm" onClick={() => window.open(`${API}/reports/csv?start_date=${selectedDate}&end_date=${selectedDate}`, '_blank')}>CSV</button>
               </div>
             </div>
           </div>
-
+          {loading && <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading...</p></div>}
           {dailyData && (
             <div>
               <div className="stats-grid">
@@ -98,12 +114,11 @@ export default function Reports() {
                 <div className="stat-card warning"><span className="stat-value">Rs.{formatINR(dailyData.totalSgst)}</span><span className="stat-label">SGST</span></div>
                 <div className="stat-card accent"><span className="stat-value">Rs.{formatINR(dailyData.totalDiscount)}</span><span className="stat-label">Discounts</span></div>
               </div>
-
               <div className="card">
                 <div className="card-header"><h3>Invoices for {selectedDate}</h3></div>
                 <div className="table-container">
                   <table>
-                    <thead><tr><th>Invoice</th><th>Customer</th><th>Items</th><th>Subtotal</th><th>CGST</th><th>SGST</th><th>Total</th><th>Payment</th></tr></thead>
+                    <thead><tr><th>Invoice</th><th>Customer</th><th>Items</th><th>Subtotal</th><th>CGST</th><th>SGST</th><th>Total</th><th>Payment</th><th>Share</th></tr></thead>
                     <tbody>
                       {dailyData.sales.map(s => (
                         <tr key={s.id}>
@@ -115,27 +130,16 @@ export default function Reports() {
                           <td>Rs.{formatINR(s.sgst_total)}</td>
                           <td><strong>Rs.{formatINR(s.grand_total)}</strong></td>
                           <td><span className="badge badge-info">{s.payment_mode}</span></td>
+                          <td>
+                            <button className="btn btn-sm btn-success" onClick={() => whatsappShare(`Aditya Enterprises - Invoice ${s.invoice_number}\nDate: ${s.sale_date}\nCustomer: ${s.customer_name}\nTotal: Rs.${formatINR(s.grand_total)}\n${(s.items || []).map(i => `${i.product_name} x${i.quantity} @ Rs.${i.sell_price}`).join('\n')}\n\nThank you!`)}>Share</button>
+                          </td>
                         </tr>
                       ))}
-                      {dailyData.sales.length === 0 && <tr><td colSpan={8} style={{textAlign:'center',color:'#999',padding:20}}>No sales for this date</td></tr>}
+                      {dailyData.sales.length === 0 && <tr><td colSpan={9} style={{textAlign:'center',color:'#999',padding:20}}>No sales for this date. Pick another date above.</td></tr>}
                     </tbody>
                   </table>
                 </div>
               </div>
-
-              {dailyData.paymentModes && Object.keys(dailyData.paymentModes).length > 0 && (
-                <div className="card" style={{marginTop:16}}>
-                  <div className="card-header"><h3>Payment Mode Breakdown</h3></div>
-                  <div className="stats-grid">
-                    {Object.entries(dailyData.paymentModes).map(([mode, amount]) => (
-                      <div key={mode} className="stat-card accent">
-                        <span className="stat-value">Rs.{formatINR(amount)}</span>
-                        <span className="stat-label">{mode.toUpperCase()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -151,24 +155,20 @@ export default function Reports() {
               </div>
               <div className="form-group" style={{display:'flex', gap:8, alignItems:'end'}}>
                 <button className="btn btn-info btn-sm" onClick={loadMonthly}>Refresh</button>
-                <button className="btn btn-warning btn-sm" onClick={() => downloadPDF(`/reports/monthly/pdf?month=${selectedMonth}`)}>
-                  Download PDF
-                </button>
-                <button className="btn btn-info btn-sm" onClick={downloadCSV}>Download CSV</button>
+                <button className="btn btn-warning btn-sm" onClick={() => window.open(`${API}/reports/monthly/pdf?month=${selectedMonth}`, '_blank')}>PDF</button>
+                <button className="btn btn-success btn-sm" onClick={() => window.open(`${API}/reports/csv?start_date=${selectedMonth}-01`, '_blank')}>CSV</button>
               </div>
             </div>
           </div>
-
+          {loading && <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading...</p></div>}
           {monthlyData && (
             <div>
-              <div className="card"><div className="card-header"><h3>{monthlyData.period}</h3></div></div>
               <div className="stats-grid">
                 <div className="stat-card accent"><span className="stat-value">{monthlyData.totalInvoices}</span><span className="stat-label">Total Invoices</span></div>
                 <div className="stat-card success"><span className="stat-value">Rs.{formatINR(monthlyData.totalRevenue)}</span><span className="stat-label">Total Revenue</span></div>
                 <div className="stat-card warning"><span className="stat-value">Rs.{formatINR(monthlyData.totalCgst + monthlyData.totalSgst)}</span><span className="stat-label">Total GST</span></div>
                 <div className="stat-card accent"><span className="stat-value">Rs.{formatINR(monthlyData.totalDiscount)}</span><span className="stat-label">Total Discounts</span></div>
               </div>
-
               {monthlyData.dailyBreakdown && (
                 <div className="card" style={{marginTop:16}}>
                   <div className="card-header"><h3>Daily Breakdown</h3></div>
@@ -177,23 +177,9 @@ export default function Reports() {
                       <thead><tr><th>Date</th><th>Invoices</th><th>Revenue</th></tr></thead>
                       <tbody>
                         {monthlyData.dailyBreakdown.map(d => (
-                          <tr key={d.date}><td><strong>{d.date}</strong></td><td>{d.invoices}</td><td>Rs.{formatINR(d.revenue)}</td></tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {monthlyData.productBreakdown && (
-                <div className="card" style={{marginTop:16}}>
-                  <div className="card-header"><h3>Top Products</h3></div>
-                  <div className="table-container">
-                    <table>
-                      <thead><tr><th>Product</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
-                      <tbody>
-                        {monthlyData.productBreakdown.slice(0, 15).map(p => (
-                          <tr key={p.name}><td><strong>{p.name}</strong></td><td>{p.quantity}</td><td>Rs.{formatINR(p.revenue)}</td></tr>
+                          <tr key={d.date} style={{cursor:'pointer'}} onClick={() => { setSelectedDate(d.date); setActiveTab('daily'); }}>
+                            <td><strong>{d.date}</strong></td><td>{d.invoices}</td><td>Rs.{formatINR(d.revenue)}</td>
+                          </tr>
                         ))}
                       </tbody>
                     </table>
@@ -205,8 +191,138 @@ export default function Reports() {
         </div>
       )}
 
+      {activeTab === 'balance' && (
+        <div>
+          <div className="card" style={{marginBottom:16}}>
+            <div className="form-row" style={{alignItems:'end'}}>
+              <div className="form-group">
+                <label>Year</label>
+                <input type="number" value={balanceYear} onChange={e => setBalanceYear(e.target.value)} min="2020" max="2030" />
+              </div>
+              <div className="form-group">
+                <label>Month (optional - leave blank for yearly)</label>
+                <select value={balanceMonth} onChange={e => setBalanceMonth(e.target.value)}>
+                  <option value="">Full Year</option>
+                  {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => <option key={m} value={m}>{new Date(2020, parseInt(m)-1).toLocaleString('en',{month:'long'})}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{display:'flex', gap:8, alignItems:'end'}}>
+                <button className="btn btn-info btn-sm" onClick={loadBalanceSheet}>Generate</button>
+                <button className="btn btn-warning btn-sm" onClick={() => window.open(`${API}/reports/balance-sheet/pdf?year=${balanceYear}${balanceMonth ? '&month='+balanceMonth : ''}`, '_blank')}>PDF</button>
+                <button className="btn btn-success btn-sm" onClick={() => window.open(`${API}/reports/balance-sheet/csv?year=${balanceYear}${balanceMonth ? '&month='+balanceMonth : ''}`, '_blank')}>CSV</button>
+                <button className="btn btn-primary btn-sm" onClick={() => window.print()}>Print</button>
+              </div>
+            </div>
+          </div>
+          {loading && <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading...</p></div>}
+          {balanceData && (
+            <div>
+              <div className="card"><div className="card-header"><h3>Balance Sheet - {balanceData.period}</h3></div></div>
+              <div className="stats-grid">
+                <div className="stat-card success"><span className="stat-value">Rs.{formatINR(balanceData.totalRevenue)}</span><span className="stat-label">Total Revenue</span></div>
+                <div className="stat-card danger"><span className="stat-value">Rs.{formatINR(balanceData.totalPurchases)}</span><span className="stat-label">Total Purchases</span></div>
+                <div className="stat-card warning"><span className="stat-value">Rs.{formatINR(balanceData.totalDiscount)}</span><span className="stat-label">Discounts Given</span></div>
+                <div className="stat-card accent"><span className="stat-value">Rs.{formatINR(balanceData.netProfit)}</span><span className="stat-label">Net Profit / Loss</span></div>
+                <div className="stat-card accent"><span className="stat-value">Rs.{formatINR(balanceData.netGstPayable)}</span><span className="stat-label">Net GST Payable</span></div>
+                <div className="stat-card accent"><span className="stat-value">{balanceData.totalInvoices}</span><span className="stat-label">Total Invoices</span></div>
+              </div>
+              {balanceData.monthlyBreakdown && balanceData.monthlyBreakdown.length > 0 && (
+                <div className="card" style={{marginTop:16}}>
+                  <div className="card-header"><h3>Monthly Breakdown</h3></div>
+                  <div className="table-container">
+                    <table>
+                      <thead><tr><th>Month</th><th>Revenue</th><th>Expenses</th><th>Profit</th><th>Invoices</th></tr></thead>
+                      <tbody>
+                        {balanceData.monthlyBreakdown.map(mb => (
+                          <tr key={mb.month}>
+                            <td><strong>{mb.month}</strong></td>
+                            <td style={{color:'#27ae60'}}>Rs.{formatINR(mb.revenue)}</td>
+                            <td style={{color:'#e74c3c'}}>Rs.{formatINR(mb.expenses)}</td>
+                            <td style={{color: mb.profit >= 0 ? '#27ae60' : '#e74c3c', fontWeight:'bold'}}>Rs.{formatINR(mb.profit)}</td>
+                            <td>{mb.invoices}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginTop:16}}>
+                {balanceData.sales && balanceData.sales.length > 0 && (
+                  <div className="card">
+                    <div className="card-header"><h3>Sales Invoices ({balanceData.sales.length})</h3></div>
+                    <div className="table-container">
+                      <table>
+                        <thead><tr><th>Invoice</th><th>Customer</th><th>Total</th></tr></thead>
+                        <tbody>
+                          {balanceData.sales.map(s => (
+                            <tr key={s.id}><td style={{fontSize:11}}>{s.invoice_number}</td><td>{s.customer_name}</td><td>Rs.{formatINR(s.grand_total)}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {balanceData.purchases && balanceData.purchases.length > 0 && (
+                  <div className="card">
+                    <div className="card-header"><h3>Purchases ({balanceData.purchases.length})</h3></div>
+                    <div className="table-container">
+                      <table>
+                        <thead><tr><th>Invoice</th><th>Supplier</th><th>Total</th></tr></thead>
+                        <tbody>
+                          {balanceData.purchases.map(p => (
+                            <tr key={p.id}><td style={{fontSize:11}}>{p.invoice_number}</td><td>{p.supplier_name}</td><td>Rs.{formatINR(p.grand_total)}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'lowstock' && (
+        <div>
+          <div className="card" style={{marginBottom:16}}>
+            <div className="card-header">
+              <h3>Low Stock Items (Quantity {'<='} 5)</h3>
+              <div style={{display:'flex', gap:8}}>
+                <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/reports/low-stock/pdf`, '_blank')}>PDF</button>
+                <button className="btn btn-sm btn-success" onClick={() => window.open(`${API}/reports/low-stock/csv`, '_blank')}>CSV</button>
+              </div>
+            </div>
+          </div>
+          {loading && <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading...</p></div>}
+          {lowStockData && (
+            <div className="card">
+              <div className="table-container">
+                <table>
+                  <thead><tr><th>Product</th><th>Qty</th><th>Sell Price</th><th>Cost Price</th><th>Barcode</th></tr></thead>
+                  <tbody>
+                    {lowStockData.map(p => (
+                      <tr key={p.id}>
+                        <td><strong>{p.name}</strong></td>
+                        <td style={{color:'#e74c3c', fontWeight:'bold'}}>{p.quantity}</td>
+                        <td>Rs.{formatINR(p.sell_price)}</td>
+                        <td>Rs.{formatINR(p.inward_price)}</td>
+                        <td style={{fontFamily:'monospace', fontSize:11}}>{p.barcode || '-'}</td>
+                      </tr>
+                    ))}
+                    {lowStockData.length === 0 && <tr><td colSpan={5} style={{textAlign:'center',color:'#999',padding:20}}>No low stock items. All products are well stocked.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {activeTab === 'products' && (
         <div>
+          {loading && <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading...</p></div>}
           {productData && (
             <div className="card">
               <div className="card-header"><h3>Sales by Product (All Time)</h3></div>
@@ -228,6 +344,7 @@ export default function Reports() {
 
       {activeTab === 'customers' && (
         <div>
+          {loading && <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading...</p></div>}
           {customerData && (
             <div>
               <div className="stats-grid" style={{marginBottom:16}}>
@@ -236,13 +353,9 @@ export default function Reports() {
                 <div className="stat-card info"><span className="stat-value">{customerData.summary.newCustomers}</span><span className="stat-label">New Customers</span></div>
                 <div className="stat-card success"><span className="stat-value">Rs.{formatINR(customerData.summary.repeatRevenue)}</span><span className="stat-label">Repeat Revenue</span></div>
               </div>
-
               {customerData.summary.topCustomers && customerData.summary.topCustomers.length > 0 && (
                 <div className="card">
-                  <div className="card-header">
-                    <h3>Top Repeat Customers</h3>
-                    <span className="badge badge-info">{customerData.summary.topCustomers.length} repeat</span>
-                  </div>
+                  <div className="card-header"><h3>Top Repeat Customers</h3><span className="badge badge-info">{customerData.summary.topCustomers.length} repeat</span></div>
                   <div className="table-container">
                     <table>
                       <thead><tr><th>Customer</th><th>Visits</th><th>Total Spent</th><th>First Visit</th><th>Last Visit</th><th>Status</th></tr></thead>
@@ -262,7 +375,6 @@ export default function Reports() {
                   </div>
                 </div>
               )}
-
               <div className="card" style={{marginTop:16}}>
                 <div className="card-header"><h3>All Customers</h3></div>
                 <div className="table-container">

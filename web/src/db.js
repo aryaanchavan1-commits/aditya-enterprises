@@ -43,6 +43,8 @@ async function initSchema() {
     `CREATE TABLE IF NOT EXISTS stock_movements (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, type TEXT, quantity_change INTEGER, reference TEXT, notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS ai_conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, content TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`,
+    `CREATE TABLE IF NOT EXISTS customer_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT NOT NULL, customer_phone TEXT DEFAULT '', visit_date TEXT NOT NULL, purpose TEXT DEFAULT '', notes TEXT DEFAULT '', amount REAL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT NOT NULL, customer_phone TEXT DEFAULT '', device_type TEXT DEFAULT '', brand TEXT DEFAULT '', model TEXT DEFAULT '', serial_number TEXT DEFAULT '', issue TEXT DEFAULT '', parts TEXT DEFAULT '', parts_cost REAL DEFAULT 0, service_charge REAL DEFAULT 0, total_charge REAL DEFAULT 0, status TEXT DEFAULT 'pending', technician TEXT DEFAULT '', received_date TEXT NOT NULL, completed_date TEXT, notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
   ];
   for (const sql of stmts) {
     try { await turso.execute(sql); } catch (e) { console.warn('Schema create:', e.message); }
@@ -57,6 +59,8 @@ async function initSchema() {
     { table: 'categories', cols: ['name', 'is_editable', 'created_at'] },
     { table: 'subcategories', cols: ['category_id', 'name', 'created_at'] },
     { table: 'settings', cols: ['value'] },
+    { table: 'customer_visits', cols: ['customer_name', 'customer_phone', 'visit_date', 'purpose', 'notes', 'amount', 'created_at'] },
+    { table: 'services', cols: ['customer_name', 'customer_phone', 'device_type', 'brand', 'model', 'serial_number', 'issue', 'parts', 'parts_cost', 'service_charge', 'total_charge', 'status', 'technician', 'received_date', 'completed_date', 'notes', 'created_at'] },
   ];
   const migs = [];
   for (const t of allCols) {
@@ -172,6 +176,20 @@ function cleanRow(row) {
 
 async function migrateLegacyData() {
   try {
+    const tableInfo = await turso.execute("PRAGMA table_info(products)");
+    const cols = tableInfo.rows.map(r => r.name);
+    const legacyMap = [
+      { old: 'sku', new: 'name' },
+      { old: 'hsnCode', new: 'hsn_code' },
+      { old: 'sellingPrice', new: 'sell_price' },
+      { old: 'purchasePrice', new: 'inward_price' },
+      { old: 'currentStock', new: 'quantity' },
+    ];
+    for (const m of legacyMap) {
+      if (cols.includes(m.old) && cols.includes(m.new)) {
+        await turso.execute(`UPDATE products SET ${m.new} = ${m.old} WHERE (${m.new} IS NULL OR ${m.new} = '' OR ${m.new} = 0) AND (${m.old} IS NOT NULL AND ${m.old} != '')`);
+      }
+    }
     const r = await turso.execute("SELECT id, name, description, hsn_code, serial_number, barcode, image, barcode_image FROM products WHERE name LIKE '{%' LIMIT 1");
     if (r.rows.length === 0) return;
     const allProducts = await turso.execute('SELECT id, name, description, hsn_code, serial_number, barcode, image, barcode_image FROM products');
@@ -200,4 +218,19 @@ async function migrateLegacyData() {
   } catch (e) { console.warn('Legacy migration:', e.message); }
 }
 
-module.exports = { getDb, query, run, get, all, dataDir: DATA_DIR, cleanRow, cleanValue };
+async function resetData() {
+  turso = null;
+  const { createClient } = require('@libsql/client');
+  const url = process.env.TURSO_DATABASE_URL;
+  const token = process.env.TURSO_AUTH_TOKEN;
+  if (!url) throw new Error('TURSO_DATABASE_URL not configured');
+  turso = createClient({ url, authToken: token });
+  await withTimeout(turso.execute('SELECT 1'), 8000);
+  const tables = ['stock_movements', 'sales', 'purchases', 'products', 'parties', 'ai_conversations', 'subcategories', 'categories'];
+  for (const t of tables) {
+    try { await turso.execute(`DROP TABLE IF EXISTS ${t}`); } catch (e) {}
+  }
+  await initSchema();
+}
+
+module.exports = { getDb, query, run, get, all, dataDir: DATA_DIR, cleanRow, cleanValue, resetData };

@@ -173,4 +173,175 @@ router.get('/csv', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
+router.get('/balance-sheet', async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    const today = new Date();
+    const y = year || today.getFullYear();
+    const m = month || null;
+    let startDate, endDate, periodLabel;
+    if (m) {
+      startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, m, 0).getDate();
+      endDate = `${y}-${String(m).padStart(2, '0')}-${lastDay}`;
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      periodLabel = `${monthNames[parseInt(m)-1]} ${y}`;
+    } else {
+      startDate = `${y}-01-01`;
+      endDate = `${y}-12-31`;
+      periodLabel = `Year ${y}`;
+    }
+    const sales = await all("SELECT * FROM sales WHERE sale_date >= ? AND sale_date <= ? ORDER BY sale_date", [startDate, endDate]);
+    const purchases = await all("SELECT * FROM purchases WHERE purchase_date >= ? AND purchase_date <= ? ORDER BY purchase_date", [startDate, endDate]);
+    const parsedSales = sales.map(s => ({ ...s, items: JSON.parse(s.items || '[]') }));
+    const totalRevenue = parsedSales.reduce((sum, s) => sum + s.grand_total, 0);
+    const totalCgst = parsedSales.reduce((sum, s) => sum + s.cgst_total, 0);
+    const totalSgst = parsedSales.reduce((sum, s) => sum + s.sgst_total, 0);
+    const totalDiscount = parsedSales.reduce((sum, s) => sum + s.discount_total, 0);
+    const totalPurchases = purchases.reduce((sum, p) => sum + p.grand_total, 0);
+    const purchaseGst = purchases.reduce((sum, p) => sum + p.gst_total, 0);
+    const totalInvoices = parsedSales.length;
+    const totalQuantity = parsedSales.reduce((sum, s) => sum + s.items.reduce((q, i) => q + (i.quantity || 0), 0), 0);
+    const netGstPayable = totalCgst + totalSgst - purchaseGst;
+    const netProfit = totalRevenue - totalPurchases - totalDiscount;
+    const monthlyBreakdown = {};
+    for (let i = 1; i <= 12; i++) {
+      const ms = `${y}-${String(i).padStart(2, '0')}`;
+      monthlyBreakdown[ms] = { month: ms, revenue: 0, expenses: 0, invoices: 0, profit: 0 };
+    }
+    parsedSales.forEach(s => {
+      const key = s.sale_date.substring(0, 7);
+      if (monthlyBreakdown[key]) { monthlyBreakdown[key].revenue += s.grand_total; monthlyBreakdown[key].invoices++; }
+    });
+    purchases.forEach(p => {
+      const key = p.purchase_date.substring(0, 7);
+      if (monthlyBreakdown[key]) monthlyBreakdown[key].expenses += p.grand_total;
+    });
+    Object.values(monthlyBreakdown).forEach(mb => mb.profit = mb.revenue - mb.expenses);
+    res.json({ success: true, data: { period: periodLabel, startDate, endDate, totalRevenue: Math.round(totalRevenue * 100) / 100, totalCgst: Math.round(totalCgst * 100) / 100, totalSgst: Math.round(totalSgst * 100) / 100, totalDiscount: Math.round(totalDiscount * 100) / 100, totalPurchases: Math.round(totalPurchases * 100) / 100, purchaseGst: Math.round(purchaseGst * 100) / 100, netGstPayable: Math.round(netGstPayable * 100) / 100, netProfit: Math.round(netProfit * 100) / 100, totalInvoices, totalQuantity, sales: parsedSales, purchases, monthlyBreakdown: Object.values(monthlyBreakdown).filter(mb => mb.revenue > 0 || mb.expenses > 0) } });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/balance-sheet/pdf', async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    const today = new Date();
+    const y = year || today.getFullYear();
+    const m = month || null;
+    let startDate, endDate, periodLabel, fileName;
+    if (m) {
+      startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, m, 0).getDate();
+      endDate = `${y}-${String(m).padStart(2, '0')}-${lastDay}`;
+      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      periodLabel = `${monthNames[parseInt(m)-1]} ${y}`;
+      fileName = `Balance_Sheet_${periodLabel.replace(' ','_')}`;
+    } else {
+      startDate = `${y}-01-01`; endDate = `${y}-12-31`;
+      periodLabel = `Year ${y}`;
+      fileName = `Balance_Sheet_${y}`;
+    }
+    const sales = await all("SELECT * FROM sales WHERE sale_date >= ? AND sale_date <= ? ORDER BY sale_date", [startDate, endDate]);
+    const purchases = await all("SELECT * FROM purchases WHERE purchase_date >= ? AND purchase_date <= ? ORDER BY purchase_date", [startDate, endDate]);
+    const parsedSales = sales.map(s => ({ ...s, items: JSON.parse(s.items || '[]') }));
+    const totalRevenue = parsedSales.reduce((sum, s) => sum + s.grand_total, 0);
+    const totalCgst = parsedSales.reduce((sum, s) => sum + s.cgst_total, 0);
+    const totalSgst = parsedSales.reduce((sum, s) => sum + s.sgst_total, 0);
+    const totalDiscount = parsedSales.reduce((sum, s) => sum + s.discount_total, 0);
+    const totalPurchases = purchases.reduce((sum, p) => sum + p.grand_total, 0);
+    const netGstPayable = totalCgst + totalSgst;
+    const netProfit = totalRevenue - totalPurchases - totalDiscount;
+    const settings = {}; (await all('SELECT * FROM settings')).forEach(s => settings[s.key] = s.value);
+    const company = { name: settings['company_name'] || 'Aditya Enterprises', address: settings['company_address'] || '', gstin: settings['company_gstin'] || '' };
+    const doc = new PDFDocument({ size: 'A4', margin: 30 }); const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => { res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `attachment; filename="${fileName}.pdf"`); res.send(Buffer.concat(chunks)); });
+    doc.fontSize(16).font('Helvetica-Bold').text('BALANCE SHEET', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text(company.name, { align: 'center' }); doc.text(`Period: ${periodLabel} (${startDate} to ${endDate})`, { align: 'center' }); doc.moveDown();
+    doc.rect(30, doc.y, 535, 80).stroke(); const sy = doc.y + 5;
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text(`Total Revenue: Rs.${formatINR(totalRevenue)}`, 40, sy);
+    doc.text(`Total Purchases: Rs.${formatINR(totalPurchases)}`, 40, sy + 20);
+    doc.text(`Total Discounts: Rs.${formatINR(totalDiscount)}`, 40, sy + 40);
+    doc.text(`Gross Profit: Rs.${formatINR(totalRevenue - totalPurchases - totalDiscount)}`, 40, sy + 60);
+    doc.text(`Total Invoices: ${parsedSales.length}`, 300, sy);
+    doc.text(`CGST Collected: Rs.${formatINR(totalCgst)}`, 300, sy + 20);
+    doc.text(`SGST Collected: Rs.${formatINR(totalSgst)}`, 300, sy + 40);
+    doc.text(`Net GST Payable: Rs.${formatINR(netGstPayable)}`, 300, sy + 60);
+    doc.moveDown(5);
+    if (parsedSales.length > 0) {
+      doc.fontSize(11).font('Helvetica-Bold').text('Sales Invoices'); doc.moveDown(0.3);
+      doc.fontSize(8); doc.text('Date         Invoice No         Customer                     Amount');
+      parsedSales.forEach(s => {
+        doc.text(`${s.sale_date}   ${s.invoice_number.padEnd(18)} ${(s.customer_name || 'Walk-in').substring(0, 22).padEnd(24)} Rs.${formatINR(s.grand_total).padStart(10)}`);
+      });
+    }
+    doc.moveDown(1);
+    doc.fontSize(7).font('Helvetica').text('Generated by Aditya Enterprises ERP Web', { align: 'center' });
+    doc.end();
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/balance-sheet/csv', async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    const today = new Date();
+    const y = year || today.getFullYear();
+    const m = month || null;
+    let startDate, endDate;
+    if (m) {
+      startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, m, 0).getDate();
+      endDate = `${y}-${String(m).padStart(2, '0')}-${lastDay}`;
+    } else { startDate = `${y}-01-01`; endDate = `${y}-12-31`; }
+    const sales = await all("SELECT * FROM sales WHERE sale_date >= ? AND sale_date <= ? ORDER BY sale_date", [startDate, endDate]);
+    const purchases = await all("SELECT * FROM purchases WHERE purchase_date >= ? AND purchase_date <= ? ORDER BY purchase_date", [startDate, endDate]);
+    let csv = 'Type,Date,Invoice/Ref,Customer/Supplier,Amount,GST,Total\n';
+    sales.forEach(s => { csv += `Sale,${s.sale_date},${s.invoice_number},"${s.customer_name}",${s.subtotal},${s.cgst_total + s.sgst_total + s.igst_total},${s.grand_total}\n`; });
+    purchases.forEach(p => { csv += `Purchase,${p.purchase_date},${p.invoice_number},"${p.supplier_name}",${p.subtotal},${p.gst_total},${p.grand_total}\n`; });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="Balance_Sheet_${y}${m ? '_'+m : ''}.csv"`);
+    res.send(csv);
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/low-stock', async (req, res) => {
+  try {
+    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= 5 ORDER BY quantity ASC');
+    res.json({ success: true, data: products });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/low-stock/csv', async (req, res) => {
+  try {
+    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= 5 ORDER BY quantity ASC');
+    let csv = 'Product Name,Quantity,Sell Price,Cost Price,Barcode\n';
+    products.forEach(p => { csv += `"${p.name}",${p.quantity},${p.sell_price},${p.inward_price},${p.barcode || ''}\n`; });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="Low_Stock_Report.csv"');
+    res.send(csv);
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.get('/low-stock/pdf', async (req, res) => {
+  try {
+    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= 5 ORDER BY quantity ASC');
+    const settings = {}; (await all('SELECT * FROM settings')).forEach(s => settings[s.key] = s.value);
+    const company = { name: settings['company_name'] || 'Aditya Enterprises' };
+    const doc = new PDFDocument({ size: 'A4', margin: 30 }); const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => { res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', 'attachment; filename="Low_Stock_Report.pdf"'); res.send(Buffer.concat(chunks)); });
+    doc.fontSize(16).font('Helvetica-Bold').text('LOW STOCK REPORT', { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text(company.name, { align: 'center' });
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`, { align: 'center' }); doc.moveDown();
+    products.forEach(p => {
+      doc.fontSize(10).font('Helvetica-Bold').text(`${p.name}  |  Qty: ${p.quantity}  |  Price: Rs.${formatINR(p.sell_price)}`);
+    });
+    if (products.length === 0) doc.text('No low stock items found.');
+    doc.moveDown(2);
+    doc.fontSize(7).font('Helvetica').text('Generated by Aditya Enterprises ERP Web', { align: 'center' });
+    doc.end();
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
 module.exports = router;

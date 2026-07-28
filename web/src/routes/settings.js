@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { get, all, run } = require('../db');
+const { get, all, run, resetData } = require('../db');
 
 router.get('/', async (req, res) => {
   try {
@@ -26,6 +26,13 @@ router.put('/', async (req, res) => {
       await run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, String(value)]);
     }
     res.json({ success: true, message: 'Settings updated' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.post('/reset', async (req, res) => {
+  try {
+    await resetData();
+    res.json({ success: true, message: 'All data reset. Fresh schema re-initialized.' });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 

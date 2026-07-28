@@ -27,10 +27,12 @@ router.get('/stats/dashboard', async (req, res) => {
     const monthSalesArr = await all("SELECT * FROM sales WHERE sale_date >= ?", [firstOfMonth]);
     const monthlyRevenue = monthSalesArr.reduce((s, x) => s + x.grand_total, 0);
     const lowStock = (await get('SELECT COUNT(*) as c FROM products WHERE quantity <= 5'))?.c || 0;
+    const lowStockProducts = await all('SELECT id, name, quantity, sell_price FROM products WHERE quantity <= 5 ORDER BY quantity ASC LIMIT 20');
     const totalSales = (await get('SELECT COUNT(*) as c FROM sales'))?.c || 0;
     const recentSales = await all('SELECT * FROM sales ORDER BY created_at DESC LIMIT 10');
     const stockMovements = await all('SELECT sm.*, p.name as product_name FROM stock_movements sm LEFT JOIN products p ON sm.product_id = p.id ORDER BY sm.created_at DESC LIMIT 10');
-    res.json({ success: true, data: { totalProducts, totalQuantity, todaySales: Math.round(todaySales * 100) / 100, monthlyRevenue: Math.round(monthlyRevenue * 100) / 100, lowStock, totalSales, todayInvoices: todaySalesArr.length, monthInvoices: monthSalesArr.length, recentSales, stockMovements } });
+    const dailySalesArr = await all("SELECT sale_date, SUM(grand_total) as total FROM sales WHERE sale_date >= ? GROUP BY sale_date ORDER BY sale_date ASC", [firstOfMonth]);
+    res.json({ success: true, data: { totalProducts, totalQuantity, todaySales: Math.round(todaySales * 100) / 100, monthlyRevenue: Math.round(monthlyRevenue * 100) / 100, lowStock, lowStockProducts, totalSales, todayInvoices: todaySalesArr.length, monthInvoices: monthSalesArr.length, recentSales, stockMovements, dailySales: dailySalesArr } });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 

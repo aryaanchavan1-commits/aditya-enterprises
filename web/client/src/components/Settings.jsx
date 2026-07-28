@@ -205,8 +205,8 @@ export default function Settings() {
           <h4 style={{fontSize:14, marginBottom:8}}>Barcode Scanners</h4>
           <div style={{marginBottom:12}}>
             <button className="btn btn-sm btn-info" onClick={detectScanners}>Scan for Scanners</button>
-            <button className="btn btn-sm btn-primary" style={{marginLeft:4}} onClick={connectBluetoothScanner}>🔵 Connect Bluetooth Scanner</button>
-            <button className="btn btn-sm btn-warning" style={{marginLeft:4}} onClick={connectUsbDevice}>🔌 Connect USB Device</button>
+            <button className="btn btn-sm btn-primary" style={{marginLeft:4}} onClick={connectBluetoothScanner}>Connect Bluetooth Scanner</button>
+            <button className="btn btn-sm btn-warning" style={{marginLeft:4}} onClick={connectUsbDevice}>Connect USB Device</button>
             {scannerStatus && <div style={{fontSize:12, marginTop:4, color: scannerStatus.includes('No')?'#e74c3c':'#27ae60'}}>{scannerStatus}</div>}
           </div>
           {detectedScanners.length > 0 ? (
@@ -240,7 +240,7 @@ export default function Settings() {
           {detectedPrinters.length > 0 ? (
             detectedPrinters.map((p, i) => (
               <div key={i} style={{fontSize:12, padding:'6px 8px', marginBottom:4, background:'#f0fff0', borderRadius:6, borderLeft:'3px solid #27ae60'}}>
-                <div><strong>🖨 {p.name}</strong></div>
+                <div><strong>{p.name}</strong></div>
                 <div style={{fontSize:10, color:'#777'}}>
                   {p.driver && <span>Driver: {p.driver} | </span>}
                   {p.port && <span>Port: {p.port} | </span>}
@@ -269,16 +269,29 @@ export default function Settings() {
         <div className="card" style={{borderLeft:'4px solid #e74c3c'}}>
           <div className="card-header"><h3>Data Management</h3></div>
           <p style={{fontSize:13, color:'#777', marginBottom:12}}>
-            All data is stored locally at: <code>app\data\aditya_erp.db</code>
+            All data is stored in Turso cloud database.
           </p>
           <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
             <button className="btn btn-sm btn-outline" onClick={async () => {
               await fetch(`${API}/ai/history`, { method: 'DELETE' });
               showToast('Chat history cleared');
             }}>Clear AI History</button>
-            <button className="btn btn-sm btn-outline" onClick={() => {
-              showToast('Tip: Backup app/data/aditya_erp.db to save all data');
-            }}>Backup Info</button>
+            <button className="btn btn-sm btn-danger" onClick={async () => {
+              if (!window.confirm('Reset ALL data? This will delete all products, sales, purchases, categories and start fresh. This cannot be undone.')) return;
+              if (!window.confirm('Are you absolutely sure? All your business data will be permanently deleted.')) return;
+              try {
+                const r = await fetch(`${API}/settings/reset`, { method: 'POST' });
+                const d = await r.json();
+                if (d.success) {
+                  showToast('All data has been reset. Refreshing...');
+                  setTimeout(() => window.location.reload(), 1500);
+                } else {
+                  showToast(d.error || 'Reset failed', 'error');
+                }
+              } catch (e) {
+                showToast('Reset failed: ' + e.message, 'error');
+              }
+            }}>Reset All Data</button>
           </div>
         </div>
       </div>

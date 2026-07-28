@@ -86,6 +86,8 @@ app.use('/api/settings', require('../src/routes/settings'));
 app.use('/api/devices', require('../src/routes/devices'));
 app.use('/api/reports', require('../src/routes/reports'));
 app.use('/api/purchases', require('../src/routes/purchases'));
+app.use('/api/crm', require('../src/routes/crm'));
+app.use('/api/services', require('../src/routes/services'));
 
 app.get('/api/status', async (req, res) => {
   let dbOk = false;

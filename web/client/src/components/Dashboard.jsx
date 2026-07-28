@@ -2,11 +2,38 @@ import React, { useState, useEffect } from 'react';
 
 const API = '/api';
 
+const COLORS = ['#3498db','#2ecc71','#e74c3c','#f39c12','#9b59b6','#1abc9c','#e67e22','#34495e'];
+
+function BarChart({ data, labelKey, valueKey, title, color }) {
+  if (!data || data.length === 0) return null;
+  const maxVal = Math.max(...data.map(d => Number(d[valueKey]) || 0), 1);
+  return (
+    <div className="card">
+      <div className="card-header"><h3>{title}</h3></div>
+      <div style={{display:'flex', alignItems:'flex-end', gap:6, height:120, padding:'10px 0'}}>
+        {data.map((d, i) => {
+          const val = Number(d[valueKey]) || 0;
+          const pct = (val / maxVal) * 100;
+          return (
+            <div key={i} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', height:'100%', justifyContent:'flex-end'}}>
+              <span style={{fontSize:9, color:'#666', marginBottom:2}}>{val.toFixed(0)}</span>
+              <div style={{width:'100%', height:`${pct}%`, minHeight:4, background: color || COLORS[i % COLORS.length], borderRadius:'4px 4px 0 0', transition:'height 0.3s'}} title={d[labelKey]}></div>
+              <span style={{fontSize:8, color:'#999', marginTop:4, transform:'rotate(-45deg)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:50}}>{String(d[labelKey]).length > 6 ? String(d[labelKey]).slice(-5) : d[labelKey]}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const load = () => {
+    setError(null);
+    setStats(null);
     fetch(`${API}/sales/stats/dashboard`)
       .then(r => r.json())
       .then(d => {
@@ -15,13 +42,17 @@ export default function Dashboard() {
             ...d.data,
             recentSales: d.data.recentSales || [],
             stockMovements: d.data.stockMovements || [],
+            lowStockProducts: d.data.lowStockProducts || [],
+            dailySales: d.data.dailySales || [],
           });
         } else {
           setError(d.error || 'Failed to load dashboard');
         }
       })
       .catch(e => setError(e.message));
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
 
   if (error) {
     return (
@@ -29,7 +60,7 @@ export default function Dashboard() {
         <p style={{ fontSize: 36, color: '#e74c3c', marginBottom: 12 }}>!</p>
         <p style={{ color: '#666' }}>Could not load dashboard data</p>
         <p style={{ fontSize: 12, color: '#999', marginTop: 8 }}>{error}</p>
-        <button className="btn btn-primary" style={{marginTop:16}} onClick={() => { setError(null); setStats(null); window.location.reload(); }}>Retry</button>
+        <button className="btn btn-primary" style={{marginTop:16}} onClick={load}>Retry</button>
       </div>
     );
   }
@@ -64,6 +95,34 @@ export default function Dashboard() {
         <div className="stat-card success">
           <span className="stat-value">{stats.totalSales}</span>
           <span className="stat-label">Total Invoices</span>
+        </div>
+      </div>
+
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:20}}>
+        <BarChart data={stats.dailySales} labelKey="sale_date" valueKey="total" title="Daily Sales (This Month)" color="#2ecc71" />
+        <div className="card">
+          <div className="card-header" style={{borderBottomColor: stats.lowStockProducts.length > 0 ? '#e74c3c' : '#eee'}}>
+            <h3>Low Stock Items</h3>
+            {stats.lowStockProducts.length > 0 && <span className="badge badge-danger">{stats.lowStockProducts.length} items</span>}
+          </div>
+          {stats.lowStockProducts.length > 0 ? (
+            <div className="table-container">
+              <table>
+                <thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
+                <tbody>
+                  {stats.lowStockProducts.map(p => (
+                    <tr key={p.id}>
+                      <td>{p.name || 'N/A'}</td>
+                      <td style={{color:'#e74c3c', fontWeight:'bold'}}>{p.quantity}</td>
+                      <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{color:'#27ae60', textAlign:'center', padding:20}}>All products are well stocked</p>
+          )}
         </div>
       </div>
 

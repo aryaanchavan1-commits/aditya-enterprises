@@ -78,8 +78,11 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  try { await run('DELETE FROM products WHERE id = ?', [req.params.id]); res.json({ success: true, message: 'Product deleted' }); }
-  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  try {
+    await run('DELETE FROM stock_movements WHERE product_id = ?', [req.params.id]);
+    await run('DELETE FROM products WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Product deleted' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 router.get('/:id/barcode', async (req, res) => {

@@ -43,6 +43,9 @@ router.post('/scan-sale', async (req, res) => {
 
 router.post('/generate/:productId', async (req, res) => {
   try {
+    if (!req.params.productId || req.params.productId === 'undefined' || req.params.productId === 'null') {
+      return res.status(400).json({ success: false, error: 'Invalid product ID' });
+    }
     const product = await get('SELECT * FROM products WHERE id = ?', [req.params.productId]);
     if (!product) return res.status(404).json({ success: false, error: 'Not found' });
     const code = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
