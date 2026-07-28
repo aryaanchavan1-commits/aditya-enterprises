@@ -47,36 +47,29 @@ async function initSchema() {
   for (const sql of stmts) {
     try { await turso.execute(sql); } catch (e) { console.warn('Schema create:', e.message); }
   }
-  const migs = [
-    { table: 'products', col: 'quantity', def: 'INTEGER DEFAULT 0' },
-    { table: 'products', col: 'description', def: 'TEXT DEFAULT ""' },
-    { table: 'products', col: 'hsn_code', def: 'TEXT DEFAULT ""' },
-    { table: 'products', col: 'sell_price', def: 'REAL DEFAULT 0' },
-    { table: 'products', col: 'inward_price', def: 'REAL DEFAULT 0' },
-    { table: 'products', col: 'serial_number', def: 'TEXT' },
-    { table: 'products', col: 'discount_percent', def: 'REAL DEFAULT 0' },
-    { table: 'products', col: 'barcode', def: 'TEXT' },
-    { table: 'products', col: 'barcode_image', def: 'TEXT DEFAULT ""' },
-    { table: 'products', col: 'category_id', def: 'INTEGER' },
-    { table: 'products', col: 'subcategory_id', def: 'INTEGER' },
-    { table: 'products', col: 'gst_rate', def: 'REAL DEFAULT 18' },
-    { table: 'products', col: 'supplier_id', def: 'INTEGER' },
-    { table: 'products', col: 'updated_at', def: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
-    { table: 'sales', col: 'customer_id', def: 'INTEGER' },
-    { table: 'sales', col: 'customer_phone', def: 'TEXT DEFAULT ""' },
-    { table: 'sales', col: 'customer_gstin', def: 'TEXT DEFAULT ""' },
-    { table: 'sales', col: 'customer_address', def: 'TEXT DEFAULT ""' },
-    { table: 'sales', col: 'discount_total', def: 'REAL DEFAULT 0' },
-    { table: 'sales', col: 'cgst_total', def: 'REAL DEFAULT 0' },
-    { table: 'sales', col: 'sgst_total', def: 'REAL DEFAULT 0' },
-    { table: 'sales', col: 'igst_total', def: 'REAL DEFAULT 0' },
-    { table: 'sales', col: 'cess_total', def: 'REAL DEFAULT 0' },
-    { table: 'sales', col: 'payment_mode', def: 'TEXT DEFAULT "cash"' },
-    { table: 'sales', col: 'is_barcode_scan', def: 'INTEGER DEFAULT 0' },
-    { table: 'sales', col: 'notes', def: 'TEXT DEFAULT ""' },
-    { table: 'purchases', col: 'supplier_id', def: 'INTEGER' },
-    { table: 'purchases', col: 'notes', def: 'TEXT DEFAULT ""' },
+  const allCols = [
+    { table: 'products', cols: ['name', 'image', 'quantity', 'description', 'hsn_code', 'sell_price', 'inward_price', 'serial_number', 'discount_percent', 'barcode', 'barcode_image', 'category_id', 'subcategory_id', 'gst_rate', 'supplier_id', 'created_at', 'updated_at'] },
+    { table: 'sales', cols: ['invoice_number', 'sale_date', 'customer_id', 'customer_name', 'customer_phone', 'customer_gstin', 'customer_address', 'items', 'subtotal', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'grand_total', 'payment_mode', 'is_barcode_scan', 'notes', 'created_at'] },
+    { table: 'purchases', cols: ['invoice_number', 'purchase_date', 'supplier_id', 'supplier_name', 'items', 'subtotal', 'gst_total', 'grand_total', 'payment_status', 'notes', 'created_at'] },
+    { table: 'parties', cols: ['name', 'party_type', 'phone', 'email', 'gstin', 'address', 'city', 'state', 'pincode', 'opening_balance', 'is_active', 'created_at'] },
+    { table: 'stock_movements', cols: ['product_id', 'type', 'quantity_change', 'reference', 'notes', 'created_at'] },
+    { table: 'ai_conversations', cols: ['role', 'content', 'created_at'] },
+    { table: 'categories', cols: ['name', 'is_editable', 'created_at'] },
+    { table: 'subcategories', cols: ['category_id', 'name', 'created_at'] },
+    { table: 'settings', cols: ['value'] },
   ];
+  const migs = [];
+  for (const t of allCols) {
+    for (const col of t.cols) {
+      let def = 'TEXT DEFAULT ""';
+      if (['id', 'quantity', 'category_id', 'subcategory_id', 'supplier_id', 'customer_id', 'product_id', 'is_editable', 'is_active', 'is_barcode_scan'].includes(col)) def = 'INTEGER DEFAULT 0';
+      if (['sell_price', 'inward_price', 'discount_percent', 'gst_rate', 'subtotal', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'grand_total', 'gst_total', 'opening_balance'].includes(col)) def = 'REAL DEFAULT 0';
+      if (['serial_number', 'barcode'].includes(col)) def = 'TEXT';
+      if (['name', 'invoice_number'].includes(col)) def = 'TEXT DEFAULT ""';
+      if (['sale_date', 'purchase_date', 'created_at', 'updated_at'].includes(col)) def = 'DATETIME DEFAULT CURRENT_TIMESTAMP';
+      migs.push({ table: t.table, col, def });
+    }
+  }
   for (const m of migs) {
     try { await turso.execute(`ALTER TABLE ${m.table} ADD COLUMN ${m.col} ${m.def}`); } catch (e) {}
   }
