@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { getDb, seedIfEmpty } = require('../src/db');
+const { getDb } = require('../src/db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -88,20 +88,19 @@ app.use('/api/reports', require('../src/routes/reports'));
 app.use('/api/purchases', require('../src/routes/purchases'));
 
 app.get('/api/status', async (req, res) => {
-  const tursoOk = !!(await getTurso().catch(() => null));
-  let localOk = false;
+  let dbOk = false;
+  let dbError = null;
   try {
-    const local = await getLocalDb();
-    localOk = !!local;
-  } catch (e) {}
+    await getDb();
+    dbOk = true;
+  } catch (e) { dbError = e.message; }
   res.json({
     success: true,
     data: {
       server: 'ok',
-      database: tursoOk ? 'turso' : (localOk ? 'local_sqljs' : 'none'),
-      turso: tursoOk,
-      local_fallback: localOk,
-      data_dir: DATA_DIR,
+      database: dbOk ? 'turso' : 'error',
+      db_connected: dbOk,
+      db_error: dbError,
       environment: IS_PRODUCTION ? 'production' : 'development',
     },
   });
@@ -133,9 +132,8 @@ if (!IS_VERCEL) {
 
 async function start() {
   try {
-    const db = await getDb();
-    await seedIfEmpty(db);
-    console.log('Database initialized');
+    await getDb();
+    console.log('Database connected');
   } catch (err) {
     console.error('Database init error:', err.message);
   }

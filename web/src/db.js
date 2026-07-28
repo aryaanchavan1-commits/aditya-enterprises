@@ -1,50 +1,39 @@
 require('dotenv').config();
-const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 
 let turso = null;
-let localDb = null;
-let localSQL = null;
 
 const DATA_DIR = (process.env.DATA_DIR || (process.env.VERCEL ? '/tmp/data' : path.join(__dirname, '..', 'data')));
-const DB_PATH = path.join(DATA_DIR, 'aditya_erp.db');
-const ENABLE_LOCAL = process.env.ENABLE_LOCAL_FALLBACK !== 'false';
-
-try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {
-  console.warn('Could not create DATA_DIR, using /tmp:', e.message);
-  try { const tmpDir = '/tmp/aditya-erp-data'; fs.mkdirSync(tmpDir, { recursive: true }); process.env.DATA_DIR = tmpDir; } catch (e2) {}
-}
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 
 function withTimeout(promise, ms) {
   return Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out')), ms)),
   ]);
 }
 
-async function getTurso() {
+async function getDb() {
   if (turso) return turso;
   const url = process.env.TURSO_DATABASE_URL;
   const token = process.env.TURSO_AUTH_TOKEN;
-  if (!url) return null;
+  if (!url) throw new Error('TURSO_DATABASE_URL not configured');
   try {
     const { createClient } = require('@libsql/client');
     turso = createClient({ url, authToken: token });
     await withTimeout(turso.execute('SELECT 1'), 8000);
-    await withTimeout(initTursoSchema(), 15000);
+    await withTimeout(initSchema(), 20000);
     return turso;
   } catch (e) {
-    console.warn('Turso connection failed:', e.message);
     turso = null;
-    return null;
+    throw new Error('Turso connection failed: ' + e.message);
   }
 }
 
-async function initTursoSchema() {
+async function initSchema() {
   if (!turso) return;
-  const tables = ['categories', 'subcategories', 'products', 'parties', 'sales', 'purchases', 'stock_movements', 'ai_conversations', 'settings'];
-  const createStmts = [
+  const stmts = [
     `CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, is_editable INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS subcategories (id INTEGER PRIMARY KEY AUTOINCREMENT, category_id INTEGER NOT NULL, name TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE)`,
     `CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, image TEXT DEFAULT '', quantity INTEGER DEFAULT 0, description TEXT DEFAULT '', hsn_code TEXT DEFAULT '', sell_price REAL DEFAULT 0, inward_price REAL DEFAULT 0, serial_number TEXT UNIQUE, discount_percent REAL DEFAULT 0, barcode TEXT UNIQUE, barcode_image TEXT DEFAULT '', category_id INTEGER, subcategory_id INTEGER, gst_rate REAL DEFAULT 18, supplier_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
@@ -55,199 +44,99 @@ async function initTursoSchema() {
     `CREATE TABLE IF NOT EXISTS ai_conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, content TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`,
   ];
-  for (const sql of createStmts) {
+  for (const sql of stmts) {
     try { await turso.execute(sql); } catch (e) { console.warn('Schema create:', e.message); }
   }
-
-  const productColumns = ['quantity', 'description', 'hsn_code', 'sell_price', 'inward_price', 'serial_number', 'discount_percent', 'barcode', 'barcode_image', 'category_id', 'subcategory_id', 'gst_rate', 'supplier_id', 'updated_at'];
-  for (const col of productColumns) {
-    try { await turso.execute(`ALTER TABLE products ADD COLUMN ${col} TEXT DEFAULT ''`); } catch (e) {}
-  }
-  const saleColumns = ['customer_id', 'customer_phone', 'customer_gstin', 'customer_address', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'payment_mode', 'is_barcode_scan', 'notes'];
-  for (const col of saleColumns) {
-    try { await turso.execute(`ALTER TABLE sales ADD COLUMN ${col} TEXT DEFAULT ''`); } catch (e) {}
-  }
-  const purchaseColumns = ['supplier_id', 'notes'];
-  for (const col of purchaseColumns) {
-    try { await turso.execute(`ALTER TABLE purchases ADD COLUMN ${col} TEXT DEFAULT ''`); } catch (e) {}
-  }
-
-  const idxStmts = [
-    `CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)`,
-    `CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date)`,
-    `CREATE INDEX IF NOT EXISTS idx_parties_type ON parties(party_type)`,
+  const migs = [
+    { table: 'products', col: 'quantity', def: 'INTEGER DEFAULT 0' },
+    { table: 'products', col: 'description', def: 'TEXT DEFAULT ""' },
+    { table: 'products', col: 'hsn_code', def: 'TEXT DEFAULT ""' },
+    { table: 'products', col: 'sell_price', def: 'REAL DEFAULT 0' },
+    { table: 'products', col: 'inward_price', def: 'REAL DEFAULT 0' },
+    { table: 'products', col: 'serial_number', def: 'TEXT' },
+    { table: 'products', col: 'discount_percent', def: 'REAL DEFAULT 0' },
+    { table: 'products', col: 'barcode', def: 'TEXT' },
+    { table: 'products', col: 'barcode_image', def: 'TEXT DEFAULT ""' },
+    { table: 'products', col: 'category_id', def: 'INTEGER' },
+    { table: 'products', col: 'subcategory_id', def: 'INTEGER' },
+    { table: 'products', col: 'gst_rate', def: 'REAL DEFAULT 18' },
+    { table: 'products', col: 'supplier_id', def: 'INTEGER' },
+    { table: 'products', col: 'updated_at', def: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+    { table: 'sales', col: 'customer_id', def: 'INTEGER' },
+    { table: 'sales', col: 'customer_phone', def: 'TEXT DEFAULT ""' },
+    { table: 'sales', col: 'customer_gstin', def: 'TEXT DEFAULT ""' },
+    { table: 'sales', col: 'customer_address', def: 'TEXT DEFAULT ""' },
+    { table: 'sales', col: 'discount_total', def: 'REAL DEFAULT 0' },
+    { table: 'sales', col: 'cgst_total', def: 'REAL DEFAULT 0' },
+    { table: 'sales', col: 'sgst_total', def: 'REAL DEFAULT 0' },
+    { table: 'sales', col: 'igst_total', def: 'REAL DEFAULT 0' },
+    { table: 'sales', col: 'cess_total', def: 'REAL DEFAULT 0' },
+    { table: 'sales', col: 'payment_mode', def: 'TEXT DEFAULT "cash"' },
+    { table: 'sales', col: 'is_barcode_scan', def: 'INTEGER DEFAULT 0' },
+    { table: 'sales', col: 'notes', def: 'TEXT DEFAULT ""' },
+    { table: 'purchases', col: 'supplier_id', def: 'INTEGER' },
+    { table: 'purchases', col: 'notes', def: 'TEXT DEFAULT ""' },
   ];
-  for (const sql of idxStmts) {
-    try { await turso.execute(sql); } catch (e) { console.warn('Index:', e.message); }
+  for (const m of migs) {
+    try { await turso.execute(`ALTER TABLE ${m.table} ADD COLUMN ${m.col} ${m.def}`); } catch (e) {}
   }
-}
-
-async function getLocalDb() {
-  if (localDb) return localDb;
-  if (!ENABLE_LOCAL) return null;
-  const SQL = await initSqlJs();
-  localSQL = SQL;
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH);
-    localDb = new SQL.Database(buffer);
-  } else {
-    localDb = new SQL.Database();
+  const idx = [
+    'CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)',
+    'CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)',
+    'CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date)',
+    'CREATE INDEX IF NOT EXISTS idx_parties_type ON parties(party_type)',
+  ];
+  for (const sql of idx) {
+    try { await turso.execute(sql); } catch (e) {}
   }
-  localDb.run('PRAGMA journal_mode=WAL');
-  localDb.run('PRAGMA foreign_keys=ON');
-  initSchema(localDb);
-  saveLocalDb();
-  return localDb;
+  await seedIfEmpty();
 }
 
-function initSchema(db) {
-  db.run(`CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
-    is_editable INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS subcategories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, category_id INTEGER NOT NULL,
-    name TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
-    image TEXT DEFAULT '', quantity INTEGER DEFAULT 0,
-    description TEXT DEFAULT '', hsn_code TEXT DEFAULT '',
-    sell_price REAL DEFAULT 0, inward_price REAL DEFAULT 0,
-    serial_number TEXT UNIQUE, discount_percent REAL DEFAULT 0,
-    barcode TEXT UNIQUE, barcode_image TEXT DEFAULT '',
-    category_id INTEGER, subcategory_id INTEGER,
-    gst_rate REAL DEFAULT 18, supplier_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS parties (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
-    party_type TEXT DEFAULT 'customer', phone TEXT DEFAULT '',
-    email TEXT DEFAULT '', gstin TEXT DEFAULT '',
-    address TEXT DEFAULT '', city TEXT DEFAULT '', state TEXT DEFAULT '',
-    pincode TEXT DEFAULT '', opening_balance REAL DEFAULT 0,
-    is_active INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS sales (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL,
-    sale_date TEXT NOT NULL, customer_id INTEGER,
-    customer_name TEXT DEFAULT 'Walk-in Customer',
-    customer_phone TEXT DEFAULT '', customer_gstin TEXT DEFAULT '',
-    customer_address TEXT DEFAULT '', items TEXT NOT NULL,
-    subtotal REAL DEFAULT 0, discount_total REAL DEFAULT 0,
-    cgst_total REAL DEFAULT 0, sgst_total REAL DEFAULT 0,
-    igst_total REAL DEFAULT 0, cess_total REAL DEFAULT 0,
-    grand_total REAL DEFAULT 0, payment_mode TEXT DEFAULT 'cash',
-    is_barcode_scan INTEGER DEFAULT 0, notes TEXT DEFAULT '',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS purchases (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL,
-    purchase_date TEXT NOT NULL, supplier_id INTEGER,
-    supplier_name TEXT DEFAULT '', items TEXT NOT NULL,
-    subtotal REAL DEFAULT 0, gst_total REAL DEFAULT 0,
-    grand_total REAL DEFAULT 0, payment_status TEXT DEFAULT 'paid',
-    notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS stock_movements (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER,
-    type TEXT, quantity_change INTEGER, reference TEXT,
-    notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS ai_conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT,
-    content TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY, value TEXT
-  )`);
-
-  db.run('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_parties_type ON parties(party_type)');
-}
-
-function saveLocalDb() {
-  if (!localDb) return;
-  const data = localDb.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
-}
-
-async function seedIfEmpty(db) {
-  const catCount = db.exec('SELECT COUNT(*) as c FROM categories');
-  const count = catCount.length > 0 ? catCount[0].values[0][0] : 0;
-  if (count === 0) {
-    for (let i = 1; i <= 10; i++) {
-      db.run('INSERT INTO categories (name) VALUES (?)', [`Category ${i}`]);
-      const catId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
-      for (let j = 1; j <= 6; j++) {
-        db.run('INSERT INTO subcategories (category_id, name) VALUES (?, ?)', [catId, `Subcategory ${i}.${j}`]);
+async function seedIfEmpty() {
+  try {
+    const r = await turso.execute('SELECT COUNT(*) as c FROM categories');
+    if (r.rows[0]?.c > 0) return;
+    for (let i = 1; i <= 5; i++) {
+      const ins = await turso.execute({ sql: 'INSERT INTO categories (name) VALUES (?)', args: [`Category ${i}`] });
+      const catId = Number(ins.lastInsertRowid);
+      for (let j = 1; j <= 3; j++) {
+        await turso.execute({ sql: 'INSERT INTO subcategories (category_id, name) VALUES (?, ?)', args: [catId, `Sub ${i}.${j}`] });
       }
     }
-    const settingsSeed = [
-      ['company_name', 'Aditya Enterprises'], ['company_address', 'Shop No. 5, Main Market, City'],
-      ['company_gstin', '27AXXXXX1234Z1'], ['company_phone', '+91-9876543210'],
-      ['company_email', 'aditya@email.com'], ['company_pan', 'ABCDE1234F'],
-      ['invoice_prefix', 'AE/'], ['gst_rate', '18'], ['cgst_rate', '9'],
-      ['sgst_rate', '9'], ['igst_rate', '18'], ['printer_type', 'thermal'],
-      ['printer_port', 'USB001'], ['scanner_mode', 'keyboard_wedge'],
-      ['groq_api_key', ''], ['groq_model', 'llama-3.3-70b-versatile'],
+    const defaults = [
+      ['company_name', 'Aditya Enterprises'],
+      ['company_gstin', '27AXXXXX1234Z1'],
+      ['company_phone', '+91-9876543210'],
+      ['invoice_prefix', 'AE/'],
+      ['gst_rate', '18'],
+      ['cgst_rate', '9'],
+      ['sgst_rate', '9'],
+      ['igst_rate', '18'],
+      ['printer_type', 'thermal'],
+      ['groq_model', 'llama-3.3-70b-versatile'],
+      ['groq_api_key', ''],
     ];
-    for (const [k, v] of settingsSeed) {
-      db.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [k, v]);
+    for (const [k, v] of defaults) {
+      try { await turso.execute({ sql: 'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', args: [k, v] }); } catch (e) {}
     }
-    saveLocalDb();
-  }
+  } catch (e) { console.warn('Seed:', e.message); }
 }
 
 function toRows(result) {
-  if (!result || result.length === 0) return [];
-  const { columns, values } = result[0];
-  return values.map(row => {
-    const obj = {};
-    columns.forEach((col, i) => { obj[col] = row[i]; });
-    return obj;
-  });
+  if (!result || !result.rows) return [];
+  return result.rows.map(r => ({ ...r }));
 }
 
 async function query(sql, params = []) {
-  const db = await getTurso();
-  if (db) {
-    try {
-      const result = await db.execute({ sql, args: params });
-      return result.rows || [];
-    } catch (e) { console.warn('Turso query failed, falling back:', e.message); }
-  }
-  const local = await getLocalDb();
-  if (!local) throw new Error('No database available');
-  const stmt = local.prepare(sql);
-  if (params.length > 0) stmt.bind(params);
-  const rows = [];
-  while (stmt.step()) rows.push(stmt.getAsObject());
-  stmt.free();
-  return rows;
+  const db = await getDb();
+  const result = await db.execute({ sql, args: params });
+  return result.rows || [];
 }
 
 async function run(sql, params = []) {
-  const db = await getTurso();
-  let tursoId = null;
-  if (db) {
-    try {
-      const result = await db.execute({ sql, args: params });
-      tursoId = Number(result.lastInsertRowid);
-    } catch (e) { console.warn('Turso write failed, falling back:', e.message); }
-  }
-  const local = await getLocalDb();
-  if (!local) throw new Error('No database available');
-  local.run(sql, params);
-  const res = local.exec('SELECT last_insert_rowid()');
-  const localId = (res.length > 0 && res[0].values.length > 0) ? res[0].values[0][0] : 0;
-  saveLocalDb();
-  return { id: tursoId || localId, tursoId, localId };
+  const db = await getDb();
+  const result = await db.execute({ sql, args: params });
+  return { id: Number(result.lastInsertRowid) };
 }
 
 async function get(sql, params = []) {
@@ -259,4 +148,4 @@ async function all(sql, params = []) {
   return await query(sql, params);
 }
 
-module.exports = { getTurso, getLocalDb, getDb: getLocalDb, query, run, get, all, initSchema, seedIfEmpty, dataDir: DATA_DIR };
+module.exports = { getDb, query, run, get, all, dataDir: DATA_DIR };
