@@ -16,6 +16,13 @@ try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {
   try { const tmpDir = '/tmp/aditya-erp-data'; fs.mkdirSync(tmpDir, { recursive: true }); process.env.DATA_DIR = tmpDir; } catch (e2) {}
 }
 
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)),
+  ]);
+}
+
 async function getTurso() {
   if (turso) return turso;
   const url = process.env.TURSO_DATABASE_URL;
@@ -24,11 +31,12 @@ async function getTurso() {
   try {
     const { createClient } = require('@libsql/client');
     turso = createClient({ url, authToken: token });
-    await turso.execute('SELECT 1');
-    await initTursoSchema();
+    await withTimeout(turso.execute('SELECT 1'), 8000);
+    await withTimeout(initTursoSchema(), 15000);
     return turso;
   } catch (e) {
     console.warn('Turso connection failed:', e.message);
+    turso = null;
     return null;
   }
 }
