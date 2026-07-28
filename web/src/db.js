@@ -226,7 +226,7 @@ async function resetData() {
   if (!url) throw new Error('TURSO_DATABASE_URL not configured');
   turso = createClient({ url, authToken: token });
   await withTimeout(turso.execute('SELECT 1'), 8000);
-  const tables = ['stock_movements', 'sales', 'purchases', 'products', 'parties', 'ai_conversations', 'subcategories', 'categories'];
+  const tables = ['stock_movements', 'sales', 'purchases', 'products', 'parties', 'ai_conversations', 'subcategories', 'categories', 'customer_visits', 'services'];
   for (const t of tables) {
     try { await turso.execute(`DROP TABLE IF EXISTS ${t}`); } catch (e) {}
   }

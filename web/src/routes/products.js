@@ -77,6 +77,14 @@ router.put('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
+router.delete('/', async (req, res) => {
+  try {
+    await run('DELETE FROM stock_movements');
+    await run('DELETE FROM products');
+    res.json({ success: true, message: 'All products deleted' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     await run('DELETE FROM stock_movements WHERE product_id = ?', [req.params.id]);
