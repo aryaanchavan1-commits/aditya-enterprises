@@ -227,8 +227,8 @@ export default function BarcodeManager() {
       {mode === 'scan' && (
         <div>
           <div style={{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}>
-            <button className={`btn ${mode==='scan'?'btn-primary':'btn-outline'}`} onClick={() => setMode('scan')}>⌨ Keyboard</button>
-            <button className={`btn ${mode==='camera'?'btn-primary':'btn-outline'}`} onClick={() => setMode('camera')}>📷 Camera</button>
+            <button className={`btn ${mode==='scan'?'btn-primary':'btn-outline'}`} onClick={() => setMode('scan')}>Keyboard</button>
+            <button className={`btn ${mode==='camera'?'btn-primary':'btn-outline'}`} onClick={() => setMode('camera')}>Camera</button>
           </div>
 
           <div className="card" style={{textAlign:'center'}}>
@@ -249,7 +249,7 @@ export default function BarcodeManager() {
             </button>
 
             <button className="btn btn-warning" style={{marginTop:8, marginLeft:8}} onClick={() => setMode('camera')}>
-              📷 Use Camera
+              Use Camera
             </button>
 
             <div style={{marginTop:12, fontSize:11, color:'#999'}}>

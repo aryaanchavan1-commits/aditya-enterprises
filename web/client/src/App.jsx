@@ -91,7 +91,7 @@ function App() {
             ))}
           </nav>
           <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            {sidebarOpen ? '◀' : '▶'}
+            {sidebarOpen ? '<' : '>'}
           </button>
         </aside>
 
