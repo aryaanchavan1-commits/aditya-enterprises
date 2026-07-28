@@ -48,7 +48,7 @@ export default function CameraScanner({ onScan, onClose }) {
     <div className="card" style={{ textAlign: 'center' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h3 style={{ margin: 0 }}>Camera Barcode Scanner</h3>
-        <button className="btn btn-sm btn-outline" onClick={onClose}>✕ Close</button>
+        <button className="btn btn-sm btn-outline" onClick={onClose}>Close</button>
       </div>
 
       <div id="barcode-scanner-preview" ref={previewRef} style={{
@@ -58,7 +58,7 @@ export default function CameraScanner({ onScan, onClose }) {
       }}>
         {!scanning && !lastCode && (
           <div style={{ color: '#fff', fontSize: 14 }}>
-            <div style={{ fontSize: 48, marginBottom: 8 }}>📷</div>
+            <div style={{ fontSize: 36, marginBottom: 8, fontWeight: 300, opacity: 0.5 }}>Camera</div>
             Tap "Start Scanner" to begin
           </div>
         )}
@@ -68,9 +68,9 @@ export default function CameraScanner({ onScan, onClose }) {
 
       <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
         {!scanning ? (
-          <button className="btn btn-primary btn-lg" onClick={startScanning}>📷 Start Scanner</button>
+          <button className="btn btn-primary btn-lg" onClick={startScanning}>Start Scanner</button>
         ) : (
-          <button className="btn btn-danger" onClick={stopScanning}>⏹ Stop Scanner</button>
+          <button className="btn btn-danger" onClick={stopScanning}>Stop Scanner</button>
         )}
         {lastCode && (
           <div style={{ width: '100%', marginTop: 8 }}>

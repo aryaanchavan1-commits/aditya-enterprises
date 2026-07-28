@@ -44,16 +44,16 @@ function App() {
   }, []);
 
   const menuItems = [
-    { path: '/', label: 'Dashboard', icon: '📊' },
-    { path: '/products', label: 'Products', icon: '📦' },
-    { path: '/categories', label: 'Categories', icon: '📁' },
-    { path: '/barcode', label: 'Barcode', icon: '🔍' },
-    { path: '/pos', label: 'Sales / POS', icon: '🛒' },
-    { path: '/purchases', label: 'Purchases', icon: '📥' },
-    { path: '/invoices', label: 'GST & Invoices', icon: '🧾' },
-    { path: '/reports', label: 'Reports', icon: '📈' },
-    { path: '/ai', label: 'AI Assistant', icon: '🤖' },
-    { path: '/settings', label: 'Settings', icon: '⚙' },
+    { path: '/', label: 'Dashboard', icon: 'D' },
+    { path: '/products', label: 'Products', icon: 'P' },
+    { path: '/categories', label: 'Categories', icon: 'C' },
+    { path: '/barcode', label: 'Barcode', icon: 'B' },
+    { path: '/pos', label: 'Sales / POS', icon: 'S' },
+    { path: '/purchases', label: 'Purchases', icon: 'R' },
+    { path: '/invoices', label: 'GST & Invoices', icon: 'I' },
+    { path: '/reports', label: 'Reports', icon: 'T' },
+    { path: '/ai', label: 'AI Assistant', icon: 'A' },
+    { path: '/settings', label: 'Settings', icon: 'G' },
   ];
 
   return (
@@ -65,8 +65,8 @@ function App() {
           </div>
         )}
         {!sidebarOpen && (
-          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} style={{position:'fixed', top:10, left:10, zIndex:99, background:'#1a1a2e', color:'#fff', border:'none', borderRadius:6, padding:'8px 12px', fontSize:20, cursor:'pointer'}}>
-            ☰
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+            Menu
           </button>
         )}
         <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
@@ -81,7 +81,7 @@ function App() {
                 to={item.path}
                 className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
               >
-                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-icon-circle">{item.icon}</span>
                 {sidebarOpen && <span className="nav-label">{item.label}</span>}
               </Link>
             ))}

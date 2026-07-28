@@ -152,7 +152,7 @@ export default function Products() {
               {products.map(p => (
                 <tr key={p.id}>
                   <td>
-                    {p.image ? <img src={p.image} alt="" style={{width:40,height:40,borderRadius:4,objectFit:'cover'}} /> : <div style={{width:40,height:40,background:'#eee',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📦</div>}
+                    {p.image ? <img src={p.image} alt="" style={{width:40,height:40,borderRadius:4,objectFit:'cover'}} /> : <div style={{width:40,height:40,background:'#e8edf2',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#8a9aa8'}}>N/A</div>}
                   </td>
                   <td><strong>{p.name}</strong></td>
                   <td>{p.hsn_code || '-'}</td>

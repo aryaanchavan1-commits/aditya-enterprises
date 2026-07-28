@@ -7,12 +7,49 @@ const { getDb, seedIfEmpty } = require('../src/db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IS_VERCEL = !!process.env.VERCEL;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || IS_VERCEL;
 
-app.use(cors());
+const ALLOWED_ORIGINS = [
+  'https://web-rho-tawny-75.vercel.app',
+  'https://aditya-enterprises.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+];
+
+app.use(cors({
+  origin: IS_PRODUCTION ? (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(null, false);
+  } : '*',
+  credentials: true,
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-const DATA_DIR = (process.env.DATA_DIR || (process.env.VERCEL ? '/tmp/data' : path.join(__dirname, '..', 'data')));
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (req.path.startsWith('/api')) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+  next();
+});
+
+if (IS_PRODUCTION) {
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+    });
+    next();
+  });
+}
+
+const DATA_DIR = (process.env.DATA_DIR || (IS_VERCEL ? '/tmp/data' : path.join(__dirname, '..', 'data')));
 const uploadsDir = path.join(DATA_DIR, 'uploads');
 const barcodesDir = path.join(DATA_DIR, 'barcodes');
 const invoicesDir = path.join(DATA_DIR, 'invoices');
@@ -23,7 +60,13 @@ try { fs.mkdirSync(invoicesDir, { recursive: true }); } catch (e) {}
 try { fs.mkdirSync(aiUploadsDir, { recursive: true }); } catch (e) {}
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', name: 'Aditya Enterprises ERP Web', version: '2.0.0', time: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    name: 'Aditya Enterprises ERP Web',
+    version: '2.0.0',
+    environment: IS_PRODUCTION ? 'production' : 'development',
+    time: new Date().toISOString(),
+  });
 });
 
 app.use('/data/uploads', express.static(uploadsDir));
@@ -44,7 +87,39 @@ app.use('/api/devices', require('../src/routes/devices'));
 app.use('/api/reports', require('../src/routes/reports'));
 app.use('/api/purchases', require('../src/routes/purchases'));
 
-if (!process.env.VERCEL) {
+app.get('/api/status', async (req, res) => {
+  const tursoOk = !!(await getTurso().catch(() => null));
+  let localOk = false;
+  try {
+    const local = await getLocalDb();
+    localOk = !!local;
+  } catch (e) {}
+  res.json({
+    success: true,
+    data: {
+      server: 'ok',
+      database: tursoOk ? 'turso' : (localOk ? 'local_sqljs' : 'none'),
+      turso: tursoOk,
+      local_fallback: localOk,
+      data_dir: DATA_DIR,
+      environment: IS_PRODUCTION ? 'production' : 'development',
+    },
+  });
+});
+
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
+});
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err.message);
+  res.status(err.status || 500).json({
+    success: false,
+    error: IS_PRODUCTION ? 'Internal server error' : err.message,
+  });
+});
+
+if (!IS_VERCEL) {
   const clientBuild = path.join(__dirname, '..', 'client', 'dist');
   if (fs.existsSync(clientBuild)) {
     app.use(express.static(clientBuild));
@@ -65,13 +140,9 @@ async function start() {
     console.error('Database init error:', err.message);
   }
 
-  if (!process.env.VERCEL) {
+  if (!IS_VERCEL) {
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`\n╔══════════════════════════════════════════════════════════╗`);
-      console.log(`║   Aditya Enterprises ERP Web - Server Running           ║`);
-      console.log(`║   URL: http://localhost:${PORT}                               ║`);
-      console.log(`║   API: http://localhost:${PORT}/api/health                    ║`);
-      console.log(`╚══════════════════════════════════════════════════════════╝\n`);
+      console.log(`Aditya Enterprises ERP Web running on http://localhost:${PORT}`);
     });
   }
 }

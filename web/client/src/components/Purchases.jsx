@@ -146,7 +146,7 @@ export default function Purchases() {
       <div className="card">
         <h3>Purchase History</h3>
         {purchases.length === 0 ? (
-          <div className="empty-state"><div className="empty-icon">📦</div>No purchases yet</div>
+          <div className="empty-state"><p>No purchases yet</p></div>
         ) : (
           <div className="table-container">
             <table>

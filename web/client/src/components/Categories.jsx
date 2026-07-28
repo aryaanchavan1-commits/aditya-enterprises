@@ -129,8 +129,8 @@ export default function Categories() {
                   ) : (
                     <>
                       <span style={{flex:1, fontSize:13}}>{sub.name}</span>
-                      <button className="btn btn-sm btn-outline" onClick={() => { setEditSub({catId: cat.id, subId: sub.id}); setEditSubName(sub.name); }}>✏</button>
-                      <button className="btn btn-sm btn-outline" onClick={() => deleteSubcategory(cat.id, sub.id)} style={{color:'#e74c3c'}}>🗑</button>
+                      <button className="btn btn-sm btn-outline" onClick={() => { setEditSub({catId: cat.id, subId: sub.id}); setEditSubName(sub.name); }}>Edit</button>
+                      <button className="btn btn-sm btn-outline" onClick={() => deleteSubcategory(cat.id, sub.id)} style={{color:'#e74c3c'}}>Del</button>
                     </>
                   )}
                 </div>

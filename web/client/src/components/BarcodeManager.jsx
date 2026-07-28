@@ -263,7 +263,7 @@ export default function BarcodeManager() {
                 <h3>Product Found</h3>
                 <div style={{display:'flex', gap:16, alignItems:'start', marginTop:12}}>
                   <div>
-                    {scannedProduct.image ? <img src={scannedProduct.image} alt="" style={{width:100,height:100,borderRadius:8,objectFit:'cover'}} /> : <div style={{width:100,height:100,background:'#eee',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:40}}>📦</div>}
+                    {scannedProduct.image ? <img src={scannedProduct.image} alt="" style={{width:100,height:100,borderRadius:8,objectFit:'cover'}} /> : <div style={{width:100,height:100,background:'#e8edf2',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:600,color:'#8a9aa8'}}>IMG</div>}
                   </div>
                   <div style={{flex:1}}>
                     <h4>{scannedProduct.name}</h4>
@@ -354,7 +354,7 @@ export default function BarcodeManager() {
               ))}
               {products.filter(p => p.barcode_image).length === 0 && (
                 <div className="empty-state" style={{gridColumn:'1/-1'}}>
-                  <div className="empty-icon">🔍</div>
+                  <p style={{fontSize:48,color:'#ccc'}}>B</p>
                   <p>No barcodes generated yet. Go to "Generate" tab first.</p>
                 </div>
               )}

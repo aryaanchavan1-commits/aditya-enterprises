@@ -4,15 +4,37 @@ const API = '/api';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetch(`${API}/sales/stats/dashboard`)
       .then(r => r.json())
-      .then(d => { if (d.success) setStats(d.data); })
-      .catch(e => console.error(e));
+      .then(d => {
+        if (d.success) {
+          setStats({
+            ...d.data,
+            recentSales: d.data.recentSales || [],
+            stockMovements: d.data.stockMovements || [],
+          });
+        } else {
+          setError(d.error || 'Failed to load dashboard');
+        }
+      })
+      .catch(e => setError(e.message));
   }, []);
 
-  if (!stats) return <div className="empty-state"><div className="empty-icon">⏳</div>Loading dashboard...</div>;
+  if (error) {
+    return (
+      <div className="empty-state">
+        <p style={{ fontSize: 36, color: '#e74c3c', marginBottom: 12 }}>!</p>
+        <p style={{ color: '#666' }}>Could not load dashboard data</p>
+        <p style={{ fontSize: 12, color: '#999', marginTop: 8 }}>{error}</p>
+        <button className="btn btn-primary" style={{marginTop:16}} onClick={() => { setError(null); setStats(null); window.location.reload(); }}>Retry</button>
+      </div>
+    );
+  }
+
+  if (!stats) return <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading dashboard...</p></div>;
 
   return (
     <div>

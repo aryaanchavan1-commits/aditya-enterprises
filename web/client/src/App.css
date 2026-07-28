@@ -26,7 +26,13 @@
 }
 .nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
 .nav-item.active { background: rgba(255,255,255,0.12); color: #fff; border-left-color: #00d4ff; }
-.nav-icon { font-size: 18px; width: 24px; text-align: center; }
+.nav-icon-circle {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #00d4ff;
+  flex-shrink: 0;
+}
 .nav-label { white-space: nowrap; }
 
 .sidebar-toggle {
@@ -137,7 +143,21 @@ tr:hover td { background: #f8f9fa; }
 .badge-info { background: #d1ecf1; color: #0c5460; }
 
 .empty-state { text-align: center; padding: 40px; color: #999; }
-.empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+
+.spinner {
+  width: 36px; height: 36px; border: 3px solid #e0e0e0;
+  border-top-color: #2c3e50; border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(255,255,255,0.8);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999;
+}
 
 .barcode-scanner-input {
   font-size: 18px; padding: 14px; border: 2px dashed #3498db;

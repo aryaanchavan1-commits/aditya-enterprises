@@ -166,7 +166,7 @@ export default function AIChat() {
           <button className="btn btn-sm btn-info" onClick={() => handleAnalyze('inventory')}>Inventory</button>
           <button className="btn btn-sm btn-info" onClick={() => handleAnalyze('sales')}>Sales</button>
           <button className="btn btn-sm btn-info" onClick={() => handleAnalyze('customers')}>Customers</button>
-          <button className="btn btn-sm btn-outline" onClick={() => setShowSettings(!showSettings)}>⚙ API Key</button>
+          <button className="btn btn-sm btn-outline" onClick={() => setShowSettings(!showSettings)}>API Key</button>
           <button className="btn btn-sm btn-outline" onClick={clearHistory}>Clear Chat</button>
         </div>
       </div>
@@ -200,7 +200,7 @@ export default function AIChat() {
           <div className="chat-messages" ref={chatRef}>
             {messages.length === 0 && (
               <div className="empty-state">
-                <div className="empty-icon">{mode === 'agent' ? '🦾' : '🤖'}</div>
+                <div style={{fontSize:48,color:'#3498db',marginBottom:12}}>AI</div>
                 <h3>Aditya Enterprises {mode === 'agent' ? 'AI Agent' : 'AI Assistant'}</h3>
                 <p style={{fontSize:13, color:'#666'}}>Powered by Groq API (Llama 3.3, Mixtral, DeepSeek, Gemma, Qwen)</p>
                 {mode === 'chat' ? (
@@ -268,7 +268,7 @@ export default function AIChat() {
               style={{display:'none'}}
               accept="*/*"
             />
-            <button className="btn btn-outline btn-sm" onClick={() => fileRef.current?.click()} title="Upload any file type">📎</button>
+            <button className="btn btn-outline btn-sm" onClick={() => fileRef.current?.click()} title="Upload any file type">File</button>
             <input
               value={input}
               onChange={e => setInput(e.target.value)}

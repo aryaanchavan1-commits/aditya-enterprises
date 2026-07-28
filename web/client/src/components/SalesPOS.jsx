@@ -144,7 +144,7 @@ export default function SalesPOS() {
                     <tr key={p.id}>
                       <td>
                         <div style={{display:'flex',alignItems:'center',gap:8}}>
-                          {p.image ? <img src={p.image} alt="" style={{width:30,height:30,borderRadius:4,objectFit:'cover'}} /> : <span>📦</span>}
+                          {p.image ? <img src={p.image} alt="" style={{width:30,height:30,borderRadius:4,objectFit:'cover'}} /> : <span style={{color:'#8a9aa8',fontWeight:600}}>NA</span>}
                           <div>
                             <strong style={{fontSize:13}}>{p.name}</strong>
                             <div style={{fontSize:10,color:'#999'}}>HSN: {p.hsn_code}</div>

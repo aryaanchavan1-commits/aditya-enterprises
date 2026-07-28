@@ -212,7 +212,7 @@ export default function Settings() {
           {detectedScanners.length > 0 ? (
             detectedScanners.map((s, i) => (
               <div key={i} style={{fontSize:12, padding:'6px 8px', marginBottom:4, background:'#f0f8ff', borderRadius:6, borderLeft:'3px solid #3498db'}}>
-                <div><strong>🔍 {s.name}</strong></div>
+                <div><strong>{s.name}</strong></div>
                 <div style={{fontSize:10, color:'#777'}}>
                   {s.deviceId && <span>ID: {s.deviceId.substring(0,40)}... | </span>}
                   {s.path && <span>Port: {s.path} | </span>}

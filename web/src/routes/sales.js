@@ -28,7 +28,9 @@ router.get('/stats/dashboard', async (req, res) => {
     const monthlyRevenue = monthSalesArr.reduce((s, x) => s + x.grand_total, 0);
     const lowStock = (await get('SELECT COUNT(*) as c FROM products WHERE quantity <= 5'))?.c || 0;
     const totalSales = (await get('SELECT COUNT(*) as c FROM sales'))?.c || 0;
-    res.json({ success: true, data: { totalProducts, totalQuantity, todaySales: Math.round(todaySales * 100) / 100, monthlyRevenue: Math.round(monthlyRevenue * 100) / 100, lowStock, totalSales, todayInvoices: todaySalesArr.length, monthInvoices: monthSalesArr.length } });
+    const recentSales = await all('SELECT * FROM sales ORDER BY created_at DESC LIMIT 10');
+    const stockMovements = await all('SELECT sm.*, p.name as product_name FROM stock_movements sm LEFT JOIN products p ON sm.product_id = p.id ORDER BY sm.created_at DESC LIMIT 10');
+    res.json({ success: true, data: { totalProducts, totalQuantity, todaySales: Math.round(todaySales * 100) / 100, monthlyRevenue: Math.round(monthlyRevenue * 100) / 100, lowStock, totalSales, todayInvoices: todaySalesArr.length, monthInvoices: monthSalesArr.length, recentSales, stockMovements } });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
