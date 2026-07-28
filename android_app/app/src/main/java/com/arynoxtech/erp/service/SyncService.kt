@@ -3,6 +3,7 @@ package com.arynoxtech.erp.service
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import com.arynoxtech.erp.data.turso.TursoClient
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,6 +20,7 @@ data class SyncResult(
 @Singleton
 class SyncService @Inject constructor(
     private val syncManager: SyncManager,
+    private val tursoClient: TursoClient,
     @ApplicationContext private val context: Context
 ) {
     private val prefs: SharedPreferences by lazy {
@@ -29,10 +31,9 @@ class SyncService @Inject constructor(
         private const val KEY_LAST_SYNC = "last_sync_time"
     }
 
-    fun isSyncConfigured(): Boolean {
-        kotlinx.coroutines.runBlocking { syncManager.configureFromSettings() }
-        return syncManager.isConfigured
-    }
+    suspend fun configureFromSettings() = syncManager.configureFromSettings()
+
+    fun isSyncConfigured(): Boolean = tursoClient.isConfigured()
 
     fun lastSyncTime(): Long? {
         val time = prefs.getLong(KEY_LAST_SYNC, -1L)

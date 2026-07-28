@@ -89,6 +89,10 @@ app.use('/api/purchases', require('../src/routes/purchases'));
 app.use('/api/crm', require('../src/routes/crm'));
 app.use('/api/services', require('../src/routes/services'));
 
+app.get('/api/debug/:id', (req, res) => {
+  res.json({ params: req.params, url: req.url, path: req.path, originalUrl: req.originalUrl });
+});
+
 app.get('/api/status', async (req, res) => {
   let dbOk = false;
   let dbError = null;

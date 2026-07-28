@@ -135,6 +135,7 @@ class SettingsViewModel @Inject constructor(
                     tursoUrl = settings.tursoUrl,
                     tursoAuthToken = settings.tursoAuthToken
                 ) }
+                syncService.configureFromSettings()
                 groqAiService.setApiKey(settings.groqApiKey)
             }
         }
