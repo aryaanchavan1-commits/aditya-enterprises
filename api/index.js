@@ -100,6 +100,8 @@ app.use('/api/reports', require('../src/routes/reports'));
 app.use('/api/purchases', require('../src/routes/purchases'));
 app.use('/api/crm', require('../src/routes/crm'));
 app.use('/api/services', require('../src/routes/services'));
+app.use('/api/accounting', require('../src/routes/accounting'));
+app.use('/api/brands', require('../src/routes/brands'));
 
 const { get, all, run } = require('../src/db');
 

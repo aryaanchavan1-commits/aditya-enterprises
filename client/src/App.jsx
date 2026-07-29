@@ -14,6 +14,7 @@ import CRM from './components/CRM';
 import Servicing from './components/Servicing';
 import Suppliers from './components/Suppliers';
 import Accounting from './components/Accounting';
+import Brands from './components/Brands';
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -49,6 +50,7 @@ const MORE_ITEMS = [
   { path: '/accounting', label: 'Accounting', icon: 'L' },
   { path: '/reports', label: 'Reports', icon: 'T' },
   { path: '/crm', label: 'CRM', icon: 'M' },
+  { path: '/brands', label: 'Brands', icon: '\u2696' },
   { path: '/services', label: 'Servicing', icon: 'V' },
   { path: '/ai', label: 'AI Assistant', icon: 'A' },
 ];
@@ -163,6 +165,7 @@ function App() {
               <Route path="/crm" element={<CRM />} />
               <Route path="/suppliers" element={<Suppliers />} />
               <Route path="/accounting" element={<Accounting />} />
+              <Route path="/brands" element={<Brands />} />
               <Route path="/services" element={<Servicing />} />
               <Route path="/ai" element={<AIChat />} />
               <Route path="/settings" element={<Settings />} />

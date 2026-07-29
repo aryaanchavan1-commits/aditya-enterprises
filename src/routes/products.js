@@ -43,17 +43,18 @@ router.post('/', async (req, res) => {
     const serial = data.serial_number || `AE-SN-${Date.now()}`;
     let barcode_image = '';
     try {
+      const barcodesDir = path.join(require('../db').dataDir, 'barcodes');
+      fs.mkdirSync(barcodesDir, { recursive: true });
       const png = await generateBarcodeImage(barcode);
-      const fp = path.join(require('../db').dataDir, 'barcodes', `${barcode}.png`);
-      fs.writeFileSync(fp, png);
+      fs.writeFileSync(path.join(barcodesDir, `${barcode}.png`), png);
       barcode_image = `/data/barcodes/${barcode}.png`;
-    } catch (e) {}
+    } catch (e) { console.error('Barcode gen failed:', e.message); }
 
-    await run(`INSERT INTO products (name, image, quantity, description, hsn_code, sell_price, inward_price, serial_number, discount_percent, barcode, barcode_image, category_id, subcategory_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [data.name, data.image || '', data.quantity || 0, data.description || '', data.hsn_code || '', data.sell_price || 0, data.inward_price || 0, serial, data.discount_percent || 0, barcode, barcode_image, data.category_id || null, data.subcategory_id || null]);
+    const ins = await run(`INSERT INTO products (name, image, quantity, unit, description, hsn_code, sell_price, inward_price, serial_number, discount_percent, barcode, barcode_image, category_id, subcategory_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [data.name, data.image || '', data.quantity || 0, data.unit || 'pcs', data.description || '', data.hsn_code || '', data.sell_price || 0, data.inward_price || 0, serial, data.discount_percent || 0, barcode, barcode_image, data.category_id || null, data.subcategory_id || null]);
 
-    const result = await run('SELECT * FROM products ORDER BY id DESC LIMIT 1');
-    res.json({ success: true, data: result });
+    const product = await get('SELECT * FROM products WHERE id = ?', [ins.id || ins.lastID]);
+    res.json({ success: true, data: product });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
@@ -66,8 +67,10 @@ router.put('/:id', async (req, res) => {
     let barcode_image = existing.barcode_image;
     if (data.barcode && data.barcode !== existing.barcode) {
       try {
+        const barcodesDir = path.join(require('../db').dataDir, 'barcodes');
+        fs.mkdirSync(barcodesDir, { recursive: true });
         const png = await generateBarcodeImage(barcode);
-        fs.writeFileSync(path.join(require('../db').dataDir, 'barcodes', `${barcode}.png`), png);
+        fs.writeFileSync(path.join(barcodesDir, `${barcode}.png`), png);
         barcode_image = `/data/barcodes/${barcode}.png`;
       } catch (e) {}
     }

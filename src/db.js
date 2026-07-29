@@ -51,6 +51,10 @@ async function initSchema() {
     `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`,
     `CREATE TABLE IF NOT EXISTS customer_visits (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT NOT NULL, customer_phone TEXT DEFAULT '', visit_date TEXT NOT NULL, purpose TEXT DEFAULT '', notes TEXT DEFAULT '', amount REAL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS services (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT NOT NULL, customer_phone TEXT DEFAULT '', device_type TEXT DEFAULT '', brand TEXT DEFAULT '', model TEXT DEFAULT '', serial_number TEXT DEFAULT '', issue TEXT DEFAULT '', parts TEXT DEFAULT '', parts_cost REAL DEFAULT 0, service_charge REAL DEFAULT 0, total_charge REAL DEFAULT 0, status TEXT DEFAULT 'pending', technician TEXT DEFAULT '', received_date TEXT NOT NULL, completed_date TEXT, notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS brands (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, description TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS cash_book (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, description TEXT NOT NULL, type TEXT NOT NULL CHECK(type IN ('in','out')), amount REAL NOT NULL, category TEXT DEFAULT '', reference TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, description TEXT NOT NULL, category TEXT DEFAULT '', amount REAL NOT NULL, payment_mode TEXT DEFAULT 'cash', reference TEXT DEFAULT '', notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS incomes (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, description TEXT NOT NULL, category TEXT DEFAULT '', amount REAL NOT NULL, payment_mode TEXT DEFAULT 'cash', reference TEXT DEFAULT '', notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
   ];
   for (const sql of stmts) {
     try { await turso.execute(sql); } catch (e) { console.warn('Schema create:', e.message); }
@@ -67,6 +71,10 @@ async function initSchema() {
     { table: 'settings', cols: ['value'] },
     { table: 'customer_visits', cols: ['customer_name', 'customer_phone', 'visit_date', 'purpose', 'notes', 'amount', 'created_at'] },
     { table: 'services', cols: ['customer_name', 'customer_phone', 'device_type', 'brand', 'model', 'serial_number', 'issue', 'parts', 'parts_cost', 'service_charge', 'total_charge', 'status', 'technician', 'received_date', 'completed_date', 'notes', 'created_at'] },
+    { table: 'brands', cols: ['name', 'description', 'created_at'] },
+    { table: 'cash_book', cols: ['date', 'description', 'type', 'amount', 'category', 'reference', 'created_at'] },
+    { table: 'expenses', cols: ['date', 'description', 'category', 'amount', 'payment_mode', 'reference', 'notes', 'created_at'] },
+    { table: 'incomes', cols: ['date', 'description', 'category', 'amount', 'payment_mode', 'reference', 'notes', 'created_at'] },
   ];
   const migs = [];
   for (const t of allCols) {
