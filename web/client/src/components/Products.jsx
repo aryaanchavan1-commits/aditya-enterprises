@@ -106,10 +106,11 @@ export default function Products() {
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
 
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
         <h2>Products ({products.length})</h2>
-        <button className="btn btn-primary" onClick={openAdd}>+ Add Product</button>
+        <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ Add Product</button>
       </div>
+      <button className="fab show-mobile" onClick={openAdd}>+</button>
 
       <div className="search-bar">
         <input

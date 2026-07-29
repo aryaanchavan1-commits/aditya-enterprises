@@ -45,13 +45,14 @@ export default function Servicing() {
   return (
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
         <h2>Servicing ({services.length})</h2>
-        <div style={{display:'flex', gap:12, alignItems:'center'}}>
-          <span style={{fontSize:13, fontWeight:600}}>Outstanding: Rs.{totalOutstanding.toLocaleString('en-IN')}</span>
-          <button className="btn btn-primary" onClick={openAdd}>New Service</button>
+        <div style={{display:'flex', gap:10, alignItems:'center'}}>
+          <span style={{fontSize:12, fontWeight:600}}>Out: Rs.{totalOutstanding.toLocaleString('en-IN')}</span>
+          <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ New</button>
         </div>
       </div>
+      <button className="fab show-mobile" onClick={openAdd}>+</button>
       <div className="search-bar">
         <input type="text" placeholder="Search by customer, device, serial..." value={search} onChange={e => setSearch(e.target.value)} />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{width:180}}>

@@ -32,8 +32,26 @@ class ErrorBoundary extends Component {
   }
 }
 
+const TAB_ITEMS = [
+  { path: '/', label: 'Dashboard', icon: '\u25A3' },
+  { path: '/products', label: 'Products', icon: '\u2693' },
+  { path: '/pos', label: 'Sales', icon: '\u2699' },
+  { path: '/purchases', label: 'Buy', icon: '\u2190' },
+  { path: '/settings', label: 'Settings', icon: '\u2699' },
+];
+const MORE_ITEMS = [
+  { path: '/categories', label: 'Categories', icon: 'C' },
+  { path: '/barcode', label: 'Barcode', icon: 'B' },
+  { path: '/invoices', label: 'GST & Invoices', icon: 'I' },
+  { path: '/reports', label: 'Reports', icon: 'T' },
+  { path: '/crm', label: 'CRM', icon: 'M' },
+  { path: '/services', label: 'Servicing', icon: 'V' },
+  { path: '/ai', label: 'AI Assistant', icon: 'A' },
+];
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showMore, setShowMore] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
   const [serverOnline, setServerOnline] = useState(true);
@@ -50,6 +68,10 @@ function App() {
   }, [isMobile]);
 
   React.useEffect(() => {
+    setShowMore(false);
+  }, [location.pathname]);
+
+  React.useEffect(() => {
     fetch('/api/health').then(r => r.json()).then(() => setServerOnline(true)).catch(() => setServerOnline(false));
     const int = setInterval(() => {
       fetch('/api/health').then(r => r.json()).then(() => setServerOnline(true)).catch(() => setServerOnline(false));
@@ -59,20 +81,8 @@ function App() {
 
   const closeSidebar = () => { if (isMobile) setSidebarOpen(false); };
 
-  const menuItems = [
-    { path: '/', label: 'Dashboard', icon: 'D' },
-    { path: '/products', label: 'Products', icon: 'P' },
-    { path: '/categories', label: 'Categories', icon: 'C' },
-    { path: '/barcode', label: 'Barcode', icon: 'B' },
-    { path: '/pos', label: 'Sales / POS', icon: 'S' },
-    { path: '/purchases', label: 'Purchases', icon: 'R' },
-    { path: '/invoices', label: 'GST & Invoices', icon: 'I' },
-    { path: '/reports', label: 'Reports', icon: 'T' },
-    { path: '/crm', label: 'CRM', icon: 'M' },
-    { path: '/services', label: 'Servicing', icon: 'V' },
-    { path: '/ai', label: 'AI Assistant', icon: 'A' },
-    { path: '/settings', label: 'Settings', icon: 'G' },
-  ];
+  const pageTitle = TAB_ITEMS.concat(MORE_ITEMS).find(i => i.path === location.pathname)?.label || 'Aditya ERP';
+  const isTabPath = (path) => location.pathname === path;
 
   return (
     <ErrorBoundary>
@@ -82,21 +92,25 @@ function App() {
             <span>&#9888;</span> Server connection lost. Retrying...
           </div>
         )}
+
+        {/* Mobile drawer backdrop */}
         {sidebarOpen && isMobile && (
           <div className="sidebar-backdrop" onClick={closeSidebar} />
         )}
-        {!sidebarOpen && isMobile && (
-          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-            &#9776;
-          </button>
+
+        {/* More menu overlay (mobile) */}
+        {showMore && isMobile && (
+          <div className="more-overlay" onClick={() => setShowMore(false)} />
         )}
+
+        {/* Sidebar (desktop drawer / mobile drawer) */}
         <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
           <div className="sidebar-header">
             <img src="/logo.jpg" alt="Logo" className="sidebar-logo" />
             {sidebarOpen && <span className="sidebar-title">Aditya ERP</span>}
           </div>
           <nav className="sidebar-nav">
-            {menuItems.map(item => (
+            {[...TAB_ITEMS, ...MORE_ITEMS].map(item => (
               <Link
                 key={item.path}
                 to={item.path}
@@ -116,17 +130,22 @@ function App() {
         </aside>
 
         <main className="main-content">
+          {/* Top bar */}
           <header className="top-bar">
             <div className="top-bar-left">
-              <h2>Aditya Enterprises ERP Suite 2026</h2>
-              <span className={`badge ${serverOnline ? 'badge-success' : 'badge-danger'}`} style={{marginLeft:10, fontSize:10}}>
+              {isMobile && (
+                <button className="top-bar-menu-btn" onClick={() => setSidebarOpen(true)}>
+                  &#9776;
+                </button>
+              )}
+              <h2>{pageTitle}</h2>
+              <span className={`badge ${serverOnline ? 'badge-success' : 'badge-danger'}`} style={{marginLeft:8, fontSize:10}}>
                 {serverOnline ? 'Online' : 'Offline'}
               </span>
             </div>
-            <div className="top-bar-right">
-              <span className="date-display">{new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-            </div>
           </header>
+
+          {/* Page content */}
           <div className="page-content">
             <Routes>
               <Route path="/" element={<Dashboard />} />
@@ -144,6 +163,43 @@ function App() {
             </Routes>
           </div>
         </main>
+
+        {/* Bottom tab bar (mobile only) */}
+        {isMobile && (
+          <nav className="bottom-tabs">
+            {TAB_ITEMS.map(item => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`tab-item ${isTabPath(item.path) ? 'active' : ''}`}
+              >
+                <span className="tab-icon">{item.icon}</span>
+                <span className="tab-label">{item.label}</span>
+              </Link>
+            ))}
+            <button className={`tab-item ${showMore ? 'active' : ''}`} onClick={() => setShowMore(!showMore)}>
+              <span className="tab-icon">...</span>
+              <span className="tab-label">More</span>
+            </button>
+          </nav>
+        )}
+
+        {/* More menu popup (mobile) */}
+        {showMore && isMobile && (
+          <div className="more-menu">
+            {MORE_ITEMS.map(item => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`more-item ${isTabPath(item.path) ? 'active' : ''}`}
+                onClick={() => setShowMore(false)}
+              >
+                <span className="more-item-icon">{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </ErrorBoundary>
   );

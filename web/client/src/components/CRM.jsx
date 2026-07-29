@@ -32,10 +32,11 @@ export default function CRM() {
   return (
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
-        <h2>Customer CRM ({customers.length})</h2>
-        <button className="btn btn-primary" onClick={() => openVisitForm(null)}>Record Visit</button>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
+        <h2>CRM ({customers.length})</h2>
+        <button className="btn btn-primary btn-sm hide-mobile" onClick={() => openVisitForm(null)}>+ Visit</button>
       </div>
+      <button className="fab show-mobile" onClick={() => openVisitForm(null)}>+</button>
       <div className="search-bar">
         <input type="text" placeholder="Search by name or phone..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>

@@ -60,18 +60,19 @@ export default function Categories() {
   return (
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:8}}>
-        <h2 style={{margin:0}}>Categories & Subcategories</h2>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:8}}>
+        <h2 style={{margin:0}}>Categories</h2>
         {showAddCat ? (
           <div style={{display:'flex', gap:6, alignItems:'center'}}>
-            <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Category name" style={{width:200}} autoFocus onKeyDown={e => e.key === 'Enter' && addCategory()} />
+            <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Category name" style={{width:160}} autoFocus onKeyDown={e => e.key === 'Enter' && addCategory()} />
             <button className="btn btn-sm btn-success" onClick={addCategory}>Add</button>
             <button className="btn btn-sm btn-outline" onClick={() => setShowAddCat(false)}>Cancel</button>
           </div>
         ) : (
-          <button className="btn btn-primary" onClick={() => setShowAddCat(true)}>+ New Category</button>
+          <button className="btn btn-primary btn-sm hide-mobile" onClick={() => setShowAddCat(true)}>+ New Category</button>
         )}
       </div>
+      <button className="fab show-mobile" onClick={() => setShowAddCat(true)}>+</button>
 
       <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(350px, 1fr))', gap:16}}>
         {categories.map(cat => (
