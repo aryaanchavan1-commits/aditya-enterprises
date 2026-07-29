@@ -10,15 +10,16 @@ function BarChart({ data, labelKey, valueKey, title, color }) {
   return (
     <div className="card">
       <div className="card-header"><h3>{title}</h3></div>
-      <div style={{display:'flex', alignItems:'flex-end', gap:6, height:120, padding:'10px 0'}}>
+      <div style={{display:'flex', alignItems:'flex-end', gap:8, height:140, padding:'16px 8px 8px'}}>
         {data.map((d, i) => {
           const val = Number(d[valueKey]) || 0;
           const pct = (val / maxVal) * 100;
+          const barColor = color || COLORS[i % COLORS.length];
           return (
             <div key={i} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', height:'100%', justifyContent:'flex-end'}}>
-              <span style={{fontSize:9, color:'#666', marginBottom:2}}>{val.toFixed(0)}</span>
-              <div style={{width:'100%', height:`${pct}%`, minHeight:4, background: color || COLORS[i % COLORS.length], borderRadius:'4px 4px 0 0', transition:'height 0.3s'}} title={d[labelKey]}></div>
-              <span style={{fontSize:8, color:'#999', marginTop:4, transform:'rotate(-45deg)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:50}}>{String(d[labelKey]).length > 6 ? String(d[labelKey]).slice(-5) : d[labelKey]}</span>
+              <span style={{fontSize:10, color:'#555', marginBottom:4, fontWeight:600}}>{val.toFixed(0)}</span>
+              <div style={{width:'100%', height:`${Math.max(pct, 4)}%`, background:`linear-gradient(180deg, ${barColor}88, ${barColor})`, borderRadius:'6px 6px 2px 2px', transition:'height 0.4s ease', boxShadow:`0 2px 4px ${barColor}44`}} title={d[labelKey]}></div>
+              <span style={{fontSize:9, color:'#888', marginTop:6, textAlign:'center', lineHeight:1.2, maxWidth:60, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{String(d[labelKey]).length > 8 ? String(d[labelKey]).slice(0,7)+'…' : d[labelKey]}</span>
             </div>
           );
         })}

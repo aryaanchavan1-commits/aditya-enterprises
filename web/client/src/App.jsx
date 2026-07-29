@@ -64,13 +64,13 @@ function App() {
     <ErrorBoundary>
       <div className="app-layout">
         {!serverOnline && (
-          <div style={{position:'fixed', top:0, left:0, right:0, background:'#e74c3c', color:'#fff', textAlign:'center', padding:'6px', fontSize:13, zIndex:9999}}>
-            Server connection lost. Retrying...
+          <div className="offline-banner">
+            <span>&#9888;</span> Server connection lost. Retrying...
           </div>
         )}
         {!sidebarOpen && (
           <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-            Menu
+            &#9776;
           </button>
         )}
         <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
