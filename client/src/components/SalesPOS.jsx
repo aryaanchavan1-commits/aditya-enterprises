@@ -14,6 +14,9 @@ export default function SalesPOS() {
   const [isGst, setIsGst] = useState(true);
   const [companyName, setCompanyName] = useState('Aditya Enterprises');
   const printRef = useRef(null);
+  const thermalRef = useRef(null);
+  const searchRef = useRef(null);
+  const scanTimer = useRef(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -54,6 +57,20 @@ export default function SalesPOS() {
       }]);
     }
     setSearch('');
+    searchRef.current?.focus();
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && search.trim()) {
+      clearTimeout(scanTimer.current);
+      const match = products.find(p =>
+        p.barcode === search.trim() ||
+        p.name.toLowerCase() === search.trim().toLowerCase()
+      );
+      if (match) {
+        addToCart(match);
+      }
+    }
   };
 
   const updateCartItem = (productId, field, value) => {
@@ -97,6 +114,7 @@ export default function SalesPOS() {
         showToast(`Sale completed! Invoice: ${d.data.invoice_number}`);
         setCart([]);
         fetch(`${API}/products`).then(r => r.json()).then(d2 => { if (d2.success) setProducts(d2.data); });
+        searchRef.current?.focus();
       } else showToast(d.error, 'error');
     } catch (err) { showToast('Checkout failed', 'error'); }
   };
@@ -104,6 +122,11 @@ export default function SalesPOS() {
   const handlePrintReceipt = useReactToPrint({
     contentRef: printRef,
     documentTitle: `Receipt_${lastInvoice?.invoice_number || 'receipt'}`,
+  });
+
+  const handlePrintThermal = useReactToPrint({
+    contentRef: thermalRef,
+    documentTitle: `Thermal_${lastInvoice?.invoice_number || 'receipt'}`,
   });
 
   return (
@@ -117,7 +140,7 @@ export default function SalesPOS() {
           <div className="card">
             <div className="card-header"><h3>Products</h3></div>
             <div className="search-bar">
-              <input placeholder="Search by name, HSN, or barcode..." value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+              <input ref={searchRef} placeholder="Scan barcode or search..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={handleSearchKeyDown} autoFocus />
             </div>
             <div className="pos-products-list">
               <table>
@@ -228,7 +251,7 @@ export default function SalesPOS() {
       </div>
 
       {lastInvoice && (
-        <div className="card pos-invoice-card" ref={printRef}>
+        <div className="card pos-invoice-card">
           <div className="card-header">
             <h3>Invoice Generated: {lastInvoice.invoice_number}</h3>
           </div>
@@ -255,9 +278,44 @@ export default function SalesPOS() {
             <h3>Grand Total: Rs.{Number(lastInvoice.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</h3>
           </div>
           <div className="pos-invoice-actions">
-            <button className="btn btn-success" onClick={handlePrintReceipt}>Print Receipt</button>
-            <button className="btn btn-info" onClick={() => window.open(`${API}/sales/${lastInvoice.id}/receipt`, '_blank')}>Download Receipt PDF</button>
-            <button className="btn btn-warning" onClick={() => window.open(`${API}/gst/bill/${lastInvoice.id}`, '_blank')}>Download GST Bill PDF</button>
+            <button className="btn btn-success" onClick={handlePrintThermal}>Print 58mm Receipt</button>
+            <button className="btn btn-info" onClick={handlePrintReceipt}>Print A4 Receipt</button>
+            <button className="btn btn-warning" onClick={() => window.open(`${API}/gst/bill/${lastInvoice.id}`, '_blank')}>Print GST Bill</button>
+          </div>
+        </div>
+      )}
+
+      {lastInvoice && (
+        <div ref={thermalRef} className="thermal-receipt-print">
+          <div className="thermal-receipt">
+            <div className="tr-header">{companyName}</div>
+            <div className="tr-sub">{customer.address || 'Shop Address'}</div>
+            <div className="tr-divider"></div>
+            <div className="tr-row"><span>Invoice:</span><span>{lastInvoice.invoice_number}</span></div>
+            <div className="tr-row"><span>Date:</span><span>{lastInvoice.sale_date}</span></div>
+            <div className="tr-row"><span>Customer:</span><span>{lastInvoice.customer_name}</span></div>
+            {lastInvoice.customer_gstin && <div className="tr-row"><span>GSTIN:</span><span>{lastInvoice.customer_gstin}</span></div>}
+            <div className="tr-divider"></div>
+            <div className="tr-table-header">
+              <span>Item</span><span>Qty</span><span>Rate</span><span>Amt</span>
+            </div>
+            <div className="tr-divider"></div>
+            {lastInvoice.items?.map((item, i) => (
+              <div key={i} className="tr-item-row">
+                <span className="tr-item-name">{item.product_name}</span>
+                <span>{item.quantity}</span>
+                <span>{Number(item.sell_price).toFixed(0)}</span>
+                <span>{((item.sell_price * item.quantity) * (1 - (item.discount_percent || 0) / 100)).toFixed(0)}</span>
+              </div>
+            ))}
+            <div className="tr-divider"></div>
+            <div className="tr-row"><span>Subtotal</span><span>Rs. {Number(lastInvoice.subtotal).toFixed(2)}</span></div>
+            {lastInvoice.cgst_total > 0 && <div className="tr-row"><span>CGST @9%</span><span>Rs. {Number(lastInvoice.cgst_total).toFixed(2)}</span></div>}
+            {lastInvoice.sgst_total > 0 && <div className="tr-row"><span>SGST @9%</span><span>Rs. {Number(lastInvoice.sgst_total).toFixed(2)}</span></div>}
+            {lastInvoice.igst_total > 0 && <div className="tr-row"><span>IGST @18%</span><span>Rs. {Number(lastInvoice.igst_total).toFixed(2)}</span></div>}
+            <div className="tr-total">Total: Rs. {Number(lastInvoice.grand_total).toFixed(2)}</div>
+            <div className="tr-divider"></div>
+            <div className="tr-footer">Thank you! Visit again.</div>
           </div>
         </div>
       )}

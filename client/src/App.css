@@ -464,6 +464,46 @@ tbody tr:active td { background: #f0f2f5; }
 .print-area img { max-width: 300px; }
 @media print { .sidebar, .top-bar, .btn, .modal-overlay, .search-bar, .form-group, .bottom-tabs, .fab { display: none !important; } .page-content { padding: 0 !important; } }
 
+/* ===== THERMAL RECEIPT (58mm) ===== */
+.thermal-receipt-print { display: none; }
+@media print {
+  .thermal-receipt-print { display: block !important; }
+  .thermal-receipt-print ~ *:not(.thermal-receipt-print) { display: none !important; }
+}
+.thermal-receipt {
+  font-family: 'Courier New', monospace; font-size: 10px; width: 58mm; margin: 0 auto;
+  padding: 8px 4px; color: #000; background: #fff;
+}
+.thermal-receipt .tr-header { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.thermal-receipt .tr-sub { text-align: center; font-size: 9px; color: #333; margin-bottom: 4px; }
+.thermal-receipt .tr-divider { border-top: 1px dashed #000; margin: 6px 0; }
+.thermal-receipt .tr-row { display: flex; justify-content: space-between; font-size: 9px; padding: 1px 0; }
+.thermal-receipt .tr-table-header { display: flex; font-weight: 700; font-size: 9px; }
+.thermal-receipt .tr-table-header span:first-child { flex: 1; }
+.thermal-receipt .tr-table-header span { width: 28px; text-align: right; }
+.thermal-receipt .tr-item-row { display: flex; font-size: 9px; padding: 1px 0; }
+.thermal-receipt .tr-item-row .tr-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thermal-receipt .tr-item-row span:not(.tr-item-name) { width: 28px; text-align: right; }
+.thermal-receipt .tr-total { text-align: center; font-weight: 700; font-size: 12px; margin: 4px 0; }
+.thermal-receipt .tr-footer { text-align: center; font-size: 9px; color: #666; margin-top: 4px; }
+
+/* ===== PRODUCT LABEL (4x6) ===== */
+.label-print-area { padding: 10px; }
+.label-card {
+  width: 4in; height: 6in; margin: 0 auto; padding: 20px;
+  border: 1px solid #ddd; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; font-family: Arial, sans-serif;
+}
+.label-card .label-name { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+.label-card .label-price { font-size: 28px; font-weight: 700; color: #2c3e50; margin-bottom: 16px; }
+.label-card .label-barcode { max-width: 80%; height: auto; margin-bottom: 10px; }
+.label-card .label-sku { font-size: 11px; color: #888; }
+@media print {
+  .label-card { border: none; }
+  .label-card .label-barcode { max-width: 90%; }
+}
+
 /* ===== PURCHASES ===== */
 .purchases-form { max-width: 600px; }
 .purchases-search-results { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; }

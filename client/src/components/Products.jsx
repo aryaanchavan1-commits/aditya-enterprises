@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
+import { useReactToPrint } from 'react-to-print';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -96,6 +97,10 @@ export default function Products() {
     else showToast(d.error || 'Delete failed', 'error');
   };
 
+  const [labelProduct, setLabelProduct] = useState(null);
+  const labelRef = useRef(null);
+  const handlePrintLabel = useReactToPrint({ contentRef: labelRef, documentTitle: 'Product_Label' });
+
   const handleGenerateBarcode = async (id) => {
     const d = await api('/barcode/generate/' + id, { method: 'POST', body: {} });
     if (d.success) { showToast('Barcode generated'); loadProducts(); }
@@ -148,6 +153,7 @@ export default function Products() {
                   <td style={{fontSize:11}}>{p.serial_number || '-'}</td>
                   <td style={{fontSize:11}}>
                     {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30}} /> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Generate</button>}
+                    {p.barcode_image && <button className="btn btn-sm btn-outline" style={{marginLeft:4}} onClick={() => setLabelProduct(p)}>Label</button>}
                   </td>
                   <td>{p.category_name || '-'}{p.subcategory_name ? ` / ${p.subcategory_name}` : ''}</td>
                   <td>
@@ -161,6 +167,26 @@ export default function Products() {
           </table>
         </div>
       </div>
+
+      {labelProduct && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setLabelProduct(null)}>
+          <div className="modal" style={{maxWidth:400}}>
+            <h3>Print Label: {labelProduct.name}</h3>
+            <div ref={labelRef} className="label-print-area">
+              <div className="label-card">
+                <div className="label-name">{labelProduct.name}</div>
+                <div className="label-price">Rs. {Number(labelProduct.sell_price).toLocaleString('en-IN')}</div>
+                {labelProduct.barcode_image && <img src={labelProduct.barcode_image} alt="barcode" className="label-barcode" />}
+                <div className="label-sku">{labelProduct.serial_number || labelProduct.barcode || ''}</div>
+              </div>
+            </div>
+            <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:16}}>
+              <button className="btn btn-outline" onClick={() => setLabelProduct(null)}>Close</button>
+              <button className="btn btn-primary" onClick={handlePrintLabel}>Print Label</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
