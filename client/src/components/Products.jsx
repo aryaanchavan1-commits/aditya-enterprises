@@ -98,6 +98,7 @@ export default function Products() {
   };
 
   const [labelProduct, setLabelProduct] = useState(null);
+  const [labelQty, setLabelQty] = useState(1);
   const labelRef = useRef(null);
   const handlePrintLabel = useReactToPrint({ contentRef: labelRef, documentTitle: 'Product_Label' });
 
@@ -153,7 +154,7 @@ export default function Products() {
                   <td style={{fontSize:11}}>{p.serial_number || '-'}</td>
                   <td style={{fontSize:11}}>
                     {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30}} /> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Generate</button>}
-                    {p.barcode_image && <button className="btn btn-sm btn-outline" style={{marginLeft:4}} onClick={() => setLabelProduct(p)}>Label</button>}
+                    {p.barcode ? <button className="btn btn-sm btn-outline" style={{marginLeft:4}} onClick={() => setLabelProduct(p)}>Label</button> : <button className="btn btn-sm btn-outline" style={{marginLeft:4}} onClick={() => handleGenerateBarcode(p.id)}>Gen</button>}
                   </td>
                   <td>{p.category_name || '-'}{p.subcategory_name ? ` / ${p.subcategory_name}` : ''}</td>
                   <td>
@@ -196,7 +197,7 @@ export default function Products() {
               <div className="mobile-card-actions">
                 <button className="btn btn-sm btn-info" onClick={() => openEdit(p)}>Edit</button>
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Delete</button>
-                {p.barcode_image ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)}>Label</button> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Barcode</button>}
+                {p.barcode ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)}>Label</button> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Barcode</button>}
               </div>
             </div>
           ))}
@@ -208,17 +209,29 @@ export default function Products() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setLabelProduct(null)}>
           <div className="modal" style={{maxWidth:400}}>
             <h3>Print Label: {labelProduct.name}</h3>
+            <div style={{display:'flex', gap:8, alignItems:'center', marginBottom:12}}>
+              <label style={{fontSize:13, fontWeight:600}}>Copies:</label>
+              <input type="number" min="1" max="100" value={labelQty}
+                onChange={e => setLabelQty(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                style={{width:70, textAlign:'center'}} />
+            </div>
             <div ref={labelRef} className="label-print-area">
-              <div className="label-card">
-                <div className="label-name">{labelProduct.name}</div>
-                <div className="label-price">Rs. {Number(labelProduct.sell_price).toLocaleString('en-IN')}</div>
-                {labelProduct.barcode_image && <img src={labelProduct.barcode_image} alt="barcode" className="label-barcode" />}
-                <div className="label-sku">{labelProduct.serial_number || labelProduct.barcode || ''}</div>
-              </div>
+              {Array.from({ length: labelQty }).map((_, i) => (
+                <div key={i} className="label-card" style={i > 0 ? {marginTop:20, pageBreakBefore:'always'} : {}}>
+                  <div className="label-name">{labelProduct.name}</div>
+                  <div className="label-price">Rs. {Number(labelProduct.sell_price).toLocaleString('en-IN')}</div>
+                  {labelProduct.barcode_image
+                    ? <img src={labelProduct.barcode_image} alt="barcode" className="label-barcode" />
+                    : labelProduct.barcode
+                      ? <div className="label-barcode-text">{labelProduct.barcode}</div>
+                      : null}
+                  <div className="label-sku">{labelProduct.serial_number || labelProduct.barcode || ''}</div>
+                </div>
+              ))}
             </div>
             <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:16}}>
-              <button className="btn btn-outline" onClick={() => setLabelProduct(null)}>Close</button>
-              <button className="btn btn-primary" onClick={handlePrintLabel}>Print Label</button>
+              <button className="btn btn-outline" onClick={() => { setLabelProduct(null); setLabelQty(1); }}>Close</button>
+              <button className="btn btn-primary" onClick={handlePrintLabel}>Print {labelQty} Label{labelQty > 1 ? 's' : ''}</button>
             </div>
           </div>
         </div>

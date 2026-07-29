@@ -512,10 +512,14 @@ tbody tr:active td { background: #f0f2f5; }
 .label-card .label-name { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
 .label-card .label-price { font-size: 28px; font-weight: 700; color: #2c3e50; margin-bottom: 16px; }
 .label-card .label-barcode { max-width: 80%; height: auto; margin-bottom: 10px; }
+.label-card .label-barcode-text { font-family: 'Libre Barcode 128', monospace; font-size: 32px; letter-spacing: 2px; margin-bottom: 10px; color: #000; }
 .label-card .label-sku { font-size: 11px; color: #888; }
 @media print {
   .label-card { border: none; }
   .label-card .label-barcode { max-width: 90%; }
+  .label-card .label-barcode-text { font-size: 40px; }
+  .label-card { page-break-after: always; }
+  .label-card:last-child { page-break-after: auto; }
 }
 
 /* ===== PURCHASES ===== */

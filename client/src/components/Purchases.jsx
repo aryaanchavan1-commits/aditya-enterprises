@@ -82,6 +82,13 @@ export default function Purchases() {
     p.barcode?.includes(search)
   );
 
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && search.trim() && !addNewMode) {
+      const match = products.find(p => p.barcode === search.trim() || p.name.toLowerCase() === search.trim().toLowerCase());
+      if (match) addToCart(match);
+    }
+  };
+
   const total = cart.reduce((sum, c) => sum + (c.inward_price * c.quantity), 0);
   const gstTotal = cart.reduce((sum, c) => sum + ((c.inward_price * c.quantity) * ((c.gst_rate || 18) / 100)), 0);
 
@@ -116,7 +123,7 @@ export default function Purchases() {
           <div className="form-group">
             <label>Search Existing Products</label>
             <div className="search-bar">
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or barcode..." />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or barcode..." onKeyDown={handleSearchKeyDown} autoFocus />
               <button className="btn btn-sm btn-outline" onClick={() => setAddNewMode(!addNewMode)}>
                 {addNewMode ? 'Cancel' : '+ New Product'}
               </button>
