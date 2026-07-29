@@ -27,7 +27,7 @@ router.get('/stats/dashboard', async (req, res) => {
       all("SELECT grand_total FROM sales WHERE sale_date = ?", [today]),
       all("SELECT grand_total FROM sales WHERE sale_date >= ?", [firstOfMonth]),
       get('SELECT COUNT(*) as c FROM products WHERE quantity <= COALESCE(low_stock_threshold, 5)').then(r => r?.c || 0),
-      all('SELECT id, name, quantity, sell_price, low_stock_threshold FROM products WHERE quantity <= COALESCE(low_stock_threshold, 5) ORDER BY quantity ASC LIMIT 20'),
+      all('SELECT p.id, p.name, p.quantity, p.sell_price, p.low_stock_threshold, p.category_id, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.quantity <= COALESCE(p.low_stock_threshold, 5) ORDER BY c.name, p.quantity ASC'),
       get('SELECT COUNT(*) as c FROM sales').then(r => r?.c || 0),
       all('SELECT id, invoice_number, customer_name, grand_total, sale_date FROM sales ORDER BY created_at DESC LIMIT 10'),
       all('SELECT sm.*, p.name as product_name FROM stock_movements sm LEFT JOIN products p ON sm.product_id = p.id ORDER BY sm.created_at DESC LIMIT 10'),

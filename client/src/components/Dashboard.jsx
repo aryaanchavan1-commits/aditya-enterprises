@@ -29,26 +29,38 @@ export default function Dashboard() {
         <div className="stat-card danger"><span className="stat-value">{stats.lowStock}</span><span className="stat-label">Low Stock</span></div>
       </div>
 
-      <div className="dashboard-grid">
-        <div className="card">
-          <div className="card-header"><h3>Low Stock Items</h3></div>
-          {stats.lowStockProducts.length > 0 ? (
-            <table><thead><tr><th>Product</th><th>Qty</th><th>Min</th><th>Price</th></tr></thead>
-              <tbody>{stats.lowStockProducts.map(p => (
-                <tr key={p.id}><td>{p.name}</td><td style={{color:'#e74c3c',fontWeight:'bold'}}>{p.quantity}</td><td>{p.low_stock_threshold || 5}</td><td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td></tr>
-              ))}</tbody></table>
-          ) : <p style={{color:'#27ae60',textAlign:'center',padding:20}}>All products well stocked</p>}
-        </div>
+      <div className="card">
+        <div className="card-header"><h3>Low Stock by Category</h3></div>
+        {stats.lowStockProducts.length > 0 ? (
+          <div>
+            {Object.entries(
+              stats.lowStockProducts.reduce((acc, p) => {
+                const cat = p.category_name || 'Uncategorized';
+                if (!acc[cat]) acc[cat] = [];
+                acc[cat].push(p);
+                return acc;
+              }, {})
+            ).map(([cat, items]) => (
+              <div key={cat} style={{marginBottom:12}}>
+                <h4 style={{fontSize:13,color:'#555',padding:'8px 12px',background:'#f9fafb',borderBottom:'1px solid #eee'}}>{cat} ({items.length})</h4>
+                <table><thead><tr><th>Product</th><th>Current</th><th>Min</th></tr></thead>
+                  <tbody>{items.map(p => (
+                    <tr key={p.id}><td>{p.name}</td><td style={{color:'#e74c3c',fontWeight:'bold'}}>{p.quantity}</td><td>{p.low_stock_threshold || 5}</td></tr>
+                  ))}</tbody></table>
+              </div>
+            ))}
+          </div>
+        ) : <p style={{color:'#27ae60',textAlign:'center',padding:20}}>All products well stocked</p>}
+      </div>
 
-        <div className="card">
-          <div className="card-header"><h3>Recent Sales</h3></div>
-          {stats.recentSales.length > 0 ? (
-            <table><thead><tr><th>Invoice</th><th>Customer</th><th>Total</th></tr></thead>
-              <tbody>{stats.recentSales.map(s => (
-                <tr key={s.id}><td><strong>{s.invoice_number}</strong></td><td>{s.customer_name}</td><td>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</td></tr>
-              ))}</tbody></table>
-          ) : <p style={{textAlign:'center',color:'#999',padding:20}}>No sales yet</p>}
-        </div>
+      <div className="card">
+        <div className="card-header"><h3>Recent Sales</h3></div>
+        {stats.recentSales.length > 0 ? (
+          <table><thead><tr><th>Invoice</th><th>Customer</th><th>Total</th></tr></thead>
+            <tbody>{stats.recentSales.map(s => (
+              <tr key={s.id}><td><strong>{s.invoice_number}</strong></td><td>{s.customer_name}</td><td>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</td></tr>
+            ))}</tbody></table>
+        ) : <p style={{textAlign:'center',color:'#999',padding:20}}>No sales yet</p>}
       </div>
     </div>
   );
