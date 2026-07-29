@@ -188,8 +188,21 @@ function cleanRow(row) {
   return clean;
 }
 
+async function fixNullIds() {
+  const tables = ['categories', 'subcategories', 'products', 'parties', 'sales', 'purchases', 'stock_movements', 'ai_conversations', 'customer_visits', 'services'];
+  for (const t of tables) {
+    try {
+      const pk = await turso.execute(`SELECT name FROM pragma_table_info('${t}') WHERE pk = 1 LIMIT 1`);
+      if (!pk.rows.length) continue;
+      const pkCol = pk.rows[0].name;
+      await turso.execute(`UPDATE ${t} SET ${pkCol} = rowid WHERE ${pkCol} IS NULL`);
+    } catch (e) {}
+  }
+}
+
 async function migrateLegacyData() {
   try {
+    await fixNullIds();
     const tableInfo = await turso.execute("PRAGMA table_info(products)");
     const cols = tableInfo.rows.map(r => r.name);
     const legacyMap = [
