@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api } from '../api';
+import { api, exportToExcel, readExcelFile } from '../api';
 import { useReactToPrint } from 'react-to-print';
 
 export default function Products() {
@@ -121,14 +121,58 @@ export default function Products() {
     loadProducts();
   };
 
+  const handleExportProducts = () => {
+    const data = products.map(p => ({
+      Name: p.name, HSN: p.hsn_code || '', Sell_Price: p.sell_price, Inward_Price: p.inward_price,
+      Quantity: p.quantity, Unit: p.unit || 'pcs', Discount_Percent: p.discount_percent,
+      Barcode: p.barcode || '', Serial: p.serial_number || '', Category: p.category_name || '',
+      Description: p.description || ''
+    }));
+    exportToExcel(data, `products_export_${new Date().toISOString().slice(0,10)}`);
+    showToast('Products exported to Excel');
+  };
+
+  const fileRefProducts = useRef(null);
+  const handleImportProducts = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const rows = await readExcelFile(file);
+      let ok = 0, fail = 0;
+      for (const row of rows) {
+        const payload = {
+          name: row.Name || row.name || '',
+          hsn_code: row.HSN || row.hsn_code || '',
+          sell_price: parseFloat(row.Sell_Price || row.sell_price || 0),
+          inward_price: parseFloat(row.Inward_Price || row.inward_price || 0),
+          quantity: parseInt(row.Quantity || row.quantity || 0),
+          unit: row.Unit || row.unit || 'pcs',
+          discount_percent: parseFloat(row.Discount_Percent || row.discount_percent || 0),
+          barcode: row.Barcode || row.barcode || '',
+          serial_number: row.Serial || row.serial_number || '',
+          description: row.Description || row.description || ''
+        };
+        if (!payload.name) { fail++; continue; }
+        const d = await api('/products', { method: 'POST', body: payload });
+        if (d.success) ok++; else fail++;
+      }
+      showToast(`Imported ${ok} product(s)${fail ? `, ${fail} failed` : ''}`);
+      loadProducts();
+    } catch (err) { showToast('Import failed: ' + err.message, 'error'); }
+    e.target.value = '';
+  };
+
   return (
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
 
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
         <h2>Products ({products.length})</h2>
-        <div style={{display:'flex', gap:6}}>
-          <button className="btn btn-sm btn-outline hide-mobile" onClick={handleGenerateAllBarcodes} title="Generate barcodes for products without one">Bulk Barcode</button>
+        <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+          <button className="btn btn-sm btn-outline hide-mobile" onClick={handleExportProducts}>Export</button>
+          <button className="btn btn-sm btn-outline hide-mobile" onClick={() => fileRefProducts.current?.click()}>Import</button>
+          <input ref={fileRefProducts} type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={handleImportProducts} />
+          <button className="btn btn-sm btn-outline hide-mobile" onClick={handleGenerateAllBarcodes} title="Generate barcodes for products without one">Barcode</button>
           <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ Add Product</button>
         </div>
       </div>

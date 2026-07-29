@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
+import { exportToExcel } from '../api';
 
 const API = '/api';
 
@@ -17,6 +18,25 @@ export default function GSTInvoices() {
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this sale? Stock will be restored.')) return;
+    const r = await fetch(`${API}/sales/${id}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (d.success) { showToast('Sale deleted, stock restored'); fetchSales(); }
+    else showToast(d.error || 'Delete failed', 'error');
+  };
+
+  const handleExport = () => {
+    const data = sales.map(s => ({
+      Invoice: s.invoice_number, Date: s.sale_date, Customer: s.customer_name,
+      GSTIN: s.customer_gstin || '', Subtotal: s.subtotal, CGST: s.cgst_total,
+      SGST: s.sgst_total, IGST: s.igst_total || 0, Grand_Total: s.grand_total,
+      Payment_Mode: s.payment_mode
+    }));
+    exportToExcel(data, `sales_export_${new Date().toISOString().slice(0,10)}`);
+    showToast('Sales exported to Excel');
   };
 
   useEffect(() => {
@@ -61,11 +81,12 @@ export default function GSTInvoices() {
 
       <div style={{display:'flex', gap:8, marginBottom:16}}>
         <button className={`btn ${activeTab==='invoices'?'btn-primary':'btn-outline'}`} onClick={()=>setActiveTab('invoices')}>
-          All Invoices
+          Invoices
         </button>
         <button className={`btn ${activeTab==='report'?'btn-primary':'btn-outline'}`} onClick={()=>setActiveTab('report')}>
           GST Report
         </button>
+        <button className="btn btn-outline" onClick={handleExport}>Export Excel</button>
         <button className={`btn ${activeTab==='gstr1'?'btn-primary':'btn-outline'}`} onClick={()=>setActiveTab('gstr1')}>
           GSTR-1 Filing
         </button>
@@ -110,6 +131,7 @@ export default function GSTInvoices() {
                         <button className="btn btn-sm btn-info" onClick={() => window.open(`${API}/sales/${s.id}/receipt`, '_blank')}>Receipt</button>
                         <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>GST Bill</button>
                         <button className="btn btn-sm btn-success" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`*Aditya Enterprises - Invoice ${s.invoice_number}*\nDate: ${s.sale_date}\nCustomer: ${s.customer_name}\nTotal: Rs.${Number(s.grand_total).toLocaleString('en-IN')}\n\nView Bill: ${window.location.origin}${API}/gst/bill/${s.id}\nThank you!`)}`, '_blank')}>Share</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(s.id)}>Del</button>
                       </td>
                     </tr>
                   ))}
@@ -144,6 +166,7 @@ export default function GSTInvoices() {
                     <button className="btn btn-sm btn-info" onClick={() => window.open(`${API}/sales/${s.id}/receipt`, '_blank')}>Receipt</button>
                     <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>GST Bill</button>
                     <button className="btn btn-sm btn-success" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent('*Aditya Enterprises - Invoice ' + s.invoice_number + '*\nDate: ' + s.sale_date + '\nCustomer: ' + s.customer_name + '\nTotal: Rs.' + Number(s.grand_total).toLocaleString('en-IN') + '\n\nView Bill: ' + window.location.origin + API + '/gst/bill/' + s.id + '\nThank you!')}`, '_blank')}>Share</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(s.id)}>Del</button>
                   </div>
                 </div>
               ))}

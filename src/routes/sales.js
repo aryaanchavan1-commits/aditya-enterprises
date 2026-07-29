@@ -152,4 +152,18 @@ router.get('/:id/receipt', async (req, res) => {
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
+router.delete('/:id', async (req, res) => {
+  try {
+    const sale = await get('SELECT * FROM sales WHERE id = ?', [req.params.id]);
+    if (!sale) { res.json({ success: false, error: 'Sale not found' }); return; }
+    const items = JSON.parse(sale.items || '[]');
+    for (const item of items) {
+      await run('UPDATE products SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [item.quantity, item.product_id]);
+    }
+    await run('DELETE FROM stock_movements WHERE reference = ?', [sale.invoice_number]);
+    await run('DELETE FROM sales WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'Sale deleted, stock restored' });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
 module.exports = router;

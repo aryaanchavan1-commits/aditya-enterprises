@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { exportToExcel } from '../api';
 
 const API = '/api';
 const UNITS = ['pcs', 'kg', 'meter', 'bag', 'box', 'dozen', 'liter', 'pack', 'set', 'roll', 'sheet', 'pair'];
@@ -25,6 +26,26 @@ export default function Purchases() {
 
   const fetchPurchases = () => {
     fetch(`${API}/purchases`).then(r => r.json()).then(d => { if (d.success) setPurchases(d.data); });
+  };
+
+  const handleDeletePurchase = async (id) => {
+    if (!confirm('Delete this purchase record?')) return;
+    try {
+      const r = await fetch(`${API}/purchases/${id}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.success) showToast('Purchase deleted');
+      else showToast(d.error || 'Delete failed');
+      fetchPurchases();
+    } catch (e) { showToast('Delete failed'); }
+  };
+
+  const handleExportPurchases = () => {
+    const data = purchases.map(p => ({
+      Invoice: p.invoice_number, Date: p.purchase_date, Supplier: p.supplier_name,
+      Items: p.items?.length || 0, Total: p.grand_total, Status: p.payment_status
+    }));
+    exportToExcel(data, `purchases_export_${new Date().toISOString().slice(0,10)}`);
+    showToast('Purchases exported to Excel');
   };
 
   const addToCart = (product) => {
@@ -99,9 +120,12 @@ export default function Purchases() {
 
       <div className="page-header">
         <h3>Purchases</h3>
-        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'View History' : '+ New Purchase'}
-        </button>
+        <div style={{display:'flex', gap:6}}>
+          <button className="btn btn-outline" onClick={handleExportPurchases}>Export</button>
+          <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'View History' : '+ New Purchase'}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -265,7 +289,7 @@ export default function Purchases() {
           <>
             <div className="table-container desktop-table">
               <table>
-                <thead><tr><th>Invoice</th><th>Date</th><th>Supplier</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+                <thead><tr><th>Invoice</th><th>Date</th><th>Supplier</th><th>Items</th><th>Total</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                   {purchases.map(p => (
                     <tr key={p.id}>
@@ -275,6 +299,7 @@ export default function Purchases() {
                       <td>{p.items?.length || 0} items</td>
                       <td>Rs.{Number(p.grand_total).toFixed(2)}</td>
                       <td><span className={`badge badge-${p.payment_status === 'paid' ? 'success' : 'warning'}`}>{p.payment_status}</span></td>
+                      <td><button className="btn btn-sm btn-danger" onClick={() => handleDeletePurchase(p.id)}>Del</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -304,6 +329,9 @@ export default function Purchases() {
                     <div className="mobile-card-row">
                       <span className="label">Status</span>
                       <span className="value"><span className={`badge badge-${p.payment_status === 'paid' ? 'success' : 'warning'}`}>{p.payment_status}</span></span>
+                    </div>
+                    <div className="mobile-card-actions">
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDeletePurchase(p.id)}>Delete</button>
                     </div>
                   </div>
                 ))}

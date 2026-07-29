@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api';
+import { api, exportToExcel } from '../api';
 
 export default function Suppliers() {
   const [suppliers, setSuppliers] = useState([]);
