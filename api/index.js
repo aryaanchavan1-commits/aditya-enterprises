@@ -122,6 +122,16 @@ app.put('/api/category', async (req, res) => {
   catch (err) { fail(res, err.message); }
 });
 
+app.delete('/api/category', async (req, res) => {
+  try {
+    const id = req.query.id;
+    await run('DELETE FROM subcategories WHERE category_id = ?', [id]);
+    await run('UPDATE products SET category_id = NULL, subcategory_id = NULL WHERE category_id = ?', [id]);
+    await run('DELETE FROM categories WHERE id = ?', [id]);
+    ok(res);
+  } catch (err) { fail(res, err.message); }
+});
+
 app.post('/api/subcategory', async (req, res) => {
   try {
     const r = await run('INSERT INTO subcategories (category_id, name) VALUES (?, ?)', [req.query.catId, req.body.name]);

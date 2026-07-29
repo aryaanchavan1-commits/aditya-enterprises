@@ -57,22 +57,17 @@ export default function Categories() {
     else { showToast(d.error || 'Failed to add category', 'error'); }
   };
 
+  const deleteCategory = async (id) => {
+    if (!confirm('Delete this category and all its subcategories?')) return;
+    const d = await api('/category?id=' + id, { method: 'DELETE' });
+    if (d.success) { showToast('Category deleted'); loadCategories(); }
+    else { showToast(d.error || 'Delete failed', 'error'); }
+  };
+
   return (
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:8}}>
-        <h2 style={{margin:0}}>Categories</h2>
-        {showAddCat ? (
-          <div style={{display:'flex', gap:6, alignItems:'center'}}>
-            <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Category name" autoFocus onKeyDown={e => e.key === 'Enter' && addCategory()} />
-            <button className="btn btn-sm btn-success" onClick={addCategory}>Add</button>
-            <button className="btn btn-sm btn-outline" onClick={() => setShowAddCat(false)}>Cancel</button>
-          </div>
-        ) : (
-          <button className="btn btn-primary btn-sm hide-mobile" onClick={() => setShowAddCat(true)}>+ New Category</button>
-        )}
-      </div>
-      <button className="fab show-mobile" onClick={() => setShowAddCat(true)}>+</button>
+      <h2 style={{marginBottom:16}}>Categories</h2>
 
       <div className="categories-grid">
         {categories.map(cat => (
@@ -89,7 +84,10 @@ export default function Categories() {
                   <h3 onClick={() => { setEditCat(cat.id); setCatName(cat.name); }} style={{cursor:'pointer'}}>
                     {cat.name} <span style={{fontSize:12, color:'#999', fontWeight:400}}>({cat.product_count} products)</span>
                   </h3>
-                  <span className="badge badge-info">{cat.subcategories?.length || 0}/6 subs</span>
+                  <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                    <span className="badge badge-info">{cat.subcategories?.length || 0}/6 subs</span>
+                    <button className="btn btn-sm btn-danger" onClick={() => deleteCategory(cat.id)} style={{padding:'2px 8px', fontSize:11, minHeight:'auto'}}>Del</button>
+                  </div>
                 </>
               )}
             </div>
@@ -130,6 +128,12 @@ export default function Categories() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div style={{marginTop:20, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap'}}>
+        <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="New category name..."
+          style={{maxWidth:300}} autoFocus={showAddCat} />
+        <button className="btn btn-primary btn-sm" onClick={addCategory} disabled={!newCatName.trim()}>+ Add Category</button>
       </div>
     </div>
   );
