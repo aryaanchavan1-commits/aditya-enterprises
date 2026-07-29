@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { get, all, run } = require('../db');
+const { get, all, run, getDb } = require('../db');
 const PDFDocument = require('pdfkit');
 
 router.get('/', async (req, res) => {
@@ -20,6 +20,7 @@ router.get('/stats/dashboard', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    await getDb();
     const [totalProducts, totalQuantity, todaySalesArr, monthSalesArr, lowStock, lowStockProducts, totalSales, recentSales, stockMovements, dailySalesArr] = await Promise.all([
       get('SELECT COUNT(*) as c FROM products').then(r => r?.c || 0),
       get('SELECT COALESCE(SUM(quantity),0) as c FROM products').then(r => r?.c || 0),

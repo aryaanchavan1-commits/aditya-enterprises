@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 let turso = null;
+let initPromise = null;
 
 const DATA_DIR = (process.env.DATA_DIR || (process.env.VERCEL ? '/tmp/data' : path.join(__dirname, '..', 'data')));
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
@@ -16,19 +17,24 @@ function withTimeout(promise, ms) {
 
 async function getDb() {
   if (turso) return turso;
+  if (initPromise) return initPromise;
   const url = process.env.TURSO_DATABASE_URL;
   const token = process.env.TURSO_AUTH_TOKEN;
   if (!url) throw new Error('TURSO_DATABASE_URL not configured');
-  try {
-    const { createClient } = require('@libsql/client');
-    turso = createClient({ url, authToken: token });
-    await withTimeout(turso.execute('SELECT 1'), 8000);
-    await withTimeout(initSchema(), 20000);
-    return turso;
-  } catch (e) {
-    turso = null;
-    throw new Error('Turso connection failed: ' + e.message);
-  }
+  initPromise = (async () => {
+    try {
+      const { createClient } = require('@libsql/client');
+      turso = createClient({ url, authToken: token });
+      await withTimeout(turso.execute('SELECT 1'), 8000);
+      await withTimeout(initSchema(), 20000);
+      return turso;
+    } catch (e) {
+      turso = null;
+      initPromise = null;
+      throw new Error('Turso connection failed: ' + e.message);
+    }
+  })();
+  return initPromise;
 }
 
 async function initSchema() {
@@ -221,6 +227,7 @@ async function migrateLegacyData() {
 
 async function resetData() {
   turso = null;
+  initPromise = null;
   const { createClient } = require('@libsql/client');
   const url = process.env.TURSO_DATABASE_URL;
   const token = process.env.TURSO_AUTH_TOKEN;

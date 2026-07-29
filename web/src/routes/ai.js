@@ -5,7 +5,7 @@ const { get, all, run } = require('../db');
 function getGroqClient() {
   const apiKey = process.env.GROQ_API_KEY;
   if (apiKey) {
-    try { const Groq = require('groq-sdk'); return; new Groq({ apiKey }); } catch (e) {}
+    try { const Groq = require('groq-sdk'); return new Groq({ apiKey }); } catch (e) {}
   }
   return null;
 }

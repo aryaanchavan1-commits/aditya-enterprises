@@ -44,7 +44,7 @@ router.post('/scan-sale', async (req, res) => {
 router.post('/generate/:productId', async (req, res) => {
   try {
     if (!req.params.productId || req.params.productId === 'undefined' || req.params.productId === 'null') {
-      res.json({ success: false, error: 'Invalid product ID' });
+      res.json({ success: false, error: 'Invalid product ID' }); return;
     }
     const product = await get('SELECT * FROM products WHERE id = ?', [req.params.productId]);
     if (!product) { res.json({ success: false, error: 'Not found' }); return; }
