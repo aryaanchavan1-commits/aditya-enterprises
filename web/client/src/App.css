@@ -346,14 +346,23 @@ tbody tr:nth-child(even):hover td { background: #f0f2f5; }
 ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #999; }
 
+/* Sidebar backdrop (mobile only) */
+.sidebar-backdrop {
+  position: fixed; inset: 0; z-index: 99;
+  background: rgba(0,0,0,0.4);
+  animation: fadeOverlay 0.2s ease;
+}
+
 /* Mobile hamburger */
 .mobile-menu-btn {
-  display: none; position: fixed; top: 8px; left: 8px; z-index: 100;
+  display: none; position: fixed; top: 10px; left: 10px; z-index: 50;
   background: var(--card-bg); border: 1px solid var(--border);
-  border-radius: var(--radius); font-size: 20px; line-height: 1;
-  cursor: pointer; color: var(--primary); padding: 6px 10px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius); font-size: 22px; line-height: 1;
+  cursor: pointer; color: var(--primary); padding: 8px 12px;
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s;
 }
+.mobile-menu-btn:active { transform: scale(0.95); }
 
 /* ============================================
    Mobile Responsive
@@ -364,8 +373,7 @@ tbody tr:nth-child(even):hover td { background: #f0f2f5; }
   .sidebar.open { width: 260px; }
   .sidebar.closed { width: 0; min-width: 0; overflow: hidden; }
   .sidebar.closed .sidebar-header, .sidebar.closed .sidebar-nav { display: none; }
-  .sidebar-toggle { position: absolute; top: 10px; right: -40px; background: var(--primary); border-radius: 0 8px 8px 0; padding: 12px 10px; z-index: 101; display: block; color: #fff; }
-  .sidebar.closed + .main-content .sidebar-toggle { display: none; }
+  .sidebar-toggle { display: none; }
 
   .top-bar { padding: 10px 14px; flex-wrap: wrap; }
   .top-bar-left h2 { font-size: 13px; }

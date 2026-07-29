@@ -34,8 +34,20 @@ class ErrorBoundary extends Component {
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
   const [serverOnline, setServerOnline] = useState(true);
+
+  React.useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  React.useEffect(() => {
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile]);
 
   React.useEffect(() => {
     fetch('/api/health').then(r => r.json()).then(() => setServerOnline(true)).catch(() => setServerOnline(false));
@@ -44,6 +56,8 @@ function App() {
     }, 30000);
     return () => clearInterval(int);
   }, []);
+
+  const closeSidebar = () => { if (isMobile) setSidebarOpen(false); };
 
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: 'D' },
@@ -68,7 +82,10 @@ function App() {
             <span>&#9888;</span> Server connection lost. Retrying...
           </div>
         )}
-        {!sidebarOpen && (
+        {sidebarOpen && isMobile && (
+          <div className="sidebar-backdrop" onClick={closeSidebar} />
+        )}
+        {!sidebarOpen && isMobile && (
           <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
             &#9776;
           </button>
@@ -84,15 +101,18 @@ function App() {
                 key={item.path}
                 to={item.path}
                 className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+                onClick={closeSidebar}
               >
                 <span className="nav-icon-circle">{item.icon}</span>
                 {sidebarOpen && <span className="nav-label">{item.label}</span>}
               </Link>
             ))}
           </nav>
-          <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            {sidebarOpen ? '<' : '>'}
-          </button>
+          {!isMobile && (
+            <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+              {sidebarOpen ? '\u2039' : '\u203A'}
+            </button>
+          )}
         </aside>
 
         <main className="main-content">
