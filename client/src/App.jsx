@@ -12,6 +12,8 @@ import Settings from './components/Settings';
 import Reports from './components/Reports';
 import CRM from './components/CRM';
 import Servicing from './components/Servicing';
+import Suppliers from './components/Suppliers';
+import Accounting from './components/Accounting';
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -41,8 +43,10 @@ const TAB_ITEMS = [
 ];
 const MORE_ITEMS = [
   { path: '/categories', label: 'Categories', icon: 'C' },
+  { path: '/suppliers', label: 'Suppliers', icon: 'S' },
   { path: '/barcode', label: 'Barcode', icon: 'B' },
   { path: '/invoices', label: 'GST & Invoices', icon: 'I' },
+  { path: '/accounting', label: 'Accounting', icon: 'L' },
   { path: '/reports', label: 'Reports', icon: 'T' },
   { path: '/crm', label: 'CRM', icon: 'M' },
   { path: '/services', label: 'Servicing', icon: 'V' },
@@ -157,6 +161,8 @@ function App() {
               <Route path="/invoices" element={<GSTInvoices />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/crm" element={<CRM />} />
+              <Route path="/suppliers" element={<Suppliers />} />
+              <Route path="/accounting" element={<Accounting />} />
               <Route path="/services" element={<Servicing />} />
               <Route path="/ai" element={<AIChat />} />
               <Route path="/settings" element={<Settings />} />

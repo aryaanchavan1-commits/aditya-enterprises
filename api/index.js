@@ -91,6 +91,7 @@ app.use('/api/ai', require('../src/routes/ai'));
 app.use('/api/upload', require('../src/routes/upload'));
 app.use('/api/settings', require('../src/routes/settings'));
 app.use('/api/devices', require('../src/routes/devices'));
+app.use('/api/parties', require('../src/routes/parties'));
 app.use('/api/reports', require('../src/routes/reports'));
 app.use('/api/purchases', require('../src/routes/purchases'));
 app.use('/api/crm', require('../src/routes/crm'));
