@@ -43,21 +43,25 @@ router.post('/', async (req, res) => {
     }
     grandTotal = Math.round(grandTotal * 100) / 100;
 
-    const enrichedItems = items.map(item => ({
-      ...item,
-      product_name: item.product_name || ''
-    }));
+    const enrichedItems = [];
+    for (const item of items) {
+      let pid = item.product_id;
+      if (item.isNew || !pid) {
+        const barcode = `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
+        const serial = `AE-PO-${Date.now()}-${Math.floor(Math.random() * 100)}`;
+        const ins = await run(`INSERT INTO products (name, quantity, inward_price, gst_rate, serial_number, barcode) VALUES (?,?,?,?,?,?)`,
+          [item.product_name || 'New Product', item.quantity, item.inward_price || 0, item.gst_rate || 18, serial, barcode]);
+        pid = ins.id;
+        item.product_id = pid;
+      } else {
+        await run('UPDATE products SET quantity = quantity + ?, inward_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [item.quantity, item.inward_price || 0, pid]);
+      }
+      await run('INSERT INTO stock_movements (product_id, type, quantity_change, reference) VALUES (?, ?, ?, ?)', [pid, 'purchase', item.quantity, invoiceNum]);
+      enrichedItems.push({ ...item, product_id: pid });
+    }
 
     await run(`INSERT INTO purchases (invoice_number, purchase_date, supplier_id, supplier_name, items, subtotal, gst_total, grand_total, payment_status, notes) VALUES (?,?,?,?,?,?,?,?,?,?)`,
       [invoiceNum, purchaseDate, data.supplier_id || null, data.supplier_name || 'Unknown Supplier', JSON.stringify(enrichedItems), Math.round(subtotal * 100) / 100, Math.round(gstTotal * 100) / 100, grandTotal, data.payment_status || 'paid', data.notes || '']);
-
-    for (const item of items) {
-      const existing = await get('SELECT * FROM products WHERE id = ?', [item.product_id]);
-      if (existing) {
-        await run('UPDATE products SET quantity = quantity + ?, inward_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [item.quantity, item.inward_price || existing.inward_price, item.product_id]);
-      }
-      await run('INSERT INTO stock_movements (product_id, type, quantity_change, reference) VALUES (?, ?, ?, ?)', [item.product_id, 'purchase', item.quantity, invoiceNum]);
-    }
 
     const purchase = await get('SELECT * FROM purchases WHERE invoice_number = ?', [invoiceNum]);
     purchase.items = JSON.parse(purchase.items || '[]');

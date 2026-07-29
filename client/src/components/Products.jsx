@@ -129,7 +129,7 @@ export default function Products() {
             <thead>
               <tr>
                 <th>Image</th><th>Name</th><th>HSN</th><th>Sell Price</th><th>Inward</th>
-                <th>Qty</th><th>Disc%</th><th>Serial</th><th>Barcode</th><th>Category</th><th>Actions</th>
+                <th>Qty</th><th>Unit</th><th>Disc%</th><th>Serial</th><th>Barcode</th><th>Category</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -143,6 +143,7 @@ export default function Products() {
                   <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
                   <td>Rs.{Number(p.inward_price).toLocaleString('en-IN')}</td>
                   <td><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity}</span></td>
+                  <td>{p.unit || 'pcs'}</td>
                   <td>{p.discount_percent}%</td>
                   <td style={{fontSize:11}}>{p.serial_number || '-'}</td>
                   <td style={{fontSize:11}}>
@@ -155,7 +156,7 @@ export default function Products() {
                   </td>
                 </tr>
               ))}
-              {products.length === 0 && <tr><td colSpan={11} style={{textAlign:'center',color:'#999',padding:30}}>No products found. Click "+ Add Product" to get started.</td></tr>}
+              {products.length === 0 && <tr><td colSpan={12} style={{textAlign:'center',color:'#999',padding:30}}>No products found. Click "+ Add Product" to get started.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -186,6 +187,12 @@ export default function Products() {
               <div className="form-group">
                 <label>Quantity</label>
                 <input type="number" value={form.quantity} onChange={e => setForm({...form, quantity: Number(e.target.value)})} />
+              </div>
+              <div className="form-group">
+                <label>Unit</label>
+                <select value={form.unit || 'pcs'} onChange={e => setForm({...form, unit: e.target.value})}>
+                  {['pcs','kg','meter','bag','box','dozen','liter','pack','set','roll','sheet','pair'].map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
               </div>
               <div className="form-group">
                 <label>Sell Price (Rs.)</label>

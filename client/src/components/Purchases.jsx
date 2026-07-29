@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 const API = '/api';
+const UNITS = ['pcs', 'kg', 'meter', 'bag', 'box', 'dozen', 'liter', 'pack', 'set', 'roll', 'sheet', 'pair'];
 
 export default function Purchases() {
   const [purchases, setPurchases] = useState([]);
@@ -12,6 +13,8 @@ export default function Purchases() {
   const [notes, setNotes] = useState('');
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState(null);
+  const [addNewMode, setAddNewMode] = useState(false);
+  const [newProduct, setNewProduct] = useState({ name: '', quantity: 1, inward_price: 0, unit: 'pcs', gst_rate: 18 });
 
   const showToast = (msg, type = 'success') => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
@@ -29,23 +32,41 @@ export default function Purchases() {
     if (existing) {
       setCart(cart.map(c => c.product_id === product.id ? { ...c, quantity: c.quantity + 1 } : c));
     } else {
-      setCart([...cart, { product_id: product.id, product_name: product.name, quantity: 1, inward_price: product.inward_price || 0, gst_rate: product.gst_rate || 18 }]);
+      setCart([...cart, { product_id: product.id, product_name: product.name, quantity: 1, inward_price: product.inward_price || 0, gst_rate: product.gst_rate || 18, unit: product.unit || 'pcs' }]);
     }
   };
 
+  const addNewProductToCart = () => {
+    if (!newProduct.name.trim()) { showToast('Enter product name', 'error'); return; }
+    setCart([...cart, {
+      product_id: null, product_name: newProduct.name.trim(), quantity: newProduct.quantity || 1,
+      inward_price: newProduct.inward_price || 0, gst_rate: newProduct.gst_rate || 18, unit: newProduct.unit || 'pcs',
+      isNew: true
+    }]);
+    setNewProduct({ name: '', quantity: 1, inward_price: 0, unit: 'pcs', gst_rate: 18 });
+    setAddNewMode(false);
+  };
+
   const updateCartItem = (productId, field, value) => {
-    setCart(cart.map(c => c.product_id === productId ? { ...c, [field]: value } : c));
+    setCart(cart.map(c => (c.product_id === productId || (c.isNew && c.product_name === productId)) ? { ...c, [field]: value } : c));
   };
 
   const removeFromCart = (productId) => {
-    setCart(cart.filter(c => c.product_id !== productId));
+    setCart(cart.filter(c => c.product_id !== productId && !(c.isNew && c.product_name === productId)));
   };
 
   const submitPurchase = async () => {
     if (cart.length === 0) { showToast('Add at least one product', 'error'); return; }
+
+    const items = cart.map(c => ({
+      product_id: c.product_id, product_name: c.product_name, quantity: c.quantity,
+      inward_price: c.inward_price, gst_rate: c.gst_rate || 18, unit: c.unit || 'pcs',
+      isNew: c.isNew || false
+    }));
+
     const r = await fetch(`${API}/purchases`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplier_name: supplierName || 'Unknown Supplier', payment_status: paymentStatus, notes, items: cart, purchase_date: new Date().toISOString().split('T')[0] })
+      body: JSON.stringify({ supplier_name: supplierName || 'Unknown Supplier', payment_status: paymentStatus, notes, items, purchase_date: new Date().toISOString().split('T')[0] })
     });
     const d = await r.json();
     if (d.success) {
@@ -58,23 +79,25 @@ export default function Purchases() {
 
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.barcode?.toLowerCase().includes(search.toLowerCase())
+    p.barcode?.includes(search)
   );
 
-  const total = cart.reduce((s, c) => s + (c.inward_price * c.quantity), 0);
-  const gstTotal = cart.reduce((s, c) => s + (c.inward_price * c.quantity * (c.gst_rate || 18) / 100), 0);
+  const total = cart.reduce((sum, c) => sum + (c.inward_price * c.quantity), 0);
+  const gstTotal = cart.reduce((sum, c) => sum + ((c.inward_price * c.quantity) * ((c.gst_rate || 18) / 100)), 0);
 
   return (
     <div>
-      {toast && <div className={`toast toast-${toast.type || 'success'}`}>{toast}</div>}
-      <div className="card-header">
-        <h2>Purchase Orders</h2>
-        <button className="btn btn-success" onClick={() => setShowForm(!showForm)}>{showForm ? '✕ Close' : '+ New Purchase'}</button>
+      {toast && <div className="toast toast-success" style={{display: toast ? 'flex' : 'none'}}>{toast}</div>}
+
+      <div className="page-header">
+        <h3>Purchases</h3>
+        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
+          {showForm ? 'View History' : '+ New Purchase'}
+        </button>
       </div>
 
       {showForm && (
         <div className="card">
-          <h3>New Purchase Order</h3>
           <div className="form-row">
             <div className="form-group">
               <label>Supplier Name</label>
@@ -91,55 +114,99 @@ export default function Purchases() {
           </div>
 
           <div className="form-group">
-            <label>Search Products to Add</label>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or barcode..." />
+            <label>Search Existing Products</label>
+            <div style={{display:'flex', gap:8}}>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or barcode..." style={{flex:1}} />
+              <button className="btn btn-sm btn-outline" onClick={() => setAddNewMode(!addNewMode)}>
+                {addNewMode ? 'Cancel' : '+ New Product'}
+              </button>
+            </div>
           </div>
 
-          {search && (
-            <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, marginBottom: 12 }}>
+          {addNewMode && (
+            <div className="card" style={{marginBottom:12, border:'2px dashed var(--accent2)', background:'#f0f8ff'}}>
+              <h4 style={{marginBottom:8,color:'var(--accent2)'}}>Add New Product</h4>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Product Name *</label>
+                  <input value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="e.g. PVC Pipe 2inch" autoFocus />
+                </div>
+                <div className="form-group">
+                  <label>Unit</label>
+                  <select value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})}>
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Quantity</label>
+                  <input type="number" min="1" value={newProduct.quantity} onChange={e => setNewProduct({...newProduct, quantity: Number(e.target.value) || 1})} />
+                </div>
+                <div className="form-group">
+                  <label>Rate (Rs./{newProduct.unit})</label>
+                  <input type="number" step="0.01" value={newProduct.inward_price} onChange={e => setNewProduct({...newProduct, inward_price: Number(e.target.value) || 0})} />
+                </div>
+                <div className="form-group">
+                  <label>GST %</label>
+                  <input type="number" step="0.1" value={newProduct.gst_rate} onChange={e => setNewProduct({...newProduct, gst_rate: Number(e.target.value) || 18})} />
+                </div>
+              </div>
+              <button className="btn btn-sm btn-success" onClick={addNewProductToCart}>Add to Purchase Cart</button>
+            </div>
+          )}
+
+          {search && !addNewMode && (
+            <div className="purchases-search-results">
               {filteredProducts.map(p => (
-                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid #f0f0f0' }}>
-                  <span style={{ fontSize: 13 }}>{p.name} <span style={{ color: '#999' }}>(Stock: {p.quantity})</span></span>
+                <div key={p.id} className="purchases-search-item">
+                  <span><strong>{p.name}</strong> <span style={{color:'var(--text-muted)',fontSize:12}}>(Stock: {p.quantity} {p.unit || 'pcs'})</span></span>
                   <button className="btn btn-sm btn-primary" onClick={() => addToCart(p)}>+ Add</button>
                 </div>
               ))}
-              {filteredProducts.length === 0 && <div className="empty-state">No products found</div>}
+              {filteredProducts.length === 0 && <div className="empty-state" style={{padding:20}}>No products found</div>}
             </div>
           )}
 
           {cart.length > 0 && (
             <div>
-              <h4 style={{ margin: '12px 0 8px' }}>Cart Items</h4>
+              <h4 style={{margin:'12px 0 8px'}}>Cart Items <span style={{fontWeight:400,fontSize:12,color:'var(--text-muted)'}}>({cart.length} items)</span></h4>
               <div className="table-container">
-                <table>
+                <table className="purchases-cart-table">
                   <thead>
-                    <tr><th>Product</th><th>Qty</th><th>Rate</th><th>GST%</th><th>Total</th><th></th></tr>
+                    <tr><th>Product</th><th>Qty</th><th>Unit</th><th>Rate</th><th>GST%</th><th>Total</th><th></th></tr>
                   </thead>
                   <tbody>
-                    {cart.map(c => (
-                      <tr key={c.product_id}>
-                        <td>{c.product_name}</td>
-                        <td><input type="number" value={c.quantity} min="1" onChange={e => updateCartItem(c.product_id, 'quantity', parseInt(e.target.value) || 1)} style={{ width: 60 }} /></td>
-                        <td><input type="number" value={c.inward_price} onChange={e => updateCartItem(c.product_id, 'inward_price', parseFloat(e.target.value) || 0)} style={{ width: 80 }} /></td>
-                        <td><input type="number" value={c.gst_rate} onChange={e => updateCartItem(c.product_id, 'gst_rate', parseFloat(e.target.value) || 0)} style={{ width: 60 }} /></td>
+                    {cart.map((c, idx) => (
+                      <tr key={c.product_id || 'new-' + idx}>
+                        <td>{c.product_name} {c.isNew && <span className="badge badge-warning" style={{fontSize:10}}>New</span>}</td>
+                        <td><input type="number" value={c.quantity} min="1" onChange={e => updateCartItem(c.product_id || c.product_name, 'quantity', parseInt(e.target.value) || 1)} /></td>
+                        <td>
+                          <select value={c.unit || 'pcs'} onChange={e => updateCartItem(c.product_id || c.product_name, 'unit', e.target.value)}>
+                            {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </td>
+                        <td><input type="number" step="0.01" value={c.inward_price} onChange={e => updateCartItem(c.product_id || c.product_name, 'inward_price', parseFloat(e.target.value) || 0)} /></td>
+                        <td><input type="number" step="0.1" value={c.gst_rate} onChange={e => updateCartItem(c.product_id || c.product_name, 'gst_rate', parseFloat(e.target.value) || 0)} /></td>
                         <td>Rs.{(c.inward_price * c.quantity).toFixed(2)}</td>
-                        <td><button className="btn btn-sm btn-danger" onClick={() => removeFromCart(c.product_id)}>✕</button></td>
+                        <td><button className="btn btn-sm btn-danger" onClick={() => removeFromCart(c.product_id || c.product_name)}>&times;</button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div style={{ textAlign: 'right', marginTop: 12, fontWeight: 600 }}>
-                Subtotal: Rs.{total.toFixed(2)} | GST: Rs.{gstTotal.toFixed(2)} | <span style={{ fontSize: 16 }}>Total: Rs.{(total + gstTotal).toFixed(2)}</span>
+              <div className="purchases-cart-summary">
+                Subtotal: Rs.{total.toFixed(2)} | GST: Rs.{gstTotal.toFixed(2)} | <span style={{fontSize:16}}>Total: Rs.{(total + gstTotal).toFixed(2)}</span>
               </div>
+              <div className="form-group" style={{marginTop:8}}>
+                <label>Notes</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows="2" />
+              </div>
+              <button className="btn btn-success btn-lg" style={{width:'100%'}} onClick={submitPurchase} disabled={cart.length === 0}>
+                Save Purchase Order - Rs.{(total + gstTotal).toFixed(2)}
+              </button>
             </div>
           )}
-
-          <div className="form-group">
-            <label>Notes</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows="2" />
-          </div>
-          <button className="btn btn-success" onClick={submitPurchase} disabled={cart.length === 0}>Save Purchase Order</button>
         </div>
       )}
 
@@ -157,7 +224,7 @@ export default function Purchases() {
                     <td>{p.invoice_number}</td>
                     <td>{p.purchase_date}</td>
                     <td>{p.supplier_name}</td>
-                    <td>{JSON.parse(p.items || '[]').length} items</td>
+                    <td>{p.items?.length || 0} items</td>
                     <td>Rs.{Number(p.grand_total).toFixed(2)}</td>
                     <td><span className={`badge badge-${p.payment_status === 'paid' ? 'success' : 'warning'}`}>{p.payment_status}</span></td>
                   </tr>
