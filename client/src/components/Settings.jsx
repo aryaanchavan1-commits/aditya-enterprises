@@ -114,7 +114,7 @@ export default function Settings() {
 
       <h2 style={{marginBottom:20}}>Settings</h2>
 
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16}}>
+      <div className="settings-grid">
         {/* Company Settings */}
         <div className="card">
           <div className="card-header"><h3>Company Details</h3></div>

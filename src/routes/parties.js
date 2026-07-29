@@ -36,10 +36,12 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { name, party_type, phone, email, gstin, address, city, state, pincode, opening_balance, is_active } = req.body;
+    const existing = await get('SELECT * FROM parties WHERE id = ?', [req.params.id]);
+    if (!existing) { res.json({ success: false, error: 'Party not found' }); return; }
+    const data = req.body;
     await run(
       'UPDATE parties SET name=?, party_type=?, phone=?, email=?, gstin=?, address=?, city=?, state=?, pincode=?, opening_balance=?, is_active=? WHERE id=?',
-      [name, party_type || 'customer', phone || '', email || '', gstin || '', address || '', city || '', state || '', pincode || '', opening_balance || 0, is_active !== undefined ? is_active : 1, req.params.id]
+      [data.name || existing.name, data.party_type || existing.party_type, data.phone ?? existing.phone, data.email ?? existing.email, data.gstin ?? existing.gstin, data.address ?? existing.address, data.city ?? existing.city, data.state ?? existing.state, data.pincode ?? existing.pincode, data.opening_balance ?? existing.opening_balance, data.is_active ?? existing.is_active, req.params.id]
     );
     const party = await get('SELECT * FROM parties WHERE id = ?', [req.params.id]);
     res.json({ success: true, data: party });

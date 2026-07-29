@@ -247,7 +247,7 @@ export default function Reports() {
                   </div>
                 </div>
               )}
-              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginTop:16}}>
+              <div className="reports-grid">
                 {balanceData.sales && balanceData.sales.length > 0 && (
                   <div className="card">
                     <div className="card-header"><h3>Sales Invoices ({balanceData.sales.length})</h3></div>

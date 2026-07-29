@@ -114,7 +114,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:20}}>
+      <div className="dashboard-grid">
         <BarChart data={stats.dailySales} labelKey="sale_date" valueKey="total" title="Daily Sales (This Month)" color="#2ecc71" />
         <div className="card">
           <div className="card-header" style={{borderBottomColor: stats.lowStockProducts.length > 0 ? '#e74c3c' : '#eee'}}>
@@ -142,7 +142,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20}}>
+      <div className="dashboard-grid">
         <div className="card">
           <div className="card-header"><h3>Recent Sales</h3></div>
           <div className="table-container">

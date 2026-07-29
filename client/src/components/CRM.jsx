@@ -40,7 +40,7 @@ export default function CRM() {
       <div className="search-bar">
         <input type="text" placeholder="Search by name or phone..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20}}>
+      <div className="crm-grid">
         <div className="card">
           <div className="card-header"><h3>Customers</h3></div>
           <div className="table-container">
