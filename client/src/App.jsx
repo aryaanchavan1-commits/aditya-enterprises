@@ -38,19 +38,14 @@ const TAB_ITEMS = [
   { path: '/', label: 'Dashboard', icon: '\u25A3' },
   { path: '/products', label: 'Products', icon: '\u2693' },
   { path: '/pos', label: 'Sales', icon: '\u2699' },
-  { path: '/purchases', label: 'Buy', icon: '\u2190' },
   { path: '/settings', label: 'Settings', icon: '\u2699' },
 ];
 const MORE_ITEMS = [
-  { path: '/categories', label: 'Categories', icon: 'C' },
+  { path: '/invoices', label: 'Invoices', icon: 'I' },
+  { path: '/purchases', label: 'Purchases', icon: 'B' },
   { path: '/suppliers', label: 'Suppliers', icon: 'S' },
-  { path: '/invoices', label: 'GST & Invoices', icon: 'I' },
-  { path: '/accounting', label: 'Accounting', icon: 'L' },
   { path: '/reports', label: 'Reports', icon: 'T' },
-  { path: '/crm', label: 'CRM', icon: 'M' },
-  { path: '/brands', label: 'Brands', icon: '\u2696' },
   { path: '/services', label: 'Servicing', icon: 'V' },
-  { path: '/ai', label: 'AI Assistant', icon: 'A' },
 ];
 
 function App() {

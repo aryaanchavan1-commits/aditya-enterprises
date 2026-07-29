@@ -180,7 +180,7 @@ export default function Products() {
 
       <div className="search-bar">
         <input
-          type="text" placeholder="Search by name, HSN, serial, barcode, description..."
+          type="text"           placeholder="Search by name or barcode..."
           value={search} onChange={e => setSearch(e.target.value)}
         />
         <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
@@ -195,37 +195,22 @@ export default function Products() {
             <table>
               <thead>
                 <tr>
-                  <th>Image</th><th>Name</th><th>HSN</th><th>Sell Price</th><th>Inward</th>
-                  <th>Qty</th><th>Unit</th><th>Disc%</th><th>Serial</th><th>Barcode</th><th>Category</th><th>Actions</th>
+                  <th>Name</th><th>Price</th><th>Stock</th><th>Barcode</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {products.map(p => (
                   <tr key={p.id}>
-                    <td>
-                      {p.image ? <img src={p.image} alt="" style={{width:40,height:40,borderRadius:4,objectFit:'cover'}} /> : <div style={{width:40,height:40,background:'#e8edf2',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#8a9aa8'}}>N/A</div>}
-                    </td>
                     <td><strong>{p.name}</strong></td>
-                    <td>{p.hsn_code || '-'}</td>
                     <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
-                    <td>Rs.{Number(p.inward_price).toLocaleString('en-IN')}</td>
-                    <td><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity}</span></td>
-                    <td>{p.unit || 'pcs'}</td>
-                    <td>{p.discount_percent}%</td>
-                    <td style={{fontSize:11}}>{p.serial_number || '-'}</td>
-                    <td style={{fontSize:11, minWidth:130}}>
-                      {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30, display:'block', marginBottom:4}} /> : p.barcode ? <span style={{fontSize:11,fontWeight:600,color:'#666',letterSpacing:1}}>{p.barcode}</span> : null}
-                      <div style={{marginTop:4}}>
-                        {p.barcode_image
-                          ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)} style={{marginRight:4}}>Redo</button>
-                          : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)} style={{marginRight:4}}>Gen</button>}
-                        {p.barcode && <button className="btn btn-sm btn-primary" onClick={() => setLabelProduct(p)}>Label</button>}
-                      </div>
+                    <td><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity} {p.unit || 'pcs'}</span></td>
+                    <td style={{fontSize:11}}>
+                      {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30, display:'block'}} /> : p.barcode || <span className="badge badge-warning">None</span>}
                     </td>
-                    <td>{p.category_name || '-'}{p.subcategory_name ? ` / ${p.subcategory_name}` : ''}</td>
                     <td>
                       <button className="btn btn-sm btn-info" style={{marginRight:4}} onClick={() => openEdit(p)}>Edit</button>
                       <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Del</button>
+                      {p.barcode ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)} style={{marginLeft:4}}>Label</button> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)} style={{marginLeft:4}}>Barcode</button>}
                     </td>
                   </tr>
                 ))}
@@ -244,28 +229,12 @@ export default function Products() {
               <div className="mobile-card-header">{p.name}</div>
               <div className="mobile-card-row">
                 <span className="label">Price</span>
-                <span className="value">Rs.{Number(p.sell_price).toLocaleString('en-IN')} {p.unit || 'pcs'}</span>
+                <span className="value">Rs.{Number(p.sell_price).toLocaleString('en-IN')}</span>
               </div>
               <div className="mobile-card-row">
                 <span className="label">Stock</span>
-                <span className="value"><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity}</span></span>
+                <span className="value"><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity} {p.unit || 'pcs'}</span></span>
               </div>
-              {p.hsn_code && <div className="mobile-card-row">
-                <span className="label">HSN</span>
-                <span className="value">{p.hsn_code}</span>
-              </div>}
-              {p.serial_number && <div className="mobile-card-row">
-                <span className="label">Serial</span>
-                <span className="value" style={{fontSize:12}}>{p.serial_number}</span>
-              </div>}
-              <div className="mobile-card-row">
-                <span className="label">Category</span>
-                <span className="value">{p.category_name || '-'}</span>
-              </div>
-              {p.barcode && <div className="mobile-card-row">
-                <span className="label">Barcode</span>
-                <span className="value" style={{fontSize:12,letterSpacing:1}}>{p.barcode}</span>
-              </div>}
               <div className="mobile-card-actions">
                 <button className="btn btn-sm btn-info" onClick={() => openEdit(p)}>Edit</button>
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Delete</button>
