@@ -16,7 +16,7 @@ export default function Products() {
   const emptyProduct = {
     name: '', image: '', quantity: 0, description: '', hsn_code: '',
     sell_price: 0, inward_price: 0, serial_number: '', discount_percent: 0,
-    barcode: '', category_id: '', subcategory_id: ''
+    barcode: '', category_id: '', subcategory_id: '', low_stock_threshold: 5
   };
 
   const [form, setForm] = useState(emptyProduct);
@@ -203,7 +203,7 @@ export default function Products() {
                   <tr key={p.id}>
                     <td><strong>{p.name}</strong></td>
                     <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
-                    <td><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity} {p.unit || 'pcs'}</span></td>
+                    <td><span className={`badge ${p.quantity <= (p.low_stock_threshold || 5) ? 'badge-danger' : 'badge-success'}`}>{p.quantity} {p.unit || 'pcs'}</span></td>
                     <td style={{fontSize:11}}>
                       {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30, display:'block'}} /> : p.barcode || <span className="badge badge-warning">None</span>}
                     </td>
@@ -233,7 +233,7 @@ export default function Products() {
               </div>
               <div className="mobile-card-row">
                 <span className="label">Stock</span>
-                <span className="value"><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity} {p.unit || 'pcs'}</span></span>
+                <span className="value"><span className={`badge ${p.quantity <= (p.low_stock_threshold || 5) ? 'badge-danger' : 'badge-success'}`}>{p.quantity} {p.unit || 'pcs'}</span></span>
               </div>
               <div className="mobile-card-actions">
                 <button className="btn btn-sm btn-info" onClick={() => openEdit(p)}>Edit</button>
@@ -321,6 +321,10 @@ export default function Products() {
               <div className="form-group">
                 <label>Discount % on Sale</label>
                 <input type="number" step="0.1" value={form.discount_percent} onChange={e => setForm({...form, discount_percent: Number(e.target.value)})} />
+              </div>
+              <div className="form-group">
+                <label>Low Stock Alert (qty)</label>
+                <input type="number" min="0" value={form.low_stock_threshold} onChange={e => setForm({...form, low_stock_threshold: Number(e.target.value)})} />
               </div>
             </div>
 

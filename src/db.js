@@ -60,7 +60,7 @@ async function initSchema() {
     try { await turso.execute(sql); } catch (e) { console.warn('Schema create:', e.message); }
   }
   const allCols = [
-    { table: 'products', cols: ['name', 'image', 'quantity', 'unit', 'description', 'hsn_code', 'sell_price', 'inward_price', 'serial_number', 'discount_percent', 'barcode', 'barcode_image', 'category_id', 'subcategory_id', 'gst_rate', 'supplier_id', 'created_at', 'updated_at'] },
+    { table: 'products', cols: ['name', 'image', 'quantity', 'unit', 'description', 'hsn_code', 'sell_price', 'inward_price', 'serial_number', 'discount_percent', 'barcode', 'barcode_image', 'category_id', 'subcategory_id', 'gst_rate', 'supplier_id', 'low_stock_threshold', 'created_at', 'updated_at'] },
     { table: 'sales', cols: ['invoice_number', 'sale_date', 'customer_id', 'customer_name', 'customer_phone', 'customer_gstin', 'customer_address', 'items', 'subtotal', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'grand_total', 'payment_mode', 'is_barcode_scan', 'notes', 'created_at'] },
     { table: 'purchases', cols: ['invoice_number', 'purchase_date', 'supplier_id', 'supplier_name', 'items', 'subtotal', 'gst_total', 'grand_total', 'payment_status', 'notes', 'created_at'] },
     { table: 'parties', cols: ['name', 'party_type', 'phone', 'email', 'gstin', 'address', 'city', 'state', 'pincode', 'opening_balance', 'is_active', 'created_at'] },
@@ -81,6 +81,7 @@ async function initSchema() {
     for (const col of t.cols) {
       let def = 'TEXT DEFAULT ""';
       if (['id', 'quantity', 'category_id', 'subcategory_id', 'supplier_id', 'customer_id', 'product_id', 'is_editable', 'is_active', 'is_barcode_scan'].includes(col)) def = 'INTEGER DEFAULT 0';
+      if (col === 'low_stock_threshold') def = 'INTEGER DEFAULT 5';
       if (['sell_price', 'inward_price', 'discount_percent', 'gst_rate', 'subtotal', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'grand_total', 'gst_total', 'opening_balance'].includes(col)) def = 'REAL DEFAULT 0';
       if (['serial_number', 'barcode'].includes(col)) def = 'TEXT';
       if (['name', 'invoice_number'].includes(col)) def = 'TEXT DEFAULT ""';
@@ -208,7 +209,7 @@ async function fixIdTypes() {
 
   const schemas = {
     categories: 'id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, is_editable INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
-    products: 'id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, image TEXT DEFAULT \'\', quantity INTEGER DEFAULT 0, unit TEXT DEFAULT \'pcs\', description TEXT DEFAULT \'\', hsn_code TEXT DEFAULT \'\', sell_price REAL DEFAULT 0, inward_price REAL DEFAULT 0, serial_number TEXT UNIQUE, discount_percent REAL DEFAULT 0, barcode TEXT UNIQUE, barcode_image TEXT DEFAULT \'\', category_id INTEGER, subcategory_id INTEGER, gst_rate REAL DEFAULT 18, supplier_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+    products: 'id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, image TEXT DEFAULT \'\', quantity INTEGER DEFAULT 0, unit TEXT DEFAULT \'pcs\', description TEXT DEFAULT \'\', hsn_code TEXT DEFAULT \'\', sell_price REAL DEFAULT 0, inward_price REAL DEFAULT 0, serial_number TEXT UNIQUE, discount_percent REAL DEFAULT 0, barcode TEXT UNIQUE, barcode_image TEXT DEFAULT \'\', category_id INTEGER, subcategory_id INTEGER, gst_rate REAL DEFAULT 18, supplier_id INTEGER, low_stock_threshold INTEGER DEFAULT 5, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP',
     sales: 'id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, sale_date TEXT NOT NULL, customer_id INTEGER, customer_name TEXT DEFAULT \'Walk-in Customer\', customer_phone TEXT DEFAULT \'\', customer_gstin TEXT DEFAULT \'\', customer_address TEXT DEFAULT \'\', items TEXT NOT NULL, subtotal REAL DEFAULT 0, discount_total REAL DEFAULT 0, cgst_total REAL DEFAULT 0, sgst_total REAL DEFAULT 0, igst_total REAL DEFAULT 0, cess_total REAL DEFAULT 0, grand_total REAL DEFAULT 0, payment_mode TEXT DEFAULT \'cash\', is_barcode_scan INTEGER DEFAULT 0, notes TEXT DEFAULT \'\', created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
     purchases: 'id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, purchase_date TEXT NOT NULL, supplier_id INTEGER, supplier_name TEXT DEFAULT \'\', items TEXT NOT NULL, subtotal REAL DEFAULT 0, gst_total REAL DEFAULT 0, grand_total REAL DEFAULT 0, payment_status TEXT DEFAULT \'paid\', notes TEXT DEFAULT \'\', created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
     stock_movements: 'id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, type TEXT, quantity_change INTEGER, reference TEXT, notes TEXT DEFAULT \'\', created_at DATETIME DEFAULT CURRENT_TIMESTAMP',

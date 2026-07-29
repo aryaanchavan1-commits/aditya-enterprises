@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
     if (search) { sql += ` AND (p.name LIKE ? OR p.hsn_code LIKE ? OR p.serial_number LIKE ? OR p.barcode LIKE ? OR p.description LIKE ?)`; const s = `%${search}%`; params.push(s, s, s, s, s); }
     if (category_id) { sql += ` AND p.category_id = ?`; params.push(category_id); }
     if (subcategory_id) { sql += ` AND p.subcategory_id = ?`; params.push(subcategory_id); }
-    if (low_stock === 'true') { sql += ` AND p.quantity <= 5`; }
+    if (low_stock === 'true') { sql += ` AND p.quantity <= COALESCE(p.low_stock_threshold, 5)`; }
     sql += ` ORDER BY p.updated_at DESC`;
     const data = (await all(sql, params)).map(cleanRow);
     res.json({ success: true, data });
@@ -50,8 +50,8 @@ router.post('/', async (req, res) => {
       barcode_image = `/data/barcodes/${barcode}.png`;
     } catch (e) { console.error('Barcode gen failed:', e.message); }
 
-    const ins = await run(`INSERT INTO products (name, image, quantity, unit, description, hsn_code, sell_price, inward_price, serial_number, discount_percent, barcode, barcode_image, category_id, subcategory_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [data.name, data.image || '', data.quantity || 0, data.unit || 'pcs', data.description || '', data.hsn_code || '', data.sell_price || 0, data.inward_price || 0, serial, data.discount_percent || 0, barcode, barcode_image, data.category_id || null, data.subcategory_id || null]);
+    const ins = await run(`INSERT INTO products (name, image, quantity, unit, description, hsn_code, sell_price, inward_price, serial_number, discount_percent, barcode, barcode_image, category_id, subcategory_id, low_stock_threshold) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [data.name, data.image || '', data.quantity || 0, data.unit || 'pcs', data.description || '', data.hsn_code || '', data.sell_price || 0, data.inward_price || 0, serial, data.discount_percent || 0, barcode, barcode_image, data.category_id || null, data.subcategory_id || null, data.low_stock_threshold ?? 5]);
 
     const product = await get('SELECT * FROM products WHERE id = ?', [ins.id || ins.lastID]);
     res.json({ success: true, data: product });
@@ -74,8 +74,8 @@ router.put('/:id', async (req, res) => {
         barcode_image = `/data/barcodes/${barcode}.png`;
       } catch (e) {}
     }
-    await run(`UPDATE products SET name=?, image=?, quantity=?, description=?, hsn_code=?, sell_price=?, inward_price=?, discount_percent=?, barcode=?, barcode_image=?, category_id=?, subcategory_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-      [data.name || existing.name, data.image || existing.image, data.quantity ?? existing.quantity, data.description || existing.description, data.hsn_code || existing.hsn_code, data.sell_price ?? existing.sell_price, data.inward_price ?? existing.inward_price, data.discount_percent ?? existing.discount_percent, barcode, barcode_image, data.category_id ?? existing.category_id, data.subcategory_id ?? existing.subcategory_id, req.params.id]);
+    await run(`UPDATE products SET name=?, image=?, quantity=?, description=?, hsn_code=?, sell_price=?, inward_price=?, discount_percent=?, barcode=?, barcode_image=?, category_id=?, subcategory_id=?, low_stock_threshold=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [data.name || existing.name, data.image || existing.image, data.quantity ?? existing.quantity, data.description || existing.description, data.hsn_code || existing.hsn_code, data.sell_price ?? existing.sell_price, data.inward_price ?? existing.inward_price, data.discount_percent ?? existing.discount_percent, barcode, barcode_image, data.category_id ?? existing.category_id, data.subcategory_id ?? existing.subcategory_id, data.low_stock_threshold ?? existing.low_stock_threshold ?? 5, req.params.id]);
     res.json({ success: true, data: await get('SELECT * FROM products WHERE id = ?', [req.params.id]) });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });

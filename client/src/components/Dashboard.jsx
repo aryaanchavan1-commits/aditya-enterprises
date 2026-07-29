@@ -33,9 +33,9 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-header"><h3>Low Stock Items</h3></div>
           {stats.lowStockProducts.length > 0 ? (
-            <table><thead><tr><th>Product</th><th>Qty</th><th>Price</th></tr></thead>
+            <table><thead><tr><th>Product</th><th>Qty</th><th>Min</th><th>Price</th></tr></thead>
               <tbody>{stats.lowStockProducts.map(p => (
-                <tr key={p.id}><td>{p.name}</td><td style={{color:'#e74c3c',fontWeight:'bold'}}>{p.quantity}</td><td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td></tr>
+                <tr key={p.id}><td>{p.name}</td><td style={{color:'#e74c3c',fontWeight:'bold'}}>{p.quantity}</td><td>{p.low_stock_threshold || 5}</td><td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td></tr>
               ))}</tbody></table>
           ) : <p style={{color:'#27ae60',textAlign:'center',padding:20}}>All products well stocked</p>}
         </div>
