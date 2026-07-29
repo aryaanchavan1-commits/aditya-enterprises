@@ -128,14 +128,21 @@ async function seedIfEmpty() {
 
 function toRows(result) {
   if (!result || !result.rows) return [];
-  return result.rows.map(r => ({ ...r }));
+  return result.rows.map(r => {
+    const obj = {};
+    for (const k of r.columns || Object.keys(r)) {
+      const v = r[k];
+      obj[k] = typeof v === 'bigint' ? Number(v) : v;
+    }
+    return obj;
+  });
 }
 
 async function query(sql, params = []) {
   const db = await getDb();
   const safeParams = params.map(p => p === undefined ? null : p);
   const result = await db.execute({ sql, args: safeParams });
-  return result.rows || [];
+  return toRows(result);
 }
 
 async function run(sql, params = []) {
