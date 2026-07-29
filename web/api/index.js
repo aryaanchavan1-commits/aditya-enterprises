@@ -91,6 +91,7 @@ app.use('/api/services', require('../src/routes/services'));
 
 const db = require('../src/db');
 
+app.get('/api/testjson', (req, res) => { res.status(404).json({ test: true }); });
 app.get('/api/testdb', async (req, res) => {
   try {
     const db2 = await db.getDb();
@@ -103,13 +104,19 @@ app.get('/api/testdb', async (req, res) => {
 
 app.get('/api/category', async (req, res) => {
   try {
-    if (!req.query.id) { res.status(400).json({ success: false, error: 'id query param required' }); return; }
+    if (!req.query.id) {
+      res.status(400).json({ success: false, error: 'id query param required' });
+      return;
+    }
     const cat = await db.get('SELECT * FROM categories WHERE id = ?', [req.query.id]);
-    if (!cat) { res.status(404).json({ success: false, error: 'Not found' }); return; }
-    cat.subcategories = await db.all('SELECT * FROM subcategories WHERE category_id = ? ORDER BY id', [cat.id]);
-    cat.products = await db.all('SELECT * FROM products WHERE category_id = ?', [cat.id]);
-    res.json({ success: true, data: cat });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+    if (!cat) {
+      res.status(404).json({ success: false, error: 'Not found' });
+      return;
+    }
+    const subs = await db.all('SELECT * FROM subcategories WHERE category_id = ? ORDER BY id', [cat.id]);
+    const prods = await db.all('SELECT * FROM products WHERE category_id = ?', [cat.id]);
+    res.json({ success: true, data: { ...cat, subcategories: subs, products: prods } });
+  } catch (err) { res.status(500).json({ success: false, error: err.message, stack: err.stack }); }
 });
 
 app.put('/api/category', async (req, res) => {
