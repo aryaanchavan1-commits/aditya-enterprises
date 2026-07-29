@@ -34,6 +34,7 @@ export default function Purchases() {
     } else {
       setCart([...cart, { product_id: product.id, product_name: product.name, quantity: 1, inward_price: product.inward_price || 0, gst_rate: product.gst_rate || 18, unit: product.unit || 'pcs' }]);
     }
+    setSearch('');
   };
 
   const addNewProductToCart = () => {

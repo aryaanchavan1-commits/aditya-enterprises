@@ -79,8 +79,10 @@ export default function Products() {
 
   const handleSave = async () => {
     if (!form.name) return showToast('Product name is required', 'error');
+    const payload = { ...form };
+    if (payload.barcode) payload.barcode = payload.barcode.replace(/[^A-Za-z0-9\-]/g, '').slice(0, 20);
     const path = editProduct ? `/products/${editProduct.id}` : '/products';
-    const d = await api(path, { method: editProduct ? 'PUT' : 'POST', body: form });
+    const d = await api(path, { method: editProduct ? 'PUT' : 'POST', body: payload });
     if (d.success) {
       showToast(editProduct ? 'Product updated' : 'Product created');
       setShowModal(false);
@@ -108,13 +110,27 @@ export default function Products() {
     else showToast(d.error || 'Barcode generation failed', 'error');
   };
 
+  const handleGenerateAllBarcodes = async () => {
+    const missing = products.filter(p => !p.barcode);
+    if (!missing.length) return showToast('All products already have barcodes');
+    if (!confirm(`Generate barcodes for ${missing.length} products without barcodes?`)) return;
+    const ids = missing.map(p => p.id);
+    const d = await api('/barcode/generate-bulk', { method: 'POST', body: { product_ids: ids } });
+    if (d.success) showToast(`Generated ${d.data.length} barcode(s)`);
+    else showToast(d.error || 'Bulk generation failed', 'error');
+    loadProducts();
+  };
+
   return (
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
 
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
         <h2>Products ({products.length})</h2>
-        <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ Add Product</button>
+        <div style={{display:'flex', gap:6}}>
+          <button className="btn btn-sm btn-outline hide-mobile" onClick={handleGenerateAllBarcodes} title="Generate barcodes for products without one">Bulk Barcode</button>
+          <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ Add Product</button>
+        </div>
       </div>
       <button className="fab show-mobile" onClick={openAdd}>+</button>
 
@@ -152,9 +168,14 @@ export default function Products() {
                   <td>{p.unit || 'pcs'}</td>
                   <td>{p.discount_percent}%</td>
                   <td style={{fontSize:11}}>{p.serial_number || '-'}</td>
-                  <td style={{fontSize:11}}>
-                    {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30}} /> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Generate</button>}
-                    {p.barcode ? <button className="btn btn-sm btn-outline" style={{marginLeft:4}} onClick={() => setLabelProduct(p)}>Label</button> : <button className="btn btn-sm btn-outline" style={{marginLeft:4}} onClick={() => handleGenerateBarcode(p.id)}>Gen</button>}
+                  <td style={{fontSize:11, minWidth:130}}>
+                    {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30, display:'block', marginBottom:4}} /> : p.barcode ? <span style={{fontSize:11,fontWeight:600,color:'#666',letterSpacing:1}}>{p.barcode}</span> : null}
+                    <div style={{marginTop:4}}>
+                      {p.barcode_image
+                        ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)} style={{marginRight:4}}>Redo</button>
+                        : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)} style={{marginRight:4}}>Gen</button>}
+                      {p.barcode && <button className="btn btn-sm btn-primary" onClick={() => setLabelProduct(p)}>Label</button>}
+                    </div>
                   </td>
                   <td>{p.category_name || '-'}{p.subcategory_name ? ` / ${p.subcategory_name}` : ''}</td>
                   <td>
@@ -194,6 +215,10 @@ export default function Products() {
                 <span className="label">Category</span>
                 <span className="value">{p.category_name || '-'}</span>
               </div>
+              {p.barcode && <div className="mobile-card-row">
+                <span className="label">Barcode</span>
+                <span className="value" style={{fontSize:12,letterSpacing:1}}>{p.barcode}</span>
+              </div>}
               <div className="mobile-card-actions">
                 <button className="btn btn-sm btn-info" onClick={() => openEdit(p)}>Edit</button>
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Delete</button>
