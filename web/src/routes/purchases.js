@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const purchase = await get('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
-    if (!purchase) res.json({ success: false, error: 'Purchase not found' }); return;
+    if (!purchase) { res.json({ success: false, error: 'Purchase not found' }); return; }
     purchase.items = JSON.parse(purchase.items || '[]');
     res.json({ success: true, data: purchase });
   } catch (err) { res.json({ success: false, error: err.message }); }
@@ -28,7 +28,7 @@ router.post('/', async (req, res) => {
   try {
     const data = req.body;
     const items = data.items || [];
-    if (items.length === 0) res.json({ success: false, error: 'No items in purchase' }); return;
+    if (items.length === 0) { res.json({ success: false, error: 'No items in purchase' }); return; }
 
     const invoiceNum = `PO/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
     const purchaseDate = data.purchase_date || new Date().toISOString().split('T')[0];
@@ -69,7 +69,7 @@ router.put('/:id', async (req, res) => {
   try {
     const data = req.body;
     const existing = await get('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
-    if (!existing) res.json({ success: false, error: 'Purchase not found' }); return;
+    if (!existing) { res.json({ success: false, error: 'Purchase not found' }); return; }
 
     await run('UPDATE purchases SET supplier_name=?, payment_status=?, notes=? WHERE id=?',
       [data.supplier_name || existing.supplier_name, data.payment_status || existing.payment_status, data.notes || existing.notes, req.params.id]);
@@ -80,7 +80,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const purchase = await get('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
-    if (!purchase) res.json({ success: false, error: 'Not found' }); return;
+    if (!purchase) { res.json({ success: false, error: 'Not found' }); return; }
     purchase.items = JSON.parse(purchase.items || '[]');
     for (const item of purchase.items) {
       await run('UPDATE products SET quantity = quantity - ? WHERE id = ?', [item.quantity, item.product_id]);

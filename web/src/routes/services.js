@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const service = await get('SELECT * FROM services WHERE id = ?', [req.params.id]);
-    if (!service) res.json({ success: false, error: 'Service not found' }); return;
+    if (!service) { res.json({ success: false, error: 'Service not found' }); return; }
     res.json({ success: true, data: service });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
@@ -25,7 +25,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const data = req.body;
-    if (!data.customer_name) res.json({ success: false, error: 'Customer name is required' }); return;
+    if (!data.customer_name) { res.json({ success: false, error: 'Customer name is required' }); return; }
     const partsCost = Number(data.parts_cost) || 0;
     const serviceCharge = Number(data.service_charge) || 0;
     const totalCharge = partsCost + serviceCharge;
@@ -39,7 +39,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const existing = await get('SELECT * FROM services WHERE id = ?', [req.params.id]);
-    if (!existing) res.json({ success: false, error: 'Service not found' }); return;
+    if (!existing) { res.json({ success: false, error: 'Service not found' }); return; }
     const data = req.body;
     const partsCost = Number(data.parts_cost ?? existing.parts_cost);
     const serviceCharge = Number(data.service_charge ?? existing.service_charge);

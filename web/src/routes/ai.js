@@ -130,10 +130,10 @@ router.get('/models', async (req, res) => {
 router.post('/chat', async (req, res) => {
   try {
     const { message, model, mode } = req.body;
-    if (!message) res.json({ success: false, error: 'Message required' }); return;
+    if (!message) { res.json({ success: false, error: 'Message required' }); return; }
 
     const client = getGroqClient();
-    if (!client) res.json({ success: false, error: 'Groq API key not configured in .env' }); return;
+    if (!client) { res.json({ success: false, error: 'Groq API key not configured in .env' }); return; }
 
     const selectedModel = model || (await get("SELECT value FROM settings WHERE key='groq_model'"))?.value || 'llama-3.3-70b-versatile';
     const isAgentMode = mode === 'agent';
@@ -186,7 +186,7 @@ router.post('/analyze', async (req, res) => {
   try {
     const { type } = req.body;
     const client = getGroqClient();
-    if (!client) res.json({ success: false, error: 'Groq API key not configured' }); return;
+    if (!client) { res.json({ success: false, error: 'Groq API key not configured' }); return; }
 
     let context = '';
     if (type === 'inventory') {

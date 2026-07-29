@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const product = await get(`SELECT p.*, c.name as category_name, sc.name as subcategory_name FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN subcategories sc ON p.subcategory_id = sc.id WHERE p.id = ?`, [req.params.id]);
-    if (!product) res.json({ success: false, error: 'Product not found' }); return;
+    if (!product) { res.json({ success: false, error: 'Product not found' }); return; }
     res.json({ success: true, data: cleanRow(product) });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
@@ -61,7 +61,7 @@ router.put('/:id', async (req, res) => {
   try {
     const data = req.body;
     const existing = await get('SELECT * FROM products WHERE id = ?', [req.params.id]);
-    if (!existing) res.json({ success: false, error: 'Not found' }); return;
+    if (!existing) { res.json({ success: false, error: 'Not found' }); return; }
     const barcode = data.barcode || existing.barcode;
     let barcode_image = existing.barcode_image;
     if (data.barcode && data.barcode !== existing.barcode) {
@@ -96,8 +96,8 @@ router.delete('/:id', async (req, res) => {
 router.get('/:id/barcode', async (req, res) => {
   try {
     const product = await get('SELECT * FROM products WHERE id = ?', [req.params.id]);
-    if (!product) res.json({ success: false, error: 'Not found' }); return;
-    if (!product.barcode) res.json({ success: false, error: 'No barcode' }); return;
+    if (!product) { res.json({ success: false, error: 'Not found' }); return; }
+    if (!product.barcode) { res.json({ success: false, error: 'No barcode' }); return; }
     const barcodePath = path.join(require('../db').dataDir, 'barcodes', `${product.barcode}.png`);
     if (!fs.existsSync(barcodePath)) { const png = await generateBarcodeImage(product.barcode); fs.writeFileSync(barcodePath, png); }
     res.json({ success: true, data: { barcode: product.barcode, image: `/data/barcodes/${product.barcode}.png` } });

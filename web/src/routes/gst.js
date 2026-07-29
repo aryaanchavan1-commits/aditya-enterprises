@@ -6,7 +6,7 @@ const PDFDocument = require('pdfkit');
 router.get('/bill/:saleId', async (req, res) => {
   try {
     const sale = await get('SELECT * FROM sales WHERE id = ?', [req.params.saleId]);
-    if (!sale) res.json({ success: false, error: 'Sale not found' }); return;
+    if (!sale) { res.json({ success: false, error: 'Sale not found' }); return; }
     sale.items = JSON.parse(sale.items || '[]');
 
     const settings = {};

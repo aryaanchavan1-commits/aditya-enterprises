@@ -58,7 +58,7 @@ async function processAndUpload(filePath, filename) {
 
 router.post('/image', upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) res.json({ success: false, error: 'No file uploaded' }); return;
+    if (!req.file) { res.json({ success: false, error: 'No file uploaded' }); return; }
     const result = await processAndUpload(req.file.path, req.file.filename);
     res.json({ success: true, data: result });
   } catch (err) { res.json({ success: false, error: err.message }); }
@@ -77,7 +77,7 @@ router.post('/images', upload.array('images', 10), async (req, res) => {
 
 router.post('/ai-upload', upload.single('file'), (req, res) => {
   try {
-    if (!req.file) res.json({ success: false, error: 'No file uploaded' }); return;
+    if (!req.file) { res.json({ success: false, error: 'No file uploaded' }); return; }
     res.json({ success: true, data: { filename: req.file.originalname, path: `/data/ai_uploads/${req.file.filename}`, type: req.file.mimetype, size: req.file.size } });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });

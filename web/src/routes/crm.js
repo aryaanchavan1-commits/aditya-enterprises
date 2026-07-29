@@ -45,7 +45,7 @@ router.get('/visits', async (req, res) => {
 router.post('/visit', async (req, res) => {
   try {
     const { customer_name, customer_phone, visit_date, purpose, notes, amount } = req.body;
-    if (!customer_name) res.json({ success: false, error: 'Customer name is required' }); return;
+    if (!customer_name) { res.json({ success: false, error: 'Customer name is required' }); return; }
     const date = visit_date || new Date().toISOString().split('T')[0];
     await run('INSERT INTO customer_visits (customer_name, customer_phone, visit_date, purpose, notes, amount) VALUES (?,?,?,?,?,?)',
       [customer_name, customer_phone || '', date, purpose || '', notes || '', amount || 0]);

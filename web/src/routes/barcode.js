@@ -8,7 +8,7 @@ const fs = require('fs');
 router.get('/scan/:code', async (req, res) => {
   try {
     const product = await get('SELECT * FROM products WHERE barcode = ? OR serial_number = ?', [req.params.code, req.params.code]);
-    if (!product) res.json({ success: false, error: 'Product not found for: ' + req.params.code }); return;
+    if (!product) { res.json({ success: false, error: 'Product not found for: ' + req.params.code }); return; }
     res.json({ success: true, data: product });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
@@ -18,8 +18,8 @@ router.post('/scan-sale', async (req, res) => {
     const { barcode, quantity } = req.body;
     const qty = quantity || 1;
     const product = await get('SELECT * FROM products WHERE barcode = ? OR serial_number = ?', [barcode, barcode]);
-    if (!product) res.json({ success: false, error: 'Product not found' }); return;
-    if (product.quantity < qty) res.json({ success: false, error: `Only ${product.quantity} left in stock` }); return;
+    if (!product) { res.json({ success: false, error: 'Product not found' }); return; }
+    if (product.quantity < qty) { res.json({ success: false, error: `Only ${product.quantity} left in stock` }); return; }
     const invoiceNum = `AE/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
     const saleDate = new Date().toISOString().split('T')[0];
     const lineTotal = product.sell_price * qty;
@@ -47,7 +47,7 @@ router.post('/generate/:productId', async (req, res) => {
       res.json({ success: false, error: 'Invalid product ID' });
     }
     const product = await get('SELECT * FROM products WHERE id = ?', [req.params.productId]);
-    if (!product) res.json({ success: false, error: 'Not found' }); return;
+    if (!product) { res.json({ success: false, error: 'Not found' }); return; }
     const code = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const png = await new Promise((resolve, reject) => {
       bwipjs.toBuffer({ bcid: req.body.type || 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center' }, (err, buf) => err ? reject(err) : resolve(buf));
@@ -83,7 +83,7 @@ router.post('/generate-bulk', async (req, res) => {
 router.get('/print/:productId', async (req, res) => {
   try {
     const product = await get('SELECT * FROM products WHERE id = ?', [req.params.productId]);
-    if (!product || !product.barcode) res.json({ success: false, error: 'No barcode' }); return;
+    if (!product || !product.barcode) { res.json({ success: false, error: 'No barcode' }); return; }
     res.json({ success: true, data: { barcode: product.barcode, image: product.barcode_image, name: product.name, price: product.sell_price } });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });

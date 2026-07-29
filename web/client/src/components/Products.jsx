@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-
-const API = '/api';
+import { api } from '../api';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -27,14 +26,12 @@ export default function Products() {
   };
 
   const loadProducts = () => {
-    fetch(`${API}/products?search=${search}&category_id=${categoryFilter}`)
-      .then(r => r.json()).then(d => { if (d.success) setProducts(d.data); })
-      .catch(e => showToast('Failed to load products', 'error'));
+    api(`/products?search=${search}&category_id=${categoryFilter}`)
+      .then(d => { if (d.success) setProducts(d.data); else showToast(d.error || 'Failed to load products', 'error'); });
   };
 
   const loadCategories = () => {
-    fetch(`${API}/categories`)
-      .then(r => r.json()).then(d => { if (d.success) setCategories(d.data); });
+    api('/categories').then(d => { if (d.success) setCategories(d.data); });
   };
 
   useEffect(() => { loadProducts(); loadCategories(); }, []);
@@ -73,7 +70,7 @@ export default function Products() {
     const fd = new FormData();
     fd.append('image', file);
     try {
-      const r = await fetch(`${API}/upload/image`, { method: 'POST', body: fd });
+      const r = await fetch('/api/upload/image', { method: 'POST', body: fd });
       const d = await r.json();
       if (d.success) setForm({ ...form, image: d.data.original });
     } catch (err) { showToast('Image upload failed', 'error'); }
@@ -81,42 +78,28 @@ export default function Products() {
 
   const handleSave = async () => {
     if (!form.name) return showToast('Product name is required', 'error');
-    const url = editProduct ? `${API}/products/${editProduct.id}` : `${API}/products`;
-    const method = editProduct ? 'PUT' : 'POST';
-
-    try {
-      const r = await fetch(url, {
-        method, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
-      });
-      const d = await r.json();
-      if (d.success) {
-        showToast(editProduct ? 'Product updated' : 'Product created');
-        setShowModal(false);
-        loadProducts();
-      } else {
-        showToast(d.error, 'error');
-      }
-    } catch (err) { showToast('Save failed', 'error'); }
+    const path = editProduct ? `/products/${editProduct.id}` : '/products';
+    const d = await api(path, { method: editProduct ? 'PUT' : 'POST', body: form });
+    if (d.success) {
+      showToast(editProduct ? 'Product updated' : 'Product created');
+      setShowModal(false);
+      loadProducts();
+    } else {
+      showToast(d.error || 'Save failed', 'error');
+    }
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this product?')) return;
-    try {
-      const r = await fetch(`${API}/products/${id}`, { method: 'DELETE' });
-      const d = await r.json();
-      if (d.success) { showToast('Product deleted'); loadProducts(); }
-      else showToast(d.error, 'error');
-    } catch (err) { showToast('Delete failed', 'error'); }
+    const d = await api('/products/' + id, { method: 'DELETE' });
+    if (d.success) { showToast('Product deleted'); loadProducts(); }
+    else showToast(d.error || 'Delete failed', 'error');
   };
 
   const handleGenerateBarcode = async (id) => {
-    try {
-      const r = await fetch(`${API}/barcode/generate/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-      const d = await r.json();
-      if (d.success) { showToast('Barcode generated'); loadProducts(); }
-      else showToast(d.error, 'error');
-    } catch (err) { showToast('Barcode generation failed', 'error'); }
+    const d = await api('/barcode/generate/' + id, { method: 'POST', body: {} });
+    if (d.success) { showToast('Barcode generated'); loadProducts(); }
+    else showToast(d.error || 'Barcode generation failed', 'error');
   };
 
   return (

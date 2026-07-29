@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
 router.get('/:key', async (req, res) => {
   try {
     const setting = await get('SELECT * FROM settings WHERE key = ?', [req.params.key]);
-    if (!setting) res.json({ success: false, error: 'Not found' }); return;
+    if (!setting) { res.json({ success: false, error: 'Not found' }); return; }
     res.json({ success: true, data: setting });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });

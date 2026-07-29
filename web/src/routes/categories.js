@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    if (!req.body.name) res.json({ success: false, error: 'Category name required' }); return;
+    if (!req.body.name) { res.json({ success: false, error: 'Category name required' }); return; }
     const result = await run('INSERT INTO categories (name) VALUES (?)', [req.body.name]);
     const cat = await get('SELECT * FROM categories WHERE id = ?', [result.id]);
     res.json({ success: true, data: { ...cat, subcategories: [], product_count: 0 } });
