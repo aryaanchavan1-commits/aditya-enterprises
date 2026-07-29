@@ -81,10 +81,26 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/data/uploads', express.static(uploadsDir));
-app.use('/data/barcodes', express.static(barcodesDir));
 app.use('/uploads', express.static(uploadsDir));
-app.use('/barcodes', express.static(barcodesDir));
 app.use('/invoices', express.static(invoicesDir));
+
+// Dynamic barcode image serving — regenerates on-the-fly if file missing (Render's FS is ephemeral)
+const bwipjs = require('bwip-js');
+function serveBarcode(req, res, next) {
+  const fileName = path.basename(req.path);
+  const filePath = path.join(barcodesDir, fileName);
+  if (fs.existsSync(filePath)) return res.sendFile(filePath);
+  const code = fileName.replace(/\.png$/i, '');
+  if (!code) return next();
+  bwipjs.toBuffer({ bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center' }, (err, png) => {
+    if (err) { console.error('Barcode regen failed:', err.message); return next(); }
+    try { fs.mkdirSync(barcodesDir, { recursive: true }); fs.writeFileSync(filePath, png); } catch (e) {}
+    res.set('Content-Type', 'image/png');
+    res.send(png);
+  });
+}
+app.use('/data/barcodes', serveBarcode);
+app.use('/barcodes', serveBarcode);
 
 app.use('/api/products', require('../src/routes/products'));
 app.use('/api/categories', require('../src/routes/categories'));
