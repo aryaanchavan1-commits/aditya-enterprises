@@ -89,8 +89,9 @@ app.use('/api/purchases', require('../src/routes/purchases'));
 app.use('/api/crm', require('../src/routes/crm'));
 app.use('/api/services', require('../src/routes/services'));
 
+const { get, all, run } = require('../src/db');
+
 app.get('/api/category', async (req, res) => {
-  const { get, all } = require('../src/db');
   try {
     const cat = await get('SELECT * FROM categories WHERE id = ?', [req.query.id]);
     if (!cat) return res.status(404).json({ success: false, error: 'Not found' });
@@ -101,13 +102,11 @@ app.get('/api/category', async (req, res) => {
 });
 
 app.put('/api/category', async (req, res) => {
-  const { run } = require('../src/db');
   try { await run('UPDATE categories SET name = ? WHERE id = ?', [req.body.name, req.query.id]); res.json({ success: true }); }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 app.post('/api/subcategory', async (req, res) => {
-  const { run } = require('../src/db');
   try {
     const r = await run('INSERT INTO subcategories (category_id, name) VALUES (?, ?)', [req.query.catId, req.body.name]);
     res.json({ success: true, data: { id: r.id, category_id: parseInt(req.query.catId), name: req.body.name } });
@@ -115,13 +114,11 @@ app.post('/api/subcategory', async (req, res) => {
 });
 
 app.put('/api/subcategory', async (req, res) => {
-  const { run } = require('../src/db');
   try { await run('UPDATE subcategories SET name = ? WHERE id = ? AND category_id = ?', [req.body.name, req.query.subId, req.query.catId]); res.json({ success: true }); }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 app.delete('/api/subcategory', async (req, res) => {
-  const { run } = require('../src/db');
   try { await run('DELETE FROM subcategories WHERE id = ? AND category_id = ?', [req.query.subId, req.query.catId]); res.json({ success: true }); }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
