@@ -5,7 +5,7 @@ const { get, all, run } = require('../db');
 function getGroqClient() {
   const apiKey = process.env.GROQ_API_KEY;
   if (apiKey) {
-    try { const Groq = require('groq-sdk'); return new Groq({ apiKey }); } catch (e) {}
+    try { const Groq = require('groq-sdk'); return; new Groq({ apiKey }); } catch (e) {}
   }
   return null;
 }
@@ -130,10 +130,10 @@ router.get('/models', async (req, res) => {
 router.post('/chat', async (req, res) => {
   try {
     const { message, model, mode } = req.body;
-    if (!message) return res.status(400).json({ success: false, error: 'Message required' });
+    if (!message) res.json({ success: false, error: 'Message required' }); return;
 
     const client = getGroqClient();
-    if (!client) return res.status(400).json({ success: false, error: 'Groq API key not configured in .env' });
+    if (!client) res.json({ success: false, error: 'Groq API key not configured in .env' }); return;
 
     const selectedModel = model || (await get("SELECT value FROM settings WHERE key='groq_model'"))?.value || 'llama-3.3-70b-versatile';
     const isAgentMode = mode === 'agent';
@@ -169,24 +169,24 @@ router.post('/chat', async (req, res) => {
     await run('INSERT INTO ai_conversations (role, content) VALUES (?, ?)', ['assistant', replyText]);
 
     res.json({ success: true, data: { role: 'assistant', content: replyText, model: selectedModel, mode: isAgentMode ? 'agent' : 'chat' } });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.get('/history', async (req, res) => {
   try { res.json({ success: true, data: await all('SELECT * FROM ai_conversations ORDER BY id ASC') }); }
-  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.delete('/history', async (req, res) => {
   try { await run('DELETE FROM ai_conversations'); res.json({ success: true, message: 'Cleared' }); }
-  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.post('/analyze', async (req, res) => {
   try {
     const { type } = req.body;
     const client = getGroqClient();
-    if (!client) return res.status(400).json({ success: false, error: 'Groq API key not configured' });
+    if (!client) res.json({ success: false, error: 'Groq API key not configured' }); return;
 
     let context = '';
     if (type === 'inventory') {
@@ -211,7 +211,7 @@ router.post('/analyze', async (req, res) => {
       temperature: 0.7, max_tokens: 1000,
     });
     res.json({ success: true, data: { analysis: completion.choices[0]?.message?.content, context } });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 module.exports = router;

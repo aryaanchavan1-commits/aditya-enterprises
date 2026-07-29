@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
     sql += ' ORDER BY created_at DESC';
     const sales = await all(sql, params);
     res.json({ success: true, data: sales.map(s => ({ ...s, items: JSON.parse(s.items || '[]') })) });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.get('/stats/dashboard', async (req, res) => {
@@ -33,14 +33,14 @@ router.get('/stats/dashboard', async (req, res) => {
     const stockMovements = await all('SELECT sm.*, p.name as product_name FROM stock_movements sm LEFT JOIN products p ON sm.product_id = p.id ORDER BY sm.created_at DESC LIMIT 10');
     const dailySalesArr = await all("SELECT sale_date, SUM(grand_total) as total FROM sales WHERE sale_date >= ? GROUP BY sale_date ORDER BY sale_date ASC", [firstOfMonth]);
     res.json({ success: true, data: { totalProducts, totalQuantity, todaySales: Math.round(todaySales * 100) / 100, monthlyRevenue: Math.round(monthlyRevenue * 100) / 100, lowStock, lowStockProducts, totalSales, todayInvoices: todaySalesArr.length, monthInvoices: monthSalesArr.length, recentSales, stockMovements, dailySales: dailySalesArr } });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.post('/', async (req, res) => {
   try {
     const data = req.body;
     const items = data.items || [];
-    if (items.length === 0) return res.status(400).json({ success: false, error: 'No items' });
+    if (items.length === 0) res.json({ success: false, error: 'No items' }); return;
     const invoiceNum = `AE/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
     const saleDate = new Date().toISOString().split('T')[0];
     let subtotal = 0, discountTotal = 0, cgstTotal = 0, sgstTotal = 0, igstTotal = 0, cessTotal = 0, grandTotal = 0;
@@ -52,7 +52,7 @@ router.post('/', async (req, res) => {
     for (const item of items) {
       const product = await get('SELECT * FROM products WHERE id = ?', [item.product_id]);
       if (!product) continue;
-      if (product.quantity < item.quantity) return res.status(400).json({ success: false, error: `Insufficient stock for ${product.name}. Available: ${product.quantity}` });
+      if (product.quantity < item.quantity) res.json({ success: false, error: `Insufficient stock for ${product.name}. Available: ${product.quantity}` }); return;
       const lineTotal = item.sell_price * item.quantity;
       const lineDiscount = lineTotal * (item.discount_percent || 0) / 100;
       const afterDiscount = lineTotal - lineDiscount;
@@ -90,13 +90,13 @@ router.post('/', async (req, res) => {
     sale.items = JSON.parse(sale.items || '[]');
     sale.is_gst = data.is_gst !== false;
     res.json({ success: true, data: sale, message: 'Sale completed' });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.get('/:id/receipt', async (req, res) => {
   try {
     const sale = await get('SELECT * FROM sales WHERE id = ?', [req.params.id]);
-    if (!sale) return res.status(404).json({ success: false, error: 'Sale not found' });
+    if (!sale) res.json({ success: false, error: 'Sale not found' }); return;
     sale.items = JSON.parse(sale.items || '[]');
     const settings = {};
     const allSettings = await all('SELECT * FROM settings');
@@ -141,7 +141,7 @@ router.get('/:id/receipt', async (req, res) => {
     doc.moveDown(0.3);
     doc.fontSize(6).font('Helvetica').text('Thank you! Visit again!', { align: 'center' });
     doc.end();
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 module.exports = router;

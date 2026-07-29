@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
     }
     const customers = Object.values(customerMap).sort((a, b) => b.lastVisit.localeCompare(a.lastVisit));
     res.json({ success: true, data: { customers, totalCustomers: customers.length, repeatCustomers: customers.filter(c => c.totalVisits > 1).length } });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.get('/visits', async (req, res) => {
@@ -39,24 +39,24 @@ router.get('/visits', async (req, res) => {
     sql += ' ORDER BY visit_date DESC, created_at DESC';
     const visits = await all(sql, params);
     res.json({ success: true, data: visits });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.post('/visit', async (req, res) => {
   try {
     const { customer_name, customer_phone, visit_date, purpose, notes, amount } = req.body;
-    if (!customer_name) return res.status(400).json({ success: false, error: 'Customer name is required' });
+    if (!customer_name) res.json({ success: false, error: 'Customer name is required' }); return;
     const date = visit_date || new Date().toISOString().split('T')[0];
     await run('INSERT INTO customer_visits (customer_name, customer_phone, visit_date, purpose, notes, amount) VALUES (?,?,?,?,?,?)',
       [customer_name, customer_phone || '', date, purpose || '', notes || '', amount || 0]);
     const result = await get('SELECT * FROM customer_visits ORDER BY id DESC LIMIT 1');
     res.json({ success: true, data: result, message: 'Visit recorded' });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.delete('/visit/:id', async (req, res) => {
   try { await run('DELETE FROM customer_visits WHERE id = ?', [req.params.id]); res.json({ success: true, message: 'Visit deleted' }); }
-  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 module.exports = router;

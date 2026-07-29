@@ -12,23 +12,23 @@ router.get('/', async (req, res) => {
     sql += ' ORDER BY created_at DESC';
     const purchases = await all(sql, params);
     res.json({ success: true, data: purchases.map(p => ({ ...p, items: JSON.parse(p.items || '[]') })) });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.get('/:id', async (req, res) => {
   try {
     const purchase = await get('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
-    if (!purchase) return res.status(404).json({ success: false, error: 'Purchase not found' });
+    if (!purchase) res.json({ success: false, error: 'Purchase not found' }); return;
     purchase.items = JSON.parse(purchase.items || '[]');
     res.json({ success: true, data: purchase });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.post('/', async (req, res) => {
   try {
     const data = req.body;
     const items = data.items || [];
-    if (items.length === 0) return res.status(400).json({ success: false, error: 'No items in purchase' });
+    if (items.length === 0) res.json({ success: false, error: 'No items in purchase' }); return;
 
     const invoiceNum = `PO/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
     const purchaseDate = data.purchase_date || new Date().toISOString().split('T')[0];
@@ -62,32 +62,32 @@ router.post('/', async (req, res) => {
     const purchase = await get('SELECT * FROM purchases WHERE invoice_number = ?', [invoiceNum]);
     purchase.items = JSON.parse(purchase.items || '[]');
     res.json({ success: true, data: purchase, message: 'Purchase recorded' });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.put('/:id', async (req, res) => {
   try {
     const data = req.body;
     const existing = await get('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
-    if (!existing) return res.status(404).json({ success: false, error: 'Purchase not found' });
+    if (!existing) res.json({ success: false, error: 'Purchase not found' }); return;
 
     await run('UPDATE purchases SET supplier_name=?, payment_status=?, notes=? WHERE id=?',
       [data.supplier_name || existing.supplier_name, data.payment_status || existing.payment_status, data.notes || existing.notes, req.params.id]);
     res.json({ success: true, data: await get('SELECT * FROM purchases WHERE id = ?', [req.params.id]) });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
   try {
     const purchase = await get('SELECT * FROM purchases WHERE id = ?', [req.params.id]);
-    if (!purchase) return res.status(404).json({ success: false, error: 'Not found' });
+    if (!purchase) res.json({ success: false, error: 'Not found' }); return;
     purchase.items = JSON.parse(purchase.items || '[]');
     for (const item of purchase.items) {
       await run('UPDATE products SET quantity = quantity - ? WHERE id = ?', [item.quantity, item.product_id]);
     }
     await run('DELETE FROM purchases WHERE id = ?', [req.params.id]);
     res.json({ success: true, message: 'Purchase deleted' });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 module.exports = router;

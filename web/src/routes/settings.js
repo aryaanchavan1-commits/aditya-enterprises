@@ -8,15 +8,15 @@ router.get('/', async (req, res) => {
     const result = {};
     settings.forEach(s => { result[s.key] = s.value; });
     res.json({ success: true, data: result });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.get('/:key', async (req, res) => {
   try {
     const setting = await get('SELECT * FROM settings WHERE key = ?', [req.params.key]);
-    if (!setting) return res.status(404).json({ success: false, error: 'Not found' });
+    if (!setting) res.json({ success: false, error: 'Not found' }); return;
     res.json({ success: true, data: setting });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.put('/', async (req, res) => {
@@ -26,14 +26,14 @@ router.put('/', async (req, res) => {
       await run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, String(value)]);
     }
     res.json({ success: true, message: 'Settings updated' });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.post('/reset', async (req, res) => {
   try {
     await resetData();
     res.json({ success: true, message: 'All data reset. Fresh schema re-initialized.' });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 module.exports = router;
