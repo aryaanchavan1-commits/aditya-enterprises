@@ -143,23 +143,26 @@ export default function Accounting() {
           )}
           <div className="desktop-table">
             <div className="table-container">
-              <table>
-                <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th><th>Category</th><th>Ref</th><th></th></tr></thead>
-                <tbody>
-                  {cashBook.map(e => (
-                    <tr key={e.id}>
-                      <td>{e.date}</td>
-                      <td>{e.description}</td>
-                      <td><span className={`badge ${e.type === 'in' ? 'badge-success' : 'badge-danger'}`}>{e.type === 'in' ? 'IN' : 'OUT'}</span></td>
-                      <td style={{color: e.type === 'in' ? '#27ae60' : '#e74c3c', fontWeight:600}}>&#8377;{Number(e.amount).toLocaleString('en-IN')}</td>
-                      <td>{e.category || '-'}</td>
-                      <td style={{fontSize:11}}>{e.reference || '-'}</td>
-                      <td><button className="btn btn-sm btn-danger" onClick={() => handleDelete('cash', e.id)}>Del</button></td>
-                    </tr>
-                  ))}
-                  {cashBook.length === 0 && <tr><td colSpan={7} style={{textAlign:'center',color:'#999',padding:20}}>No cash entries yet</td></tr>}
-                </tbody>
-              </table>
+              {cashBook.length > 0 ? (
+                <table>
+                  <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th><th>Category</th><th>Ref</th><th></th></tr></thead>
+                  <tbody>
+                    {cashBook.map(e => (
+                      <tr key={e.id}>
+                        <td>{e.date}</td>
+                        <td>{e.description}</td>
+                        <td><span className={`badge ${e.type === 'in' ? 'badge-success' : 'badge-danger'}`}>{e.type === 'in' ? 'IN' : 'OUT'}</span></td>
+                        <td style={{color: e.type === 'in' ? '#27ae60' : '#e74c3c', fontWeight:600}}>&#8377;{Number(e.amount).toLocaleString('en-IN')}</td>
+                        <td>{e.category || '-'}</td>
+                        <td style={{fontSize:11}}>{e.reference || '-'}</td>
+                        <td><button className="btn btn-sm btn-danger" onClick={() => handleDelete('cash', e.id)}>Del</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{textAlign:'center',color:'#999',padding:30}}>No cash entries yet</div>
+              )}
             </div>
           </div>
           <div className="show-mobile-cards">
@@ -235,22 +238,25 @@ export default function Accounting() {
           )}
           <div className="desktop-table">
             <div className="table-container">
-              <table>
-                <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
-                <tbody>
-                  {expenses.map(e => (
-                    <tr key={e.id}>
-                      <td>{e.date}</td>
-                      <td>{e.description}</td>
-                      <td><span className="badge badge-info">{e.category || '-'}</span></td>
-                      <td style={{color:'#e74c3c', fontWeight:600}}>&#8377;{Number(e.amount).toLocaleString('en-IN')}</td>
-                      <td><span className="badge badge-warning">{e.payment_mode}</span></td>
-                      <td><button className="btn btn-sm btn-danger" onClick={() => handleDelete('expense', e.id)}>Del</button></td>
-                    </tr>
-                  ))}
-                  {expenses.length === 0 && <tr><td colSpan={6} style={{textAlign:'center',color:'#999',padding:20}}>No expenses recorded</td></tr>}
-                </tbody>
-              </table>
+              {expenses.length > 0 ? (
+                <table>
+                  <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
+                  <tbody>
+                    {expenses.map(e => (
+                      <tr key={e.id}>
+                        <td>{e.date}</td>
+                        <td>{e.description}</td>
+                        <td><span className="badge badge-info">{e.category || '-'}</span></td>
+                        <td style={{color:'#e74c3c', fontWeight:600}}>&#8377;{Number(e.amount).toLocaleString('en-IN')}</td>
+                        <td><span className="badge badge-warning">{e.payment_mode}</span></td>
+                        <td><button className="btn btn-sm btn-danger" onClick={() => handleDelete('expense', e.id)}>Del</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{textAlign:'center',color:'#999',padding:30}}>No expenses recorded</div>
+              )}
             </div>
           </div>
           <div className="show-mobile-cards">
@@ -321,22 +327,25 @@ export default function Accounting() {
           )}
           <div className="desktop-table">
             <div className="table-container">
-              <table>
-                <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
-                <tbody>
-                  {incomes.map(e => (
-                    <tr key={e.id}>
-                      <td>{e.date}</td>
-                      <td>{e.description}</td>
-                      <td><span className="badge badge-info">{e.category || '-'}</span></td>
-                      <td style={{color:'#27ae60', fontWeight:600}}>&#8377;{Number(e.amount).toLocaleString('en-IN')}</td>
-                      <td><span className="badge badge-warning">{e.payment_mode}</span></td>
-                      <td><button className="btn btn-sm btn-danger" onClick={() => handleDelete('income', e.id)}>Del</button></td>
-                    </tr>
-                  ))}
-                  {incomes.length === 0 && <tr><td colSpan={6} style={{textAlign:'center',color:'#999',padding:20}}>No other incomes recorded</td></tr>}
-                </tbody>
-              </table>
+              {incomes.length > 0 ? (
+                <table>
+                  <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>Mode</th><th></th></tr></thead>
+                  <tbody>
+                    {incomes.map(e => (
+                      <tr key={e.id}>
+                        <td>{e.date}</td>
+                        <td>{e.description}</td>
+                        <td><span className="badge badge-info">{e.category || '-'}</span></td>
+                        <td style={{color:'#27ae60', fontWeight:600}}>&#8377;{Number(e.amount).toLocaleString('en-IN')}</td>
+                        <td><span className="badge badge-warning">{e.payment_mode}</span></td>
+                        <td><button className="btn btn-sm btn-danger" onClick={() => handleDelete('income', e.id)}>Del</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{textAlign:'center',color:'#999',padding:30}}>No other incomes recorded</div>
+              )}
             </div>
           </div>
           <div className="show-mobile-cards">

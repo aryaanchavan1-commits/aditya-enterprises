@@ -147,46 +147,49 @@ export default function Products() {
 
       <div className="card desktop-table">
         <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Image</th><th>Name</th><th>HSN</th><th>Sell Price</th><th>Inward</th>
-                <th>Qty</th><th>Unit</th><th>Disc%</th><th>Serial</th><th>Barcode</th><th>Category</th><th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map(p => (
-                <tr key={p.id}>
-                  <td>
-                    {p.image ? <img src={p.image} alt="" style={{width:40,height:40,borderRadius:4,objectFit:'cover'}} /> : <div style={{width:40,height:40,background:'#e8edf2',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#8a9aa8'}}>N/A</div>}
-                  </td>
-                  <td><strong>{p.name}</strong></td>
-                  <td>{p.hsn_code || '-'}</td>
-                  <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
-                  <td>Rs.{Number(p.inward_price).toLocaleString('en-IN')}</td>
-                  <td><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity}</span></td>
-                  <td>{p.unit || 'pcs'}</td>
-                  <td>{p.discount_percent}%</td>
-                  <td style={{fontSize:11}}>{p.serial_number || '-'}</td>
-                  <td style={{fontSize:11, minWidth:130}}>
-                    {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30, display:'block', marginBottom:4}} /> : p.barcode ? <span style={{fontSize:11,fontWeight:600,color:'#666',letterSpacing:1}}>{p.barcode}</span> : null}
-                    <div style={{marginTop:4}}>
-                      {p.barcode_image
-                        ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)} style={{marginRight:4}}>Redo</button>
-                        : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)} style={{marginRight:4}}>Gen</button>}
-                      {p.barcode && <button className="btn btn-sm btn-primary" onClick={() => setLabelProduct(p)}>Label</button>}
-                    </div>
-                  </td>
-                  <td>{p.category_name || '-'}{p.subcategory_name ? ` / ${p.subcategory_name}` : ''}</td>
-                  <td>
-                    <button className="btn btn-sm btn-info" style={{marginRight:4}} onClick={() => openEdit(p)}>Edit</button>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Del</button>
-                  </td>
+          {products.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>Image</th><th>Name</th><th>HSN</th><th>Sell Price</th><th>Inward</th>
+                  <th>Qty</th><th>Unit</th><th>Disc%</th><th>Serial</th><th>Barcode</th><th>Category</th><th>Actions</th>
                 </tr>
-              ))}
-              {products.length === 0 && <tr><td colSpan={12} style={{textAlign:'center',color:'#999',padding:30}}>No products found.</td></tr>}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {products.map(p => (
+                  <tr key={p.id}>
+                    <td>
+                      {p.image ? <img src={p.image} alt="" style={{width:40,height:40,borderRadius:4,objectFit:'cover'}} /> : <div style={{width:40,height:40,background:'#e8edf2',borderRadius:4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:600,color:'#8a9aa8'}}>N/A</div>}
+                    </td>
+                    <td><strong>{p.name}</strong></td>
+                    <td>{p.hsn_code || '-'}</td>
+                    <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
+                    <td>Rs.{Number(p.inward_price).toLocaleString('en-IN')}</td>
+                    <td><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity}</span></td>
+                    <td>{p.unit || 'pcs'}</td>
+                    <td>{p.discount_percent}%</td>
+                    <td style={{fontSize:11}}>{p.serial_number || '-'}</td>
+                    <td style={{fontSize:11, minWidth:130}}>
+                      {p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:30, display:'block', marginBottom:4}} /> : p.barcode ? <span style={{fontSize:11,fontWeight:600,color:'#666',letterSpacing:1}}>{p.barcode}</span> : null}
+                      <div style={{marginTop:4}}>
+                        {p.barcode_image
+                          ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)} style={{marginRight:4}}>Redo</button>
+                          : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)} style={{marginRight:4}}>Gen</button>}
+                        {p.barcode && <button className="btn btn-sm btn-primary" onClick={() => setLabelProduct(p)}>Label</button>}
+                      </div>
+                    </td>
+                    <td>{p.category_name || '-'}{p.subcategory_name ? ` / ${p.subcategory_name}` : ''}</td>
+                    <td>
+                      <button className="btn btn-sm btn-info" style={{marginRight:4}} onClick={() => openEdit(p)}>Edit</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Del</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{textAlign:'center',color:'#999',padding:40}}>No products found.</div>
+          )}
         </div>
       </div>
 

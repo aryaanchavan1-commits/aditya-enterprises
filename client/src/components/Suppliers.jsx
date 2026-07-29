@@ -76,38 +76,39 @@ export default function Suppliers() {
       )}
 
       <div className="table-responsive desktop-table">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Phone</th>
-              <th>Email</th>
-              <th>GSTIN</th>
-              <th>City</th>
-              <th>Balance</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {suppliers.length === 0 && (
-              <tr><td colSpan={7} className="text-center text-muted">No suppliers found</td></tr>
-            )}
-            {suppliers.map(s => (
-              <tr key={s.id}>
-                <td><strong>{s.name}</strong></td>
-                <td>{s.phone}</td>
-                <td>{s.email}</td>
-                <td>{s.gstin}</td>
-                <td>{s.city}</td>
-                <td>&#8377;{Number(s.opening_balance || 0).toFixed(2)}</td>
-                <td>
-                  <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(s)}>Edit</button>
-                  <button className="btn btn-sm btn-danger ml-1" onClick={() => handleDelete(s.id)}>Delete</button>
-                </td>
+        {suppliers.length > 0 ? (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>GSTIN</th>
+                <th>City</th>
+                <th>Balance</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {suppliers.map(s => (
+                <tr key={s.id}>
+                  <td><strong>{s.name}</strong></td>
+                  <td>{s.phone}</td>
+                  <td>{s.email}</td>
+                  <td>{s.gstin}</td>
+                  <td>{s.city}</td>
+                  <td>&#8377;{Number(s.opening_balance || 0).toFixed(2)}</td>
+                  <td>
+                    <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(s)}>Edit</button>
+                    <button className="btn btn-sm btn-danger ml-1" onClick={() => handleDelete(s.id)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div style={{textAlign:'center',color:'#999',padding:30}}>No suppliers found</div>
+        )}
       </div>
       <div className="show-mobile-cards">
         <div className="mobile-cards">

@@ -143,32 +143,35 @@ export default function SalesPOS() {
               <input ref={searchRef} placeholder="Scan barcode or search..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={handleSearchKeyDown} autoFocus />
             </div>
             <div className="pos-products-list">
-              <table>
-                <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Action</th></tr></thead>
-                <tbody>
-                  {filteredProducts.slice(0, 20).map(p => (
-                    <tr key={p.id}>
-                      <td>
-                        <div style={{display:'flex',alignItems:'center',gap:8}}>
-                          {p.image ? <img src={p.image} alt="" style={{width:30,height:30,borderRadius:4,objectFit:'cover'}} /> : <span style={{color:'#8a9aa8',fontWeight:600}}>NA</span>}
-                          <div>
-                            <strong style={{fontSize:13}}>{p.name}</strong>
-                            <div style={{fontSize:10,color:'var(--text-muted)'}}>HSN: {p.hsn_code}</div>
+              {filteredProducts.length > 0 ? (
+                <table>
+                  <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Action</th></tr></thead>
+                  <tbody>
+                    {filteredProducts.slice(0, 20).map(p => (
+                      <tr key={p.id}>
+                        <td>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            {p.image ? <img src={p.image} alt="" style={{width:30,height:30,borderRadius:4,objectFit:'cover'}} /> : <span style={{color:'#8a9aa8',fontWeight:600}}>NA</span>}
+                            <div>
+                              <strong style={{fontSize:13}}>{p.name}</strong>
+                              <div style={{fontSize:10,color:'var(--text-muted)'}}>HSN: {p.hsn_code}</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
-                      <td><span className={`badge ${p.quantity<=5?'badge-danger':'badge-success'}`}>{p.quantity}</span></td>
-                      <td>
-                        <button className="btn btn-sm btn-success" onClick={() => addToCart(p)} disabled={p.quantity <= 0}>
-                          + Add
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredProducts.length === 0 && <tr><td colSpan={4} className="text-center text-muted" style={{padding:20}}>No products found</td></tr>}
-                </tbody>
-              </table>
+                        </td>
+                        <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
+                        <td><span className={`badge ${p.quantity<=5?'badge-danger':'badge-success'}`}>{p.quantity}</span></td>
+                        <td>
+                          <button className="btn btn-sm btn-success" onClick={() => addToCart(p)} disabled={p.quantity <= 0}>
+                            + Add
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-center text-muted" style={{padding:30}}>No products found</div>
+              )}
             </div>
           </div>
         </div>
@@ -255,6 +258,7 @@ export default function SalesPOS() {
           <div className="card-header">
             <h3>Invoice Generated: {lastInvoice.invoice_number}</h3>
           </div>
+          {lastInvoice.items?.length > 0 ? (
           <table>
             <thead><tr><th>Item</th><th>HSN</th><th>Qty</th><th>Rate</th><th>Disc%</th><th>Total</th></tr></thead>
             <tbody>
@@ -270,6 +274,7 @@ export default function SalesPOS() {
               ))}
             </tbody>
           </table>
+          ) : <p style={{textAlign:'center',color:'#999',padding:12}}>No items in invoice</p>}
           <div style={{textAlign:'right', marginTop:12}}>
             <p><strong>Subtotal:</strong> Rs.{Number(lastInvoice.subtotal).toLocaleString('en-IN', {minimumFractionDigits:2})}</p>
             {lastInvoice.cgst_total > 0 && <p><strong>CGST @9%:</strong> Rs.{Number(lastInvoice.cgst_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</p>}

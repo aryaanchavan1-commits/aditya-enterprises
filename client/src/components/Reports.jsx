@@ -114,32 +114,35 @@ export default function Reports() {
                 <div className="stat-card warning"><span className="stat-value">Rs.{formatINR(dailyData.totalSgst)}</span><span className="stat-label">SGST</span></div>
                 <div className="stat-card accent"><span className="stat-value">Rs.{formatINR(dailyData.totalDiscount)}</span><span className="stat-label">Discounts</span></div>
               </div>
-              <div className="card">
-                <div className="card-header"><h3>Invoices for {selectedDate}</h3></div>
-                <div className="table-container">
-                  <table>
-                    <thead><tr><th>Invoice</th><th>Customer</th><th>Items</th><th>Subtotal</th><th>CGST</th><th>SGST</th><th>Total</th><th>Payment</th><th>Share</th></tr></thead>
-                    <tbody>
-                      {dailyData.sales.map(s => (
-                        <tr key={s.id}>
-                          <td><strong>{s.invoice_number}</strong></td>
-                          <td>{s.customer_name}{s.is_barcode_scan ? <span className="badge badge-info" style={{marginLeft:4}}>Scan</span> : ''}</td>
-                          <td style={{fontSize:11}}>{(s.items || []).map(i => `${i.product_name} x${i.quantity}`).join(', ')}</td>
-                          <td>Rs.{formatINR(s.subtotal)}</td>
-                          <td>Rs.{formatINR(s.cgst_total)}</td>
-                          <td>Rs.{formatINR(s.sgst_total)}</td>
-                          <td><strong>Rs.{formatINR(s.grand_total)}</strong></td>
-                          <td><span className="badge badge-info">{s.payment_mode}</span></td>
-                          <td>
-                            <button className="btn btn-sm btn-success" onClick={() => whatsappShare(`Aditya Enterprises - Invoice ${s.invoice_number}\nDate: ${s.sale_date}\nCustomer: ${s.customer_name}\nTotal: Rs.${formatINR(s.grand_total)}\n${(s.items || []).map(i => `${i.product_name} x${i.quantity} @ Rs.${i.sell_price}`).join('\n')}\n\nThank you!`)}>Share</button>
-                          </td>
-                        </tr>
-                      ))}
-                      {dailyData.sales.length === 0 && <tr><td colSpan={9} style={{textAlign:'center',color:'#999',padding:20}}>No sales for this date. Pick another date above.</td></tr>}
-                    </tbody>
-                  </table>
+                <div className="card">
+                  <div className="card-header"><h3>Invoices for {selectedDate}</h3></div>
+                  <div className="table-container">
+                    {dailyData.sales.length > 0 ? (
+                      <table>
+                        <thead><tr><th>Invoice</th><th>Customer</th><th>Items</th><th>Subtotal</th><th>CGST</th><th>SGST</th><th>Total</th><th>Payment</th><th>Share</th></tr></thead>
+                        <tbody>
+                          {dailyData.sales.map(s => (
+                            <tr key={s.id}>
+                              <td><strong>{s.invoice_number}</strong></td>
+                              <td>{s.customer_name}{s.is_barcode_scan ? <span className="badge badge-info" style={{marginLeft:4}}>Scan</span> : ''}</td>
+                              <td style={{fontSize:11}}>{(s.items || []).map(i => `${i.product_name} x${i.quantity}`).join(', ')}</td>
+                              <td>Rs.{formatINR(s.subtotal)}</td>
+                              <td>Rs.{formatINR(s.cgst_total)}</td>
+                              <td>Rs.{formatINR(s.sgst_total)}</td>
+                              <td><strong>Rs.{formatINR(s.grand_total)}</strong></td>
+                              <td><span className="badge badge-info">{s.payment_mode}</span></td>
+                              <td>
+                                <button className="btn btn-sm btn-success" onClick={() => whatsappShare(`Aditya Enterprises - Invoice ${s.invoice_number}\nDate: ${s.sale_date}\nCustomer: ${s.customer_name}\nTotal: Rs.${formatINR(s.grand_total)}\n${(s.items || []).map(i => `${i.product_name} x${i.quantity} @ Rs.${i.sell_price}`).join('\n')}\n\nThank you!`)}>Share</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <div style={{textAlign:'center',color:'#999',padding:20}}>No sales for this date. Pick another date above.</div>
+                    )}
+                  </div>
                 </div>
-              </div>
             </div>
           )}
         </div>
@@ -169,7 +172,7 @@ export default function Reports() {
                 <div className="stat-card warning"><span className="stat-value">Rs.{formatINR(monthlyData.totalCgst + monthlyData.totalSgst)}</span><span className="stat-label">Total GST</span></div>
                 <div className="stat-card accent"><span className="stat-value">Rs.{formatINR(monthlyData.totalDiscount)}</span><span className="stat-label">Total Discounts</span></div>
               </div>
-              {monthlyData.dailyBreakdown && (
+              {monthlyData.dailyBreakdown && monthlyData.dailyBreakdown.length > 0 && (
                 <div className="card" style={{marginTop:16}}>
                   <div className="card-header"><h3>Daily Breakdown</h3></div>
                   <div className="table-container">
@@ -185,6 +188,9 @@ export default function Reports() {
                     </table>
                   </div>
                 </div>
+              )}
+              {monthlyData.dailyBreakdown && monthlyData.dailyBreakdown.length === 0 && (
+                <div className="card" style={{marginTop:16, textAlign:'center',color:'#999',padding:20}}>No daily data for this month</div>
               )}
             </div>
           )}
@@ -296,7 +302,7 @@ export default function Reports() {
             </div>
           </div>
           {loading && <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading...</p></div>}
-          {lowStockData && (
+          {lowStockData && lowStockData.length > 0 && (
             <div className="card">
               <div className="table-container">
                 <table>
@@ -311,11 +317,13 @@ export default function Reports() {
                         <td style={{fontFamily:'monospace', fontSize:11}}>{p.barcode || '-'}</td>
                       </tr>
                     ))}
-                    {lowStockData.length === 0 && <tr><td colSpan={5} style={{textAlign:'center',color:'#999',padding:20}}>No low stock items. All products are well stocked.</td></tr>}
                   </tbody>
                 </table>
               </div>
             </div>
+          )}
+          {lowStockData && lowStockData.length === 0 && !loading && (
+            <div className="card" style={{textAlign:'center',color:'#999',padding:30}}>No low stock items. All products are well stocked.</div>
           )}
         </div>
       )}
@@ -323,7 +331,7 @@ export default function Reports() {
       {activeTab === 'products' && (
         <div>
           {loading && <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading...</p></div>}
-          {productData && (
+          {productData && productData.length > 0 && (
             <div className="card">
               <div className="card-header"><h3>Sales by Product (All Time)</h3></div>
               <div className="table-container">
@@ -333,11 +341,13 @@ export default function Reports() {
                     {productData.map(p => (
                       <tr key={p.name}><td><strong>{p.name}</strong></td><td>{p.hsn}</td><td>{p.totalQuantity}</td><td>Rs.{formatINR(p.totalRevenue)}</td><td>{p.saleCount}</td></tr>
                     ))}
-                    {productData.length === 0 && <tr><td colSpan={5} style={{textAlign:'center',color:'#999',padding:20}}>No product sales data</td></tr>}
                   </tbody>
                 </table>
               </div>
             </div>
+          )}
+          {productData && productData.length === 0 && !loading && (
+            <div className="card" style={{textAlign:'center',color:'#999',padding:30}}>No product sales data</div>
           )}
         </div>
       )}
@@ -378,24 +388,27 @@ export default function Reports() {
               <div className="card" style={{marginTop:16}}>
                 <div className="card-header"><h3>All Customers</h3></div>
                 <div className="table-container">
-                  <table>
-                    <thead><tr><th>Customer</th><th>Phone</th><th>GSTIN</th><th>Visits</th><th>Total Spent</th><th>First Visit</th><th>Last Visit</th><th>Type</th></tr></thead>
-                    <tbody>
-                      {customerData.customers.map(c => (
-                        <tr key={c.name}>
-                          <td><strong>{c.name}</strong></td>
-                          <td>{c.phone || '-'}</td>
-                          <td style={{fontSize:11}}>{c.gstin || '-'}</td>
-                          <td>{c.visitCount}</td>
-                          <td>Rs.{formatINR(c.totalSpent)}</td>
-                          <td>{c.firstVisit}</td>
-                          <td>{c.lastVisit}</td>
-                          <td><span className={`badge ${c.isRepeat ? 'badge-success' : 'badge-info'}`}>{c.isRepeat ? 'Repeat' : 'New'}</span></td>
-                        </tr>
-                      ))}
-                      {customerData.customers.length === 0 && <tr><td colSpan={8} style={{textAlign:'center',color:'#999',padding:20}}>No customers yet</td></tr>}
-                    </tbody>
-                  </table>
+                  {customerData.customers.length > 0 ? (
+                    <table>
+                      <thead><tr><th>Customer</th><th>Phone</th><th>GSTIN</th><th>Visits</th><th>Total Spent</th><th>First Visit</th><th>Last Visit</th><th>Type</th></tr></thead>
+                      <tbody>
+                        {customerData.customers.map(c => (
+                          <tr key={c.name}>
+                            <td><strong>{c.name}</strong></td>
+                            <td>{c.phone || '-'}</td>
+                            <td style={{fontSize:11}}>{c.gstin || '-'}</td>
+                            <td>{c.visitCount}</td>
+                            <td>Rs.{formatINR(c.totalSpent)}</td>
+                            <td>{c.firstVisit}</td>
+                            <td>{c.lastVisit}</td>
+                            <td><span className={`badge ${c.isRepeat ? 'badge-success' : 'badge-info'}`}>{c.isRepeat ? 'Repeat' : 'New'}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{textAlign:'center',color:'#999',padding:20}}>No customers yet</div>
+                  )}
                 </div>
               </div>
             </div>

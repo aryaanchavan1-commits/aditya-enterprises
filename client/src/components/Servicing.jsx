@@ -62,34 +62,37 @@ export default function Servicing() {
       </div>
       <div className="card">
         <div className="table-container desktop-table">
-          <table>
-            <thead>
-              <tr><th>Customer</th><th>Device</th><th>Issue</th><th>Parts Cost</th><th>Service Charge</th><th>Total</th><th>Status</th><th>Received</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {services.map(s => (
-                <tr key={s.id}>
-                  <td><strong>{s.customer_name}</strong>{s.customer_phone && <div style={{fontSize:10,color:'#999'}}>{s.customer_phone}</div>}</td>
-                  <td style={{fontSize:12}}>{s.device_type || '-'}{s.brand ? ` (${s.brand})` : ''}</td>
-                  <td style={{fontSize:12, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{s.issue || '-'}</td>
-                  <td>Rs.{Number(s.parts_cost).toLocaleString('en-IN')}</td>
-                  <td>Rs.{Number(s.service_charge).toLocaleString('en-IN')}</td>
-                  <td><strong>Rs.{Number(s.total_charge).toLocaleString('en-IN')}</strong></td>
-                  <td>
-                    <select value={s.status} onChange={e => handleStatusChange(s, e.target.value)} className={`badge ${s.status === 'completed' || s.status === 'delivered' ? 'badge-success' : s.status === 'cancelled' ? 'badge-danger' : s.status === 'in_progress' ? 'badge-info' : s.status === 'awaiting_parts' ? 'badge-warning' : 'badge-info'}`} style={{fontSize:11, padding:'2px 6px', border:'none', cursor:'pointer'}}>
-                      {STATUSES.map(st => <option key={st} value={st}>{st.replace('_', ' ').toUpperCase()}</option>)}
-                    </select>
-                  </td>
-                  <td style={{fontSize:11}}>{s.received_date}</td>
-                  <td>
-                    <button className="btn btn-sm btn-info" style={{marginRight:4}} onClick={() => openEdit(s)}>Edit</button>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(s.id)}>Del</button>
-                  </td>
-                </tr>
-              ))}
-              {services.length === 0 && <tr><td colSpan={9} style={{textAlign:'center',color:'#999',padding:30}}>No service records. Click "New Service" to add one.</td></tr>}
-            </tbody>
-          </table>
+          {services.length > 0 ? (
+            <table>
+              <thead>
+                <tr><th>Customer</th><th>Device</th><th>Issue</th><th>Parts Cost</th><th>Service Charge</th><th>Total</th><th>Status</th><th>Received</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {services.map(s => (
+                  <tr key={s.id}>
+                    <td><strong>{s.customer_name}</strong>{s.customer_phone && <div style={{fontSize:10,color:'#999'}}>{s.customer_phone}</div>}</td>
+                    <td style={{fontSize:12}}>{s.device_type || '-'}{s.brand ? ` (${s.brand})` : ''}</td>
+                    <td style={{fontSize:12, maxWidth:150, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{s.issue || '-'}</td>
+                    <td>Rs.{Number(s.parts_cost).toLocaleString('en-IN')}</td>
+                    <td>Rs.{Number(s.service_charge).toLocaleString('en-IN')}</td>
+                    <td><strong>Rs.{Number(s.total_charge).toLocaleString('en-IN')}</strong></td>
+                    <td>
+                      <select value={s.status} onChange={e => handleStatusChange(s, e.target.value)} className={`badge ${s.status === 'completed' || s.status === 'delivered' ? 'badge-success' : s.status === 'cancelled' ? 'badge-danger' : s.status === 'in_progress' ? 'badge-info' : s.status === 'awaiting_parts' ? 'badge-warning' : 'badge-info'}`} style={{fontSize:11, padding:'2px 6px', border:'none', cursor:'pointer'}}>
+                        {STATUSES.map(st => <option key={st} value={st}>{st.replace('_', ' ').toUpperCase()}</option>)}
+                      </select>
+                    </td>
+                    <td style={{fontSize:11}}>{s.received_date}</td>
+                    <td>
+                      <button className="btn btn-sm btn-info" style={{marginRight:4}} onClick={() => openEdit(s)}>Edit</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(s.id)}>Del</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{textAlign:'center',color:'#999',padding:30}}>No service records found.</div>
+          )}
         </div>
         <div className="show-mobile-cards">
           <div className="mobile-cards">

@@ -146,40 +146,46 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-header"><h3>Recent Sales</h3></div>
           <div className="table-container">
-            <table>
-              <thead><tr><th>Invoice</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead>
-              <tbody>
-                {stats.recentSales.map(s => (
-                  <tr key={s.id}>
-                    <td><strong>{s.invoice_number}</strong></td>
-                    <td>{s.customer_name}</td>
-                    <td>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
-                    <td>{s.sale_date}</td>
-                  </tr>
-                ))}
-                {stats.recentSales.length === 0 && <tr><td colSpan={4} style={{textAlign:'center',color:'#999'}}>No sales yet</td></tr>}
-              </tbody>
-            </table>
+            {stats.recentSales.length > 0 ? (
+              <table>
+                <thead><tr><th>Invoice</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead>
+                <tbody>
+                  {stats.recentSales.map(s => (
+                    <tr key={s.id}>
+                      <td><strong>{s.invoice_number}</strong></td>
+                      <td>{s.customer_name}</td>
+                      <td>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</td>
+                      <td>{s.sale_date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{textAlign:'center',color:'#999',padding:20}}>No sales yet</div>
+            )}
           </div>
         </div>
 
         <div className="card">
           <div className="card-header"><h3>Stock Movements</h3></div>
           <div className="table-container">
-            <table>
-              <thead><tr><th>Product</th><th>Type</th><th>Qty</th><th>Ref</th></tr></thead>
-              <tbody>
-                {stats.stockMovements.map((m, i) => (
-                  <tr key={i}>
-                    <td>{m.product_name || 'N/A'}</td>
-                    <td><span className={`badge ${m.type==='sale'?'badge-danger':m.type==='barcode_sale'?'badge-warning':'badge-info'}`}>{m.type}</span></td>
-                    <td style={{color: m.quantity_change<0?'#e74c3c':'#27ae60', fontWeight:'bold'}}>{m.quantity_change>0?'+':''}{m.quantity_change}</td>
-                    <td style={{fontSize:11}}>{m.reference}</td>
-                  </tr>
-                ))}
-                {stats.stockMovements.length === 0 && <tr><td colSpan={4} style={{textAlign:'center',color:'#999'}}>No movements yet</td></tr>}
-              </tbody>
-            </table>
+            {stats.stockMovements.length > 0 ? (
+              <table>
+                <thead><tr><th>Product</th><th>Type</th><th>Qty</th><th>Ref</th></tr></thead>
+                <tbody>
+                  {stats.stockMovements.map((m, i) => (
+                    <tr key={i}>
+                      <td>{m.product_name || 'N/A'}</td>
+                      <td><span className={`badge ${m.type==='sale'?'badge-danger':m.type==='barcode_sale'?'badge-warning':'badge-info'}`}>{m.type}</span></td>
+                      <td style={{color: m.quantity_change<0?'#e74c3c':'#27ae60', fontWeight:'bold'}}>{m.quantity_change>0?'+':''}{m.quantity_change}</td>
+                      <td style={{fontSize:11}}>{m.reference}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{textAlign:'center',color:'#999',padding:20}}>No movements yet</div>
+            )}
           </div>
         </div>
       </div>

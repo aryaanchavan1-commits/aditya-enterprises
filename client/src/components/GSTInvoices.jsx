@@ -84,37 +84,40 @@ export default function GSTInvoices() {
             />
           </div>
           <div className="table-container desktop-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Invoice #</th><th>Date</th><th>Customer</th><th>GSTIN</th>
-                  <th>Subtotal</th><th>CGST</th><th>SGST</th><th>IGST</th>
-                  <th>Grand Total</th><th>Mode</th><th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sales.map(s => (
-                  <tr key={s.id}>
-                    <td><strong>{s.invoice_number}</strong></td>
-                    <td>{s.sale_date}</td>
-                    <td>{s.customer_name}</td>
-                    <td>{s.customer_gstin || '-'}</td>
-                    <td>Rs.{Number(s.subtotal).toLocaleString('en-IN')}</td>
-                    <td>{s.cgst_total > 0 ? `Rs.${s.cgst_total.toFixed(2)}` : '-'}</td>
-                    <td>{s.sgst_total > 0 ? `Rs.${s.sgst_total.toFixed(2)}` : '-'}</td>
-                    <td>{s.igst_total > 0 ? `Rs.${s.igst_total.toFixed(2)}` : '-'}</td>
-                    <td><strong>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></td>
-                    <td><span className="badge badge-info">{s.payment_mode}</span></td>
-                    <td style={{display:'flex', gap:4, flexWrap:'wrap'}}>
-                      <button className="btn btn-sm btn-info" onClick={() => window.open(`${API}/sales/${s.id}/receipt`, '_blank')}>Receipt</button>
-                      <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>GST Bill</button>
-                      <button className="btn btn-sm btn-success" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`*Aditya Enterprises - Invoice ${s.invoice_number}*\nDate: ${s.sale_date}\nCustomer: ${s.customer_name}\nTotal: Rs.${Number(s.grand_total).toLocaleString('en-IN')}\n\nView Bill: ${window.location.origin}${API}/gst/bill/${s.id}\nThank you!`)}`, '_blank')}>Share</button>
-                    </td>
+            {sales.length > 0 ? (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Invoice #</th><th>Date</th><th>Customer</th><th>GSTIN</th>
+                    <th>Subtotal</th><th>CGST</th><th>SGST</th><th>IGST</th>
+                    <th>Grand Total</th><th>Mode</th><th>Actions</th>
                   </tr>
-                ))}
-                {sales.length === 0 && <tr><td colSpan={11} style={{textAlign:'center',color:'#999',padding:30}}>No invoices yet</td></tr>}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sales.map(s => (
+                    <tr key={s.id}>
+                      <td><strong>{s.invoice_number}</strong></td>
+                      <td>{s.sale_date}</td>
+                      <td>{s.customer_name}</td>
+                      <td>{s.customer_gstin || '-'}</td>
+                      <td>Rs.{Number(s.subtotal).toLocaleString('en-IN')}</td>
+                      <td>{s.cgst_total > 0 ? `Rs.${s.cgst_total.toFixed(2)}` : '-'}</td>
+                      <td>{s.sgst_total > 0 ? `Rs.${s.sgst_total.toFixed(2)}` : '-'}</td>
+                      <td>{s.igst_total > 0 ? `Rs.${s.igst_total.toFixed(2)}` : '-'}</td>
+                      <td><strong>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></td>
+                      <td><span className="badge badge-info">{s.payment_mode}</span></td>
+                      <td style={{display:'flex', gap:4, flexWrap:'wrap'}}>
+                        <button className="btn btn-sm btn-info" onClick={() => window.open(`${API}/sales/${s.id}/receipt`, '_blank')}>Receipt</button>
+                        <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>GST Bill</button>
+                        <button className="btn btn-sm btn-success" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`*Aditya Enterprises - Invoice ${s.invoice_number}*\nDate: ${s.sale_date}\nCustomer: ${s.customer_name}\nTotal: Rs.${Number(s.grand_total).toLocaleString('en-IN')}\n\nView Bill: ${window.location.origin}${API}/gst/bill/${s.id}\nThank you!`)}`, '_blank')}>Share</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{textAlign:'center',color:'#999',padding:30}}>No invoices yet</div>
+            )}
           </div>
           <div className="show-mobile-cards">
             <div className="mobile-cards">

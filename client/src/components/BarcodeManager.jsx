@@ -181,21 +181,22 @@ export default function BarcodeManager() {
           </div>
           <div className="card">
             <div className="table-container">
-              <table>
-                <thead><tr><th>Product</th><th>Barcode</th><th>Barcode Image</th><th>Actions</th></tr></thead>
-                <tbody>
-                  {products.map(p => (
-                    <tr key={p.id}>
-                      <td><strong>{p.name}</strong> <span style={{color:'#999',fontSize:11}}>Rs.{p.sell_price}</span></td>
-                      <td style={{fontFamily:'monospace',fontSize:12}}>{p.barcode || 'No barcode'}</td>
-                      <td>{p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:40}} /> : '-'}</td>
-                      <td>
-                        <button className="btn btn-sm btn-info" style={{marginRight:4}} onClick={() => handleGenerateBarcode(p.id)}>
-                          {p.barcode ? 'Regenerate' : 'Generate'}
-                        </button>
-                        {p.barcode_image && (
-                          <button className="btn btn-sm btn-success" onClick={() => {
-                            const printWindow = window.open('', '_blank', 'width=400,height=300');
+              {products.length > 0 ? (
+                <table>
+                  <thead><tr><th>Product</th><th>Barcode</th><th>Barcode Image</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    {products.map(p => (
+                      <tr key={p.id}>
+                        <td><strong>{p.name}</strong> <span style={{color:'#999',fontSize:11}}>Rs.{p.sell_price}</span></td>
+                        <td style={{fontFamily:'monospace',fontSize:12}}>{p.barcode || 'No barcode'}</td>
+                        <td>{p.barcode_image ? <img src={p.barcode_image} alt="barcode" style={{height:40}} /> : '-'}</td>
+                        <td>
+                          <button className="btn btn-sm btn-info" style={{marginRight:4}} onClick={() => handleGenerateBarcode(p.id)}>
+                            {p.barcode ? 'Regenerate' : 'Generate'}
+                          </button>
+                          {p.barcode_image && (
+                            <button className="btn btn-sm btn-success" onClick={() => {
+                              const printWindow = window.open('', '_blank', 'width=400,height=300');
                             printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
                               body { margin:0; padding:10px; font-family:Arial; text-align:center; width:58mm; }
                               @page { margin:0; size:58mm auto; }
@@ -219,6 +220,9 @@ export default function BarcodeManager() {
                   ))}
                 </tbody>
               </table>
+            ) : (
+              <div style={{textAlign:'center',color:'#999',padding:30}}>No products found</div>
+            )}
             </div>
           </div>
         </div>
