@@ -89,6 +89,8 @@ app.use('/api/purchases', require('../src/routes/purchases'));
 app.use('/api/crm', require('../src/routes/crm'));
 app.use('/api/services', require('../src/routes/services'));
 
+app.get('/api/ping', (req, res) => { res.json({ ok: true }); });
+
 const { get, all, run } = require('../src/db');
 
 app.get('/api/category', async (req, res) => {
