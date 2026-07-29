@@ -4,6 +4,7 @@
   "outputDirectory": "client/dist",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://aditya-enterprises-umgw.onrender.com/api/$1" },
+    { "source": "/data/(.*)", "destination": "https://aditya-enterprises-umgw.onrender.com/data/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
