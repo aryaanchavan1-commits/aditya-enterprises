@@ -66,6 +66,10 @@ try { fs.mkdirSync(barcodesDir, { recursive: true }); } catch (e) {}
 try { fs.mkdirSync(invoicesDir, { recursive: true }); } catch (e) {}
 try { fs.mkdirSync(aiUploadsDir, { recursive: true }); } catch (e) {}
 
+app.get('/', (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Aditya Enterprises ERP</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f0f2f5;color:#2c3e50;text-align:center}.card{background:#fff;padding:40px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08)}.btn{display:inline-block;margin-top:16px;padding:10px 24px;background:#3498db;color:#fff;border-radius:6px;text-decoration:none}a{color:#3498db}</style></head><body><div class="card"><h2>Aditya Enterprises ERP</h2><p style="color:#7f8c8d">API Server is running</p><p style="font-size:13px">&#8226; <a href="/api/health">Health Check</a><br>&#8226; <a href="https://aditya-enterprises-erp.vercel.app">Open App (Vercel)</a></p></div></body></html>`);
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
