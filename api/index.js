@@ -11,16 +11,19 @@ const IS_VERCEL = !!process.env.VERCEL;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || IS_VERCEL;
 
 const ALLOWED_ORIGINS = [
-  'https://web-rho-tawny-75.vercel.app',
-  'https://aditya-enterprises.vercel.app',
+  /\.vercel\.app$/,
+  /\.onrender\.com$/,
   'http://localhost:3000',
   'http://localhost:5173',
 ];
 
 app.use(cors({
   origin: IS_PRODUCTION ? (origin, cb) => {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(null, false);
+    if (!origin) return cb(null, true);
+    const allowed = ALLOWED_ORIGINS.some(pattern =>
+      typeof pattern === 'string' ? pattern === origin : pattern.test(origin)
+    );
+    cb(null, allowed);
   } : '*',
   credentials: true,
 }));
