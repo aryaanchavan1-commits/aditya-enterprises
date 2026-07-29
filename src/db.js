@@ -92,6 +92,7 @@ async function initSchema() {
   for (const sql of idx) {
     try { await turso.execute(sql); } catch (e) {}
   }
+  await fixIdTypes();
   await seedIfEmpty();
   await migrateLegacyData();
 }
@@ -188,21 +189,50 @@ function cleanRow(row) {
   return clean;
 }
 
-async function fixNullIds() {
-  const tables = ['categories', 'subcategories', 'products', 'parties', 'sales', 'purchases', 'stock_movements', 'ai_conversations', 'customer_visits', 'services'];
-  for (const t of tables) {
+async function fixIdTypes() {
+  const needsFix = [];
+  for (const t of ['categories', 'products', 'sales', 'purchases', 'stock_movements']) {
+    const info = await turso.execute(`PRAGMA table_info(${t})`);
+    const idCol = info.rows.find(r => r.name === 'id');
+    if (idCol && idCol.type !== 'INTEGER') needsFix.push(t);
+  }
+  if (!needsFix.length) return;
+
+  const schemas = {
+    categories: 'id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, is_editable INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+    products: 'id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, image TEXT DEFAULT \'\', quantity INTEGER DEFAULT 0, description TEXT DEFAULT \'\', hsn_code TEXT DEFAULT \'\', sell_price REAL DEFAULT 0, inward_price REAL DEFAULT 0, serial_number TEXT UNIQUE, discount_percent REAL DEFAULT 0, barcode TEXT UNIQUE, barcode_image TEXT DEFAULT \'\', category_id INTEGER, subcategory_id INTEGER, gst_rate REAL DEFAULT 18, supplier_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+    sales: 'id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, sale_date TEXT NOT NULL, customer_id INTEGER, customer_name TEXT DEFAULT \'Walk-in Customer\', customer_phone TEXT DEFAULT \'\', customer_gstin TEXT DEFAULT \'\', customer_address TEXT DEFAULT \'\', items TEXT NOT NULL, subtotal REAL DEFAULT 0, discount_total REAL DEFAULT 0, cgst_total REAL DEFAULT 0, sgst_total REAL DEFAULT 0, igst_total REAL DEFAULT 0, cess_total REAL DEFAULT 0, grand_total REAL DEFAULT 0, payment_mode TEXT DEFAULT \'cash\', is_barcode_scan INTEGER DEFAULT 0, notes TEXT DEFAULT \'\', created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+    purchases: 'id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_number TEXT UNIQUE NOT NULL, purchase_date TEXT NOT NULL, supplier_id INTEGER, supplier_name TEXT DEFAULT \'\', items TEXT NOT NULL, subtotal REAL DEFAULT 0, gst_total REAL DEFAULT 0, grand_total REAL DEFAULT 0, payment_status TEXT DEFAULT \'paid\', notes TEXT DEFAULT \'\', created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+    stock_movements: 'id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, type TEXT, quantity_change INTEGER, reference TEXT, notes TEXT DEFAULT \'\', created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+  };
+
+  for (const t of needsFix) {
     try {
-      const pk = await turso.execute(`SELECT name FROM pragma_table_info('${t}') WHERE pk = 1 LIMIT 1`);
-      if (!pk.rows.length) continue;
-      const pkCol = pk.rows[0].name;
-      await turso.execute(`UPDATE ${t} SET ${pkCol} = rowid WHERE ${pkCol} IS NULL`);
-    } catch (e) {}
+      const oldInfo = await turso.execute(`PRAGMA table_info(${t})`);
+      const oldCols = oldInfo.rows.map(r => r.name);
+      const newCols = schemas[t].split(',').map(c => c.trim().split(' ')[0]);
+      const commonCols = newCols.filter(c => oldCols.includes(c));
+      const sel = commonCols.map(c => c === 'id' ? 'CAST(COALESCE(id,rowid) AS INTEGER)' : c).join(', ');
+
+      await turso.execute(`CREATE TABLE ${t}_new (${schemas[t]})`);
+      try {
+        await turso.execute(`INSERT INTO ${t}_new (${commonCols.join(',')}) SELECT ${sel} FROM ${t}`);
+      } catch (e2) {
+        console.warn(`Direct insert failed for ${t}, trying without UNIQUE:`, e2.message);
+        const noUnique = schemas[t].replace(/ UNIQUE/g, '');
+        await turso.execute(`DROP TABLE ${t}_new`);
+        await turso.execute(`CREATE TABLE ${t}_new (${noUnique})`);
+        await turso.execute(`INSERT INTO ${t}_new (${commonCols.join(',')}) SELECT ${sel} FROM ${t}`);
+      }
+      await turso.execute(`DROP TABLE ${t}`);
+      await turso.execute(`ALTER TABLE ${t}_new RENAME TO ${t}`);
+      console.log(`Fixed ${t} schema`);
+    } catch (e) { console.warn(`Fix ${t}:`, e.message); }
   }
 }
 
 async function migrateLegacyData() {
   try {
-    await fixNullIds();
     const tableInfo = await turso.execute("PRAGMA table_info(products)");
     const cols = tableInfo.rows.map(r => r.name);
     const legacyMap = [
