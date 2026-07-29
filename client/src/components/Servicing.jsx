@@ -55,7 +55,7 @@ export default function Servicing() {
       <button className="fab show-mobile" onClick={openAdd}>+</button>
       <div className="search-bar">
         <input type="text" placeholder="Search by customer, device, serial..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{width:180}}>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">All Status</option>
           {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ').toUpperCase()}</option>)}
         </select>
@@ -94,7 +94,7 @@ export default function Servicing() {
       </div>
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{maxWidth:700}}>
+          <div className="modal">
             <h3>{editService ? 'Edit Service' : 'New Service Record'}</h3>
             <div className="form-row">
               <div className="form-group"><label>Customer Name *</label><input value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} placeholder="Customer name" /></div>

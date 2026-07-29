@@ -93,7 +93,7 @@ export default function CRM() {
       </div>
       {showVisitModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowVisitModal(false)}>
-          <div className="modal" style={{maxWidth:500}}>
+          <div className="modal">
             <h3>Record Customer Visit</h3>
             <div className="form-row">
               <div className="form-group">

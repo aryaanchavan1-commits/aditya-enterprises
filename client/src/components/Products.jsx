@@ -122,13 +122,13 @@ export default function Products() {
           type="text" placeholder="Search by name, HSN, serial, barcode, description..."
           value={search} onChange={e => setSearch(e.target.value)}
         />
-        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{width:200}}>
+        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
           <option value="">All Categories</option>
           {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
 
-      <div className="card">
+      <div className="card desktop-table">
         <div className="table-container">
           <table>
             <thead>
@@ -162,9 +162,45 @@ export default function Products() {
                   </td>
                 </tr>
               ))}
-              {products.length === 0 && <tr><td colSpan={12} style={{textAlign:'center',color:'#999',padding:30}}>No products found. Click "+ Add Product" to get started.</td></tr>}
+              {products.length === 0 && <tr><td colSpan={12} style={{textAlign:'center',color:'#999',padding:30}}>No products found.</td></tr>}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="show-mobile-cards">
+        <div className="mobile-cards">
+          {products.map(p => (
+            <div key={p.id} className="mobile-card">
+              <div className="mobile-card-header">{p.name}</div>
+              <div className="mobile-card-row">
+                <span className="label">Price</span>
+                <span className="value">Rs.{Number(p.sell_price).toLocaleString('en-IN')} {p.unit || 'pcs'}</span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="label">Stock</span>
+                <span className="value"><span className={`badge ${p.quantity <= 5 ? 'badge-danger' : p.quantity <= 20 ? 'badge-warning' : 'badge-success'}`}>{p.quantity}</span></span>
+              </div>
+              {p.hsn_code && <div className="mobile-card-row">
+                <span className="label">HSN</span>
+                <span className="value">{p.hsn_code}</span>
+              </div>}
+              {p.serial_number && <div className="mobile-card-row">
+                <span className="label">Serial</span>
+                <span className="value" style={{fontSize:12}}>{p.serial_number}</span>
+              </div>}
+              <div className="mobile-card-row">
+                <span className="label">Category</span>
+                <span className="value">{p.category_name || '-'}</span>
+              </div>
+              <div className="mobile-card-actions">
+                <button className="btn btn-sm btn-info" onClick={() => openEdit(p)}>Edit</button>
+                <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Delete</button>
+                {p.barcode_image ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)}>Label</button> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Barcode</button>}
+              </div>
+            </div>
+          ))}
+          {products.length === 0 && <div style={{textAlign:'center',color:'#999',padding:30}}>No products found.</div>}
         </div>
       </div>
 
@@ -190,7 +226,7 @@ export default function Products() {
 
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal" style={{maxWidth:800}}>
+          <div className="modal">
             <h3>{editProduct ? 'Edit Product' : 'Add New Product'}</h3>
 
             <div className="form-row">

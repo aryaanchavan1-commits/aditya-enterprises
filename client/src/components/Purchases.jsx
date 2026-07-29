@@ -115,8 +115,8 @@ export default function Purchases() {
 
           <div className="form-group">
             <label>Search Existing Products</label>
-            <div style={{display:'flex', gap:8}}>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or barcode..." style={{flex:1}} />
+            <div className="search-bar">
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or barcode..." />
               <button className="btn btn-sm btn-outline" onClick={() => setAddNewMode(!addNewMode)}>
                 {addNewMode ? 'Cancel' : '+ New Product'}
               </button>

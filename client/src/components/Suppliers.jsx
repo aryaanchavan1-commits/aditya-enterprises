@@ -75,7 +75,7 @@ export default function Suppliers() {
         </div>
       )}
 
-      <div className="table-responsive">
+      <div className="table-responsive desktop-table">
         <table className="table">
           <thead>
             <tr>
@@ -108,6 +108,40 @@ export default function Suppliers() {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="show-mobile-cards">
+        <div className="mobile-cards">
+          {suppliers.map(s => (
+            <div key={s.id} className="mobile-card">
+              <div className="mobile-card-header">{s.name}</div>
+              <div className="mobile-card-row">
+                <span className="label">Phone</span>
+                <span className="value">{s.phone || '-'}</span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="label">Email</span>
+                <span className="value" style={{fontSize:12}}>{s.email || '-'}</span>
+              </div>
+              {s.gstin && <div className="mobile-card-row">
+                <span className="label">GSTIN</span>
+                <span className="value" style={{fontSize:11}}>{s.gstin}</span>
+              </div>}
+              <div className="mobile-card-row">
+                <span className="label">City</span>
+                <span className="value">{s.city || '-'}</span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="label">Balance</span>
+                <span className="value">&#8377;{Number(s.opening_balance || 0).toFixed(2)}</span>
+              </div>
+              <div className="mobile-card-actions">
+                <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(s)}>Edit</button>
+                <button className="btn btn-sm btn-danger ml-1" onClick={() => handleDelete(s.id)}>Delete</button>
+              </div>
+            </div>
+          ))}
+          {suppliers.length === 0 && <div style={{textAlign:'center',color:'#999',padding:20}}>No suppliers found</div>}
+        </div>
       </div>
     </div>
   );

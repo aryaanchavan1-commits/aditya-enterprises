@@ -64,7 +64,7 @@ export default function Categories() {
         <h2 style={{margin:0}}>Categories</h2>
         {showAddCat ? (
           <div style={{display:'flex', gap:6, alignItems:'center'}}>
-            <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Category name" style={{width:160}} autoFocus onKeyDown={e => e.key === 'Enter' && addCategory()} />
+            <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Category name" autoFocus onKeyDown={e => e.key === 'Enter' && addCategory()} />
             <button className="btn btn-sm btn-success" onClick={addCategory}>Add</button>
             <button className="btn btn-sm btn-outline" onClick={() => setShowAddCat(false)}>Cancel</button>
           </div>
