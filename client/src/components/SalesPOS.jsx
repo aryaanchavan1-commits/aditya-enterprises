@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
+import CameraScanner from './CameraScanner';
 
 const API = '/api';
 
@@ -13,6 +14,7 @@ export default function SalesPOS() {
   const [lastInvoice, setLastInvoice] = useState(null);
   const [isGst, setIsGst] = useState(true);
   const [companyName, setCompanyName] = useState('Aditya Enterprises');
+  const [showCamera, setShowCamera] = useState(false);
   const printRef = useRef(null);
   const thermalRef = useRef(null);
   const searchRef = useRef(null);
@@ -71,6 +73,13 @@ export default function SalesPOS() {
         addToCart(match);
       }
     }
+  };
+
+  const handleCameraScan = (code) => {
+    const match = products.find(p => p.barcode === code || p.name.toLowerCase() === code.toLowerCase());
+    if (match) { addToCart(match); showToast(`Scanned: ${match.name}`); }
+    else showToast(`No product found for barcode: ${code}`, 'error');
+    setShowCamera(false);
   };
 
   const updateCartItem = (productId, field, value) => {
@@ -141,6 +150,7 @@ export default function SalesPOS() {
             <div className="card-header"><h3>Products</h3></div>
             <div className="search-bar">
               <input ref={searchRef} placeholder="Scan barcode or search..." value={search} onChange={e => setSearch(e.target.value)} onKeyDown={handleSearchKeyDown} autoFocus />
+              <button className="btn btn-sm btn-outline" onClick={() => setShowCamera(true)} title="Scan barcode with camera">📷</button>
             </div>
             <div className="pos-products-list">
               {filteredProducts.length > 0 ? (
@@ -321,6 +331,14 @@ export default function SalesPOS() {
             <div className="tr-total">Total: Rs. {Number(lastInvoice.grand_total).toFixed(2)}</div>
             <div className="tr-divider"></div>
             <div className="tr-footer">Thank you! Visit again.</div>
+          </div>
+        </div>
+      )}
+
+      {showCamera && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowCamera(false)}>
+          <div className="modal" style={{maxWidth:450}}>
+            <CameraScanner onScan={handleCameraScan} onClose={() => setShowCamera(false)} />
           </div>
         </div>
       )}

@@ -3,7 +3,6 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import Categories from './components/Categories';
-import BarcodeManager from './components/BarcodeManager';
 import SalesPOS from './components/SalesPOS';
 import Purchases from './components/Purchases';
 import GSTInvoices from './components/GSTInvoices';
@@ -45,7 +44,6 @@ const TAB_ITEMS = [
 const MORE_ITEMS = [
   { path: '/categories', label: 'Categories', icon: 'C' },
   { path: '/suppliers', label: 'Suppliers', icon: 'S' },
-  { path: '/barcode', label: 'Barcode', icon: 'B' },
   { path: '/invoices', label: 'GST & Invoices', icon: 'I' },
   { path: '/accounting', label: 'Accounting', icon: 'L' },
   { path: '/reports', label: 'Reports', icon: 'T' },
@@ -157,7 +155,6 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/products" element={<Products />} />
               <Route path="/categories" element={<Categories />} />
-              <Route path="/barcode" element={<BarcodeManager />} />
               <Route path="/pos" element={<SalesPOS />} />
               <Route path="/purchases" element={<Purchases />} />
               <Route path="/invoices" element={<GSTInvoices />} />
