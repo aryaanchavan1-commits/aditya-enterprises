@@ -91,7 +91,8 @@ app.use('/api/services', require('../src/routes/services'));
 
 const db = require('../src/db');
 
-app.get('/api/testjson', (req, res) => { res.status(404).json({ test: true }); });
+app.get('/api/testjson200', (req, res) => { res.json({ body_test: true }); });
+app.get('/api/testjson404', (req, res) => { res.status(404).json({ body_test: true }); });
 app.get('/api/testdb', async (req, res) => {
   try {
     const db2 = await db.getDb();
