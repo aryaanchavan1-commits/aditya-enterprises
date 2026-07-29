@@ -61,7 +61,7 @@ export default function Servicing() {
         </select>
       </div>
       <div className="card">
-        <div className="table-container">
+        <div className="table-container desktop-table">
           <table>
             <thead>
               <tr><th>Customer</th><th>Device</th><th>Issue</th><th>Parts Cost</th><th>Service Charge</th><th>Total</th><th>Status</th><th>Received</th><th>Actions</th></tr>
@@ -90,6 +90,44 @@ export default function Servicing() {
               {services.length === 0 && <tr><td colSpan={9} style={{textAlign:'center',color:'#999',padding:30}}>No service records. Click "New Service" to add one.</td></tr>}
             </tbody>
           </table>
+        </div>
+        <div className="show-mobile-cards">
+          <div className="mobile-cards">
+            {services.map(s => (
+              <div key={s.id} className="mobile-card">
+                <div className="mobile-card-header">{s.customer_name}</div>
+                {s.customer_phone && <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:4}}>{s.customer_phone}</div>}
+                <div className="mobile-card-row">
+                  <span className="label">Device</span>
+                  <span className="value">{s.device_type || '-'}{s.brand ? ` (${s.brand})` : ''}</span>
+                </div>
+                <div className="mobile-card-row">
+                  <span className="label">Issue</span>
+                  <span className="value" style={{fontSize:12}}>{s.issue || '-'}</span>
+                </div>
+                <div className="mobile-card-row">
+                  <span className="label">Total</span>
+                  <span className="value"><strong>Rs.{Number(s.total_charge).toLocaleString('en-IN')}</strong></span>
+                </div>
+                <div className="mobile-card-row">
+                  <span className="label">Status</span>
+                  <select value={s.status} onChange={e => handleStatusChange(s, e.target.value)}
+                    style={{fontSize:11, padding:'2px 6px', width:'auto'}}>
+                    {STATUSES.map(st => <option key={st} value={st}>{st.replace('_', ' ').toUpperCase()}</option>)}
+                  </select>
+                </div>
+                <div className="mobile-card-row">
+                  <span className="label">Received</span>
+                  <span className="value">{s.received_date}</span>
+                </div>
+                <div className="mobile-card-actions">
+                  <button className="btn btn-sm btn-info" onClick={() => openEdit(s)}>Edit</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(s.id)}>Delete</button>
+                </div>
+              </div>
+            ))}
+            {services.length === 0 && <div style={{textAlign:'center',color:'#999',padding:20}}>No service records</div>}
+          </div>
         </div>
       </div>
       {showModal && (

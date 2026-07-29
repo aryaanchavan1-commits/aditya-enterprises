@@ -171,7 +171,7 @@ export default function Purchases() {
           {cart.length > 0 && (
             <div>
               <h4 style={{margin:'12px 0 8px'}}>Cart Items <span style={{fontWeight:400,fontSize:12,color:'var(--text-muted)'}}>({cart.length} items)</span></h4>
-              <div className="table-container">
+              <div className="table-container desktop-table">
                 <table className="purchases-cart-table">
                   <thead>
                     <tr><th>Product</th><th>Qty</th><th>Unit</th><th>Rate</th><th>GST%</th><th>Total</th><th></th></tr>
@@ -195,6 +195,45 @@ export default function Purchases() {
                   </tbody>
                 </table>
               </div>
+              <div className="show-mobile-cards">
+                <div className="mobile-cards">
+                  {cart.map((c, idx) => (
+                    <div key={c.product_id || 'new-' + idx} className="mobile-card">
+                      <div className="mobile-card-header">{c.product_name}</div>
+                      {c.isNew && <div><span className="badge badge-warning" style={{fontSize:10}}>New</span></div>}
+                      <div className="mobile-card-row">
+                        <span className="label">Qty</span>
+                        <input type="number" value={c.quantity} min="1" onChange={e => updateCartItem(c.product_id || c.product_name, 'quantity', parseInt(e.target.value) || 1)}
+                          style={{width:60, textAlign:'center'}} />
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="label">Unit</span>
+                        <select value={c.unit || 'pcs'} onChange={e => updateCartItem(c.product_id || c.product_name, 'unit', e.target.value)}
+                          style={{width:80}}>
+                          {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="label">Rate</span>
+                        <input type="number" step="0.01" value={c.inward_price} onChange={e => updateCartItem(c.product_id || c.product_name, 'inward_price', parseFloat(e.target.value) || 0)}
+                          style={{width:90, textAlign:'right'}} />
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="label">GST%</span>
+                        <input type="number" step="0.1" value={c.gst_rate} onChange={e => updateCartItem(c.product_id || c.product_name, 'gst_rate', parseFloat(e.target.value) || 0)}
+                          style={{width:60, textAlign:'right'}} />
+                      </div>
+                      <div className="mobile-card-row">
+                        <span className="label">Total</span>
+                        <span className="value">Rs.{(c.inward_price * c.quantity).toFixed(2)}</span>
+                      </div>
+                      <div className="mobile-card-actions">
+                        <button className="btn btn-sm btn-danger" onClick={() => removeFromCart(c.product_id || c.product_name)}>Remove</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="purchases-cart-summary">
                 Subtotal: Rs.{total.toFixed(2)} | GST: Rs.{gstTotal.toFixed(2)} | <span style={{fontSize:16}}>Total: Rs.{(total + gstTotal).toFixed(2)}</span>
               </div>
@@ -215,23 +254,54 @@ export default function Purchases() {
         {purchases.length === 0 ? (
           <div className="empty-state"><p>No purchases yet</p></div>
         ) : (
-          <div className="table-container">
-            <table>
-              <thead><tr><th>Invoice</th><th>Date</th><th>Supplier</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
-              <tbody>
+          <>
+            <div className="table-container desktop-table">
+              <table>
+                <thead><tr><th>Invoice</th><th>Date</th><th>Supplier</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+                <tbody>
+                  {purchases.map(p => (
+                    <tr key={p.id}>
+                      <td>{p.invoice_number}</td>
+                      <td>{p.purchase_date}</td>
+                      <td>{p.supplier_name}</td>
+                      <td>{p.items?.length || 0} items</td>
+                      <td>Rs.{Number(p.grand_total).toFixed(2)}</td>
+                      <td><span className={`badge badge-${p.payment_status === 'paid' ? 'success' : 'warning'}`}>{p.payment_status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="show-mobile-cards">
+              <div className="mobile-cards">
                 {purchases.map(p => (
-                  <tr key={p.id}>
-                    <td>{p.invoice_number}</td>
-                    <td>{p.purchase_date}</td>
-                    <td>{p.supplier_name}</td>
-                    <td>{p.items?.length || 0} items</td>
-                    <td>Rs.{Number(p.grand_total).toFixed(2)}</td>
-                    <td><span className={`badge badge-${p.payment_status === 'paid' ? 'success' : 'warning'}`}>{p.payment_status}</span></td>
-                  </tr>
+                  <div key={p.id} className="mobile-card">
+                    <div className="mobile-card-header">{p.invoice_number}</div>
+                    <div className="mobile-card-row">
+                      <span className="label">Supplier</span>
+                      <span className="value">{p.supplier_name}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="label">Date</span>
+                      <span className="value">{p.purchase_date}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="label">Items</span>
+                      <span className="value">{p.items?.length || 0}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="label">Total</span>
+                      <span className="value">Rs.{Number(p.grand_total).toFixed(2)}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="label">Status</span>
+                      <span className="value"><span className={`badge badge-${p.payment_status === 'paid' ? 'success' : 'warning'}`}>{p.payment_status}</span></span>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

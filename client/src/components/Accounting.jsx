@@ -31,7 +31,7 @@ export default function Accounting() {
   return (
     <div className="page-container">
       <h3>Accounting</h3>
-      <div className="row" style={{ gap: 16, marginBottom: 24 }}>
+      <div className="stats-grid" style={{marginBottom:20}}>
         <div className="stat-card">
           <div className="stat-label">Total Sales</div>
           <div className="stat-value" style={{ color: '#27ae60' }}>&#8377;{stats.totalSales.toFixed(2)}</div>
@@ -49,7 +49,7 @@ export default function Accounting() {
       </div>
 
       <h4>Recent Transactions</h4>
-      <div className="table-responsive">
+      <div className="table-responsive desktop-table">
         <table className="table">
           <thead>
             <tr>
@@ -77,6 +77,37 @@ export default function Accounting() {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="show-mobile-cards">
+        <div className="mobile-cards">
+          {stats.recentTransactions.length === 0 && <div style={{textAlign:'center',color:'#999',padding:20}}>No transactions yet</div>}
+          {stats.recentTransactions.map((t, i) => (
+            <div key={i} className="mobile-card">
+              <div className="mobile-card-row">
+                <span className="label">Date</span>
+                <span className="value">{t.date?.split('T')[0]}</span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="label">Type</span>
+                <span className="value"><span className={`badge ${t.type === 'Sale' ? 'badge-success' : 'badge-danger'}`}>{t.type}</span></span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="label">Ref</span>
+                <span className="value" style={{fontSize:12}}>{t.ref}</span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="label">Party</span>
+                <span className="value">{t.party}</span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="label">Amount</span>
+                <span className="value" style={{color: t.amount >= 0 ? '#27ae60' : '#e74c3c', fontWeight:700}}>
+                  {t.amount >= 0 ? '+' : ''}&#8377;{Math.abs(t.amount).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -83,7 +83,7 @@ export default function GSTInvoices() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <div className="table-container">
+          <div className="table-container desktop-table">
             <table>
               <thead>
                 <tr>
@@ -115,6 +115,37 @@ export default function GSTInvoices() {
                 {sales.length === 0 && <tr><td colSpan={11} style={{textAlign:'center',color:'#999',padding:30}}>No invoices yet</td></tr>}
               </tbody>
             </table>
+          </div>
+          <div className="show-mobile-cards">
+            <div className="mobile-cards">
+              {sales.map(s => (
+                <div key={s.id} className="mobile-card">
+                  <div className="mobile-card-header">{s.invoice_number}</div>
+                  <div className="mobile-card-row">
+                    <span className="label">Customer</span>
+                    <span className="value">{s.customer_name}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="label">Date</span>
+                    <span className="value">{s.sale_date}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="label">Amount</span>
+                    <span className="value"><strong>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="label">Mode</span>
+                    <span className="value"><span className="badge badge-info">{s.payment_mode}</span></span>
+                  </div>
+                  <div className="mobile-card-actions">
+                    <button className="btn btn-sm btn-info" onClick={() => window.open(`${API}/sales/${s.id}/receipt`, '_blank')}>Receipt</button>
+                    <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>GST Bill</button>
+                    <button className="btn btn-sm btn-success" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent('*Aditya Enterprises - Invoice ' + s.invoice_number + '*\nDate: ' + s.sale_date + '\nCustomer: ' + s.customer_name + '\nTotal: Rs.' + Number(s.grand_total).toLocaleString('en-IN') + '\n\nView Bill: ' + window.location.origin + API + '/gst/bill/' + s.id + '\nThank you!')}`, '_blank')}>Share</button>
+                  </div>
+                </div>
+              ))}
+              {sales.length === 0 && <div style={{textAlign:'center',color:'#999',padding:20}}>No invoices yet</div>}
+            </div>
           </div>
         </div>
       )}
