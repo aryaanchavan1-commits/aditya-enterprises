@@ -226,6 +226,17 @@ async function start() {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Aditya Enterprises ERP Web running on http://localhost:${PORT}`);
     });
+
+    // Keep-alive every 10 min — prevents Render free-tier spin-down after 15min inactivity
+    const https = require('https');
+    const KEEP_URLS = [
+      process.env.RENDER_EXTERNAL_URL,
+      'https://aditya-enterprises-erp.vercel.app',
+    ].filter(Boolean);
+    function ping(url) {
+      https.get(`${url.replace(/\/+$/,'')}/api/health`, r => { r.resume(); }).on('error', () => {});
+    }
+    setInterval(() => { KEEP_URLS.forEach(ping); }, 10 * 60 * 1000);
   }
 }
 
