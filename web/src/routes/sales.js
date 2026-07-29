@@ -20,19 +20,26 @@ router.get('/stats/dashboard', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-    const totalProducts = (await get('SELECT COUNT(*) as c FROM products'))?.c || 0;
-    const totalQuantity = (await get('SELECT COALESCE(SUM(quantity),0) as c FROM products'))?.c || 0;
-    const todaySalesArr = await all("SELECT * FROM sales WHERE sale_date = ?", [today]);
-    const todaySales = todaySalesArr.reduce((s, x) => s + x.grand_total, 0);
-    const monthSalesArr = await all("SELECT * FROM sales WHERE sale_date >= ?", [firstOfMonth]);
-    const monthlyRevenue = monthSalesArr.reduce((s, x) => s + x.grand_total, 0);
-    const lowStock = (await get('SELECT COUNT(*) as c FROM products WHERE quantity <= 5'))?.c || 0;
-    const lowStockProducts = await all('SELECT id, name, quantity, sell_price FROM products WHERE quantity <= 5 ORDER BY quantity ASC LIMIT 20');
-    const totalSales = (await get('SELECT COUNT(*) as c FROM sales'))?.c || 0;
-    const recentSales = await all('SELECT * FROM sales ORDER BY created_at DESC LIMIT 10');
-    const stockMovements = await all('SELECT sm.*, p.name as product_name FROM stock_movements sm LEFT JOIN products p ON sm.product_id = p.id ORDER BY sm.created_at DESC LIMIT 10');
-    const dailySalesArr = await all("SELECT sale_date, SUM(grand_total) as total FROM sales WHERE sale_date >= ? GROUP BY sale_date ORDER BY sale_date ASC", [firstOfMonth]);
-    res.json({ success: true, data: { totalProducts, totalQuantity, todaySales: Math.round(todaySales * 100) / 100, monthlyRevenue: Math.round(monthlyRevenue * 100) / 100, lowStock, lowStockProducts, totalSales, todayInvoices: todaySalesArr.length, monthInvoices: monthSalesArr.length, recentSales, stockMovements, dailySales: dailySalesArr } });
+    const [totalProducts, totalQuantity, todaySalesArr, monthSalesArr, lowStock, lowStockProducts, totalSales, recentSales, stockMovements, dailySalesArr] = await Promise.all([
+      get('SELECT COUNT(*) as c FROM products').then(r => r?.c || 0),
+      get('SELECT COALESCE(SUM(quantity),0) as c FROM products').then(r => r?.c || 0),
+      all("SELECT grand_total FROM sales WHERE sale_date = ?", [today]),
+      all("SELECT grand_total FROM sales WHERE sale_date >= ?", [firstOfMonth]),
+      get('SELECT COUNT(*) as c FROM products WHERE quantity <= 5').then(r => r?.c || 0),
+      all('SELECT id, name, quantity, sell_price FROM products WHERE quantity <= 5 ORDER BY quantity ASC LIMIT 20'),
+      get('SELECT COUNT(*) as c FROM sales').then(r => r?.c || 0),
+      all('SELECT id, invoice_number, customer_name, grand_total, sale_date FROM sales ORDER BY created_at DESC LIMIT 10'),
+      all('SELECT sm.*, p.name as product_name FROM stock_movements sm LEFT JOIN products p ON sm.product_id = p.id ORDER BY sm.created_at DESC LIMIT 10'),
+      all("SELECT sale_date, SUM(grand_total) as total FROM sales WHERE sale_date >= ? GROUP BY sale_date ORDER BY sale_date ASC", [firstOfMonth])
+    ]);
+    res.json({ success: true, data: {
+      totalProducts, totalQuantity,
+      todaySales: Math.round(todaySalesArr.reduce((s, x) => s + x.grand_total, 0) * 100) / 100,
+      monthlyRevenue: Math.round(monthSalesArr.reduce((s, x) => s + x.grand_total, 0) * 100) / 100,
+      lowStock, lowStockProducts, totalSales,
+      todayInvoices: todaySalesArr.length, monthInvoices: monthSalesArr.length,
+      recentSales, stockMovements, dailySales: dailySalesArr
+    } });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
@@ -40,7 +47,7 @@ router.post('/', async (req, res) => {
   try {
     const data = req.body;
     const items = data.items || [];
-    if (items.length === 0) res.json({ success: false, error: 'No items' }); return;
+    if (items.length === 0) { res.json({ success: false, error: 'No items' }); return; }
     const invoiceNum = `AE/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
     const saleDate = new Date().toISOString().split('T')[0];
     let subtotal = 0, discountTotal = 0, cgstTotal = 0, sgstTotal = 0, igstTotal = 0, cessTotal = 0, grandTotal = 0;
@@ -52,7 +59,7 @@ router.post('/', async (req, res) => {
     for (const item of items) {
       const product = await get('SELECT * FROM products WHERE id = ?', [item.product_id]);
       if (!product) continue;
-      if (product.quantity < item.quantity) res.json({ success: false, error: `Insufficient stock for ${product.name}. Available: ${product.quantity}` }); return;
+      if (product.quantity < item.quantity) { res.json({ success: false, error: `Insufficient stock for ${product.name}. Available: ${product.quantity}` }); return; }
       const lineTotal = item.sell_price * item.quantity;
       const lineDiscount = lineTotal * (item.discount_percent || 0) / 100;
       const afterDiscount = lineTotal - lineDiscount;
@@ -96,7 +103,7 @@ router.post('/', async (req, res) => {
 router.get('/:id/receipt', async (req, res) => {
   try {
     const sale = await get('SELECT * FROM sales WHERE id = ?', [req.params.id]);
-    if (!sale) res.json({ success: false, error: 'Sale not found' }); return;
+    if (!sale) { res.json({ success: false, error: 'Sale not found' }); return; }
     sale.items = JSON.parse(sale.items || '[]');
     const settings = {};
     const allSettings = await all('SELECT * FROM settings');

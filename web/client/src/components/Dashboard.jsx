@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-
-const API = '/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { api } from '../api';
 
 const COLORS = ['#3498db','#2ecc71','#e74c3c','#f39c12','#9b59b6','#1abc9c','#e67e22','#34495e'];
 
@@ -30,43 +29,59 @@ function BarChart({ data, labelKey, valueKey, title, color }) {
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const mounted = useRef(true);
 
   const load = () => {
+    setLoading(true);
     setError(null);
-    setStats(null);
-    fetch(`${API}/sales/stats/dashboard`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          setStats({
-            ...d.data,
-            recentSales: d.data.recentSales || [],
-            stockMovements: d.data.stockMovements || [],
-            lowStockProducts: d.data.lowStockProducts || [],
-            dailySales: d.data.dailySales || [],
-          });
-        } else {
-          setError(d.error || 'Failed to load dashboard');
-        }
-      })
-      .catch(e => setError(e.message));
+    api('/sales/stats/dashboard').then(d => {
+      if (!mounted.current) return;
+      setLoading(false);
+      if (d.success) {
+        setStats({
+          ...d.data,
+          recentSales: d.data.recentSales || [],
+          stockMovements: d.data.stockMovements || [],
+          lowStockProducts: d.data.lowStockProducts || [],
+          dailySales: d.data.dailySales || [],
+        });
+      } else {
+        setError(d.error || 'Failed to load dashboard');
+      }
+    });
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { mounted.current = true; load(); return () => { mounted.current = false; }; }, []);
 
   if (error) {
     return (
       <div className="empty-state">
-        <p style={{ fontSize: 36, color: '#e74c3c', marginBottom: 12 }}>!</p>
-        <p style={{ color: '#666' }}>Could not load dashboard data</p>
-        <p style={{ fontSize: 12, color: '#999', marginTop: 8 }}>{error}</p>
-        <button className="btn btn-primary" style={{marginTop:16}} onClick={load}>Retry</button>
+        <div className="empty-state-icon">&#9888;</div>
+        <p>Could not load dashboard data</p>
+        <p style={{fontSize:12, color:'#999', marginTop:8}}>{error}</p>
+        <button className="btn btn-primary" onClick={load}>Retry</button>
       </div>
     );
   }
 
-  if (!stats) return <div className="empty-state"><div className="spinner"></div><p style={{marginTop:12}}>Loading dashboard...</p></div>;
+  if (loading || !stats) {
+    return (
+      <div>
+        <h2 style={{marginBottom:20}}>Dashboard</h2>
+        <div className="stats-grid">
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} className="stat-card" style={{opacity:0.5}}>
+              <div className="stat-value" style={{background:'#eee', borderRadius:4, height:32, width:'60%', marginBottom:4}}></div>
+              <div className="stat-label" style={{background:'#f0f0f0', borderRadius:4, height:12, width:'40%'}}></div>
+            </div>
+          ))}
+        </div>
+        <div style={{textAlign:'center', padding:20, color:'#999'}}>Loading dashboard data...</div>
+      </div>
+    );
+  }
 
   return (
     <div>

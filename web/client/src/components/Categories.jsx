@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
-
-const API = '/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { api } from '../api';
 
 export default function Categories() {
   const [categories, setCategories] = useState([]);
@@ -13,6 +12,7 @@ export default function Categories() {
   const [showAddCat, setShowAddCat] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [toast, setToast] = useState(null);
+  const mounted = useRef(true);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -20,65 +20,41 @@ export default function Categories() {
   };
 
   const loadCategories = () => {
-    fetch(`${API}/categories`)
-      .then(r => r.json()).then(d => { if (d.success) setCategories(d.data); });
+    api('/categories').then(d => { if (mounted.current && d.success) setCategories(d.data); });
   };
 
-  useEffect(() => { loadCategories(); }, []);
+  useEffect(() => { mounted.current = true; loadCategories(); return () => { mounted.current = false; }; }, []);
 
   const updateCategory = async (id, name) => {
-    try {
-      const r = await fetch(`${API}/category?id=${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-      });
-      const d = await r.json();
-      if (d.success) { showToast('Category updated'); loadCategories(); setEditCat(null); }
-    } catch (err) { showToast('Update failed', 'error'); }
+    const d = await api('/category?id=' + id, { method: 'PUT', body: { name } });
+    if (d.success) { showToast('Category updated'); loadCategories(); setEditCat(null); }
+    else { showToast(d.error || 'Update failed', 'error'); }
   };
 
   const addSubcategory = async (catId, name) => {
-    try {
-      const r = await fetch(`${API}/subcategory?catId=${catId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-      });
-      const d = await r.json();
-      if (d.success) { showToast('Subcategory added'); loadCategories(); setAddSubCat(null); setSubName(''); }
-    } catch (err) { showToast('Add failed', 'error'); }
+    const d = await api('/subcategory?catId=' + catId, { method: 'POST', body: { name } });
+    if (d.success) { showToast('Subcategory added'); loadCategories(); setAddSubCat(null); setSubName(''); }
+    else { showToast(d.error || 'Add failed', 'error'); }
   };
 
   const updateSubcategory = async (catId, subId, name) => {
-    try {
-      const r = await fetch(`${API}/subcategory?catId=${catId}&subId=${subId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-      });
-      const d = await r.json();
-      if (d.success) { showToast('Subcategory updated'); loadCategories(); }
-    } catch (err) { showToast('Update failed', 'error'); }
+    const d = await api('/subcategory?catId=' + catId + '&subId=' + subId, { method: 'PUT', body: { name } });
+    if (d.success) { showToast('Subcategory updated'); loadCategories(); }
+    else { showToast(d.error || 'Update failed', 'error'); }
   };
 
   const deleteSubcategory = async (catId, subId) => {
     if (!confirm('Delete this subcategory?')) return;
-    try {
-      const r = await fetch(`${API}/subcategory?catId=${catId}&subId=${subId}`, { method: 'DELETE' });
-      const d = await r.json();
-      if (d.success) { showToast('Subcategory deleted'); loadCategories(); }
-    } catch (err) { showToast('Delete failed', 'error'); }
+    const d = await api('/subcategory?catId=' + catId + '&subId=' + subId, { method: 'DELETE' });
+    if (d.success) { showToast('Subcategory deleted'); loadCategories(); }
+    else { showToast(d.error || 'Delete failed', 'error'); }
   };
 
   const addCategory = async () => {
     if (!newCatName.trim()) { showToast('Enter a category name', 'error'); return; }
-    try {
-      const r = await fetch(`${API}/categories`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCatName.trim() })
-      });
-      const d = await r.json();
-      if (d.success) { showToast('Category added'); loadCategories(); setNewCatName(''); setShowAddCat(false); }
-      else { showToast(d.error, 'error'); }
-    } catch (err) { showToast('Failed to add category', 'error'); }
+    const d = await api('/categories', { method: 'POST', body: { name: newCatName.trim() } });
+    if (d.success) { showToast('Category added'); loadCategories(); setNewCatName(''); setShowAddCat(false); }
+    else { showToast(d.error || 'Failed to add category', 'error'); }
   };
 
   return (
