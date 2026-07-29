@@ -74,7 +74,7 @@ export default function Categories() {
       </div>
       <button className="fab show-mobile" onClick={() => setShowAddCat(true)}>+</button>
 
-      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(350px, 1fr))', gap:16}}>
+      <div className="categories-grid">
         {categories.map(cat => (
           <div key={cat.id} className="card">
             <div className="card-header">

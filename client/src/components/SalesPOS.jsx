@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { useRef } from 'react';
 
 const API = '/api';
 
@@ -22,15 +21,13 @@ export default function SalesPOS() {
   };
 
   useEffect(() => {
-    fetch(`${API}/products`)
-      .then(r => r.json()).then(d => { if (d.success) setProducts(d.data); });
-    fetch(`${API}/settings`)
-      .then(r => r.json()).then(d => {
-        if (d.success) {
-          setCompanyName(d.data.company_name || 'Aditya Enterprises');
-          setCustomer(prev => ({ ...prev, gstin: d.data.company_gstin || '' }));
-        }
-      });
+    fetch(`${API}/products`).then(r => r.json()).then(d => { if (d.success) setProducts(d.data); });
+    fetch(`${API}/settings`).then(r => r.json()).then(d => {
+      if (d.success) {
+        setCompanyName(d.data.company_name || 'Aditya Enterprises');
+        setCustomer(prev => ({ ...prev, gstin: d.data.company_gstin || '' }));
+      }
+    });
   }, []);
 
   const filteredProducts = products.filter(p =>
@@ -51,14 +48,9 @@ export default function SalesPOS() {
       ));
     } else {
       setCart([...cart, {
-        product_id: product.id,
-        product_name: product.name,
-        hsn_code: product.hsn_code,
-        sell_price: product.sell_price,
-        discount_percent: product.discount_percent || 0,
-        quantity: 1,
-        max_quantity: product.quantity,
-        image: product.image
+        product_id: product.id, product_name: product.name, hsn_code: product.hsn_code,
+        sell_price: product.sell_price, discount_percent: product.discount_percent || 0,
+        quantity: 1, max_quantity: product.quantity, image: product.image
       }]);
     }
     setSearch('');
@@ -85,26 +77,18 @@ export default function SalesPOS() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) return showToast('Cart is empty', 'error');
-
     try {
       const r = await fetch(`${API}/sales`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: cart.map(item => ({
-            product_id: item.product_id,
-            product_name: item.product_name,
-            hsn_code: item.hsn_code,
-            quantity: item.quantity,
-            sell_price: item.sell_price,
-            discount_percent: item.discount_percent
+            product_id: item.product_id, product_name: item.product_name, hsn_code: item.hsn_code,
+            quantity: item.quantity, sell_price: item.sell_price, discount_percent: item.discount_percent
           })),
-          customer_name: customer.name,
-          customer_phone: customer.phone,
-          customer_gstin: customer.gstin,
-          customer_address: customer.address,
-          payment_mode: paymentMode,
-          is_gst: isGst
+          customer_name: customer.name, customer_phone: customer.phone,
+          customer_gstin: customer.gstin, customer_address: customer.address,
+          payment_mode: paymentMode, is_gst: isGst
         })
       });
       const d = await r.json();
@@ -112,14 +96,9 @@ export default function SalesPOS() {
         setLastInvoice(d.data);
         showToast(`Sale completed! Invoice: ${d.data.invoice_number}`);
         setCart([]);
-        // Refresh products
         fetch(`${API}/products`).then(r => r.json()).then(d2 => { if (d2.success) setProducts(d2.data); });
-      } else {
-        showToast(d.error, 'error');
-      }
-    } catch (err) {
-      showToast('Checkout failed', 'error');
-    }
+      } else showToast(d.error, 'error');
+    } catch (err) { showToast('Checkout failed', 'error'); }
   };
 
   const handlePrintReceipt = useReactToPrint({
@@ -131,22 +110,16 @@ export default function SalesPOS() {
     <div>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
 
-      <h2 style={{marginBottom:20}}>Sales Point of Sale (POS)</h2>
+      <h2 style={{marginBottom: 20}}>Sales Point of Sale (POS)</h2>
 
-      <div style={{display:'grid', gridTemplateColumns:'1fr 400px', gap:16}}>
-        {/* Product selection */}
-        <div>
+      <div className="pos-layout">
+        <div className="pos-products">
           <div className="card">
             <div className="card-header"><h3>Products</h3></div>
             <div className="search-bar">
-              <input
-                placeholder="Search products by name, HSN, or barcode..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                autoFocus
-              />
+              <input placeholder="Search by name, HSN, or barcode..." value={search} onChange={e => setSearch(e.target.value)} autoFocus />
             </div>
-            <div style={{maxHeight:400, overflowY:'auto'}}>
+            <div className="pos-products-list">
               <table>
                 <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Action</th></tr></thead>
                 <tbody>
@@ -157,31 +130,26 @@ export default function SalesPOS() {
                           {p.image ? <img src={p.image} alt="" style={{width:30,height:30,borderRadius:4,objectFit:'cover'}} /> : <span style={{color:'#8a9aa8',fontWeight:600}}>NA</span>}
                           <div>
                             <strong style={{fontSize:13}}>{p.name}</strong>
-                            <div style={{fontSize:10,color:'#999'}}>HSN: {p.hsn_code}</div>
+                            <div style={{fontSize:10,color:'var(--text-muted)'}}>HSN: {p.hsn_code}</div>
                           </div>
                         </div>
                       </td>
                       <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
                       <td><span className={`badge ${p.quantity<=5?'badge-danger':'badge-success'}`}>{p.quantity}</span></td>
                       <td>
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => addToCart(p)}
-                          disabled={p.quantity <= 0}
-                        >
+                        <button className="btn btn-sm btn-success" onClick={() => addToCart(p)} disabled={p.quantity <= 0}>
                           + Add
                         </button>
                       </td>
                     </tr>
                   ))}
-                  {filteredProducts.length === 0 && <tr><td colSpan={4} style={{textAlign:'center',padding:20,color:'#999'}}>No products found</td></tr>}
+                  {filteredProducts.length === 0 && <tr><td colSpan={4} className="text-center text-muted" style={{padding:20}}>No products found</td></tr>}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
 
-        {/* Cart & Checkout */}
         <div>
           <div className="card">
             <div className="card-header"><h3>Cart ({cart.length} items)</h3></div>
@@ -196,7 +164,7 @@ export default function SalesPOS() {
                 <input value={customer.phone} onChange={e => setCustomer({...customer, phone: e.target.value})} />
               </div>
               <div className="form-group">
-                <label>GSTIN (auto-filled from company)</label>
+                <label>GSTIN</label>
                 <input value={customer.gstin} onChange={e => setCustomer({...customer, gstin: e.target.value})} placeholder={companyName} />
               </div>
             </div>
@@ -210,7 +178,7 @@ export default function SalesPOS() {
                   <option value="credit">Credit</option>
                 </select>
               </div>
-              <div className="form-group" style={{display:'flex', flexDirection:'column', justifyContent:'center'}}>
+              <div className="form-group">
                 <label>Bill Type</label>
                 <div style={{display:'flex', gap:4}}>
                   <button className={`btn btn-sm ${isGst ? 'btn-primary' : 'btn-outline'}`} onClick={() => setIsGst(true)}>GST</button>
@@ -219,72 +187,48 @@ export default function SalesPOS() {
               </div>
             </div>
 
-            <div style={{maxHeight:300, overflowY:'auto', marginBottom:12}}>
+            <div className="pos-cart-items">
               {cart.map(item => (
-                <div key={item.product_id} style={{display:'flex',gap:8,alignItems:'center',padding:'8px 0',borderBottom:'1px solid #eee'}}>
-                  <div style={{flex:1,fontSize:13}}>
+                <div key={item.product_id} className="pos-cart-item">
+                  <div className="pos-cart-info">
                     <strong>{item.product_name}</strong>
-                    <div style={{fontSize:11,color:'#777'}}>Rs.{item.sell_price} x {item.quantity}</div>
+                    <small>Rs.{item.sell_price} &times; {item.quantity}</small>
                   </div>
                   <input type="number" min="1" max={item.max_quantity} value={item.quantity}
                     onChange={e => updateCartItem(item.product_id, 'quantity', Math.min(Number(e.target.value), item.max_quantity))}
-                    style={{width:50,textAlign:'center'}} />
+                    className="pos-qty-input" />
                   <input type="number" min="0" max="100" value={item.discount_percent}
                     onChange={e => updateCartItem(item.product_id, 'discount_percent', Number(e.target.value))}
-                    style={{width:45,textAlign:'center'}} placeholder="Disc%" />
-                  <span style={{fontWeight:600,fontSize:13,width:80,textAlign:'right'}}>
+                    className="pos-disc-input" placeholder="%" />
+                  <span className="pos-item-total">
                     Rs.{((item.sell_price * item.quantity) * (1 - item.discount_percent / 100)).toFixed(2)}
                   </span>
-                  <button className="btn btn-sm btn-outline" onClick={() => removeFromCart(item.product_id)} style={{color:'#e74c3c'}}>✕</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => removeFromCart(item.product_id)} style={{color:'var(--danger)'}}>&times;</button>
                 </div>
               ))}
-              {cart.length === 0 && <div style={{textAlign:'center',color:'#999',padding:20}}>Cart is empty. Add products to begin.</div>}
+              {cart.length === 0 && <div className="text-center text-muted" style={{padding:20}}>Cart is empty. Add products to begin.</div>}
             </div>
 
-            <div style={{borderTop:'2px solid #eee',paddingTop:12}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:4}}>
-                <span>Subtotal:</span><span>Rs.{cartSubtotal.toFixed(2)}</span>
-              </div>
+            <div className="pos-totals">
+              <div className="pos-total-row"><span>Subtotal:</span><span>Rs.{cartSubtotal.toFixed(2)}</span></div>
               {cartDiscount > 0 && (
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:4}}>
-                  <span>Discount:</span><span style={{color:'#27ae60'}}>-Rs.{cartDiscount.toFixed(2)}</span>
-                </div>
+                <div className="pos-total-row"><span>Discount:</span><span style={{color:'var(--success)'}}>-Rs.{cartDiscount.toFixed(2)}</span></div>
               )}
-              {isGst && cgstTotal > 0 && (
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}>
-                  <span>CGST @9%:</span><span>Rs.{cgstTotal.toFixed(2)}</span>
-                </div>
-              )}
-              {isGst && sgstTotal > 0 && (
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}>
-                  <span>SGST @9%:</span><span>Rs.{sgstTotal.toFixed(2)}</span>
-                </div>
-              )}
-              {isGst && igstTotal > 0 && (
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:13}}>
-                  <span>IGST @18%:</span><span>Rs.{igstTotal.toFixed(2)}</span>
-                </div>
-              )}
-              <div style={{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16,marginTop:8,paddingTop:8,borderTop:'2px solid #2c3e50'}}>
-                <span>Grand Total:</span><span>Rs.{grandTotal.toFixed(2)}</span>
-              </div>
+              {isGst && cgstTotal > 0 && <div className="pos-total-row"><span>CGST @9%:</span><span>Rs.{cgstTotal.toFixed(2)}</span></div>}
+              {isGst && sgstTotal > 0 && <div className="pos-total-row"><span>SGST @9%:</span><span>Rs.{sgstTotal.toFixed(2)}</span></div>}
+              {isGst && igstTotal > 0 && <div className="pos-total-row"><span>IGST @18%:</span><span>Rs.{igstTotal.toFixed(2)}</span></div>}
+              <div className="pos-grand-total"><span>Grand Total:</span><span>Rs.{grandTotal.toFixed(2)}</span></div>
             </div>
 
-            <button
-              className="btn btn-success btn-lg"
-              style={{width:'100%',marginTop:12}}
-              onClick={handleCheckout}
-              disabled={cart.length === 0}
-            >
+            <button className="btn btn-success btn-lg pos-checkout-btn" onClick={handleCheckout} disabled={cart.length === 0}>
               Complete Sale - Rs.{grandTotal.toFixed(2)}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Last invoice */}
       {lastInvoice && (
-        <div className="card" style={{marginTop:16, borderLeft:'4px solid #27ae60'}} ref={printRef}>
+        <div className="card pos-invoice-card" ref={printRef}>
           <div className="card-header">
             <h3>Invoice Generated: {lastInvoice.invoice_number}</h3>
           </div>
@@ -310,14 +254,10 @@ export default function SalesPOS() {
             {lastInvoice.igst_total > 0 && <p><strong>IGST @18%:</strong> Rs.{Number(lastInvoice.igst_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</p>}
             <h3>Grand Total: Rs.{Number(lastInvoice.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</h3>
           </div>
-          <div style={{display:'flex', gap:8, marginTop:8}}>
+          <div className="pos-invoice-actions">
             <button className="btn btn-success" onClick={handlePrintReceipt}>Print Receipt</button>
-            <button className="btn btn-info" onClick={() => window.open(`${API}/sales/${lastInvoice.id}/receipt`, '_blank')}>
-              Download Receipt PDF
-            </button>
-            <button className="btn btn-warning" onClick={() => window.open(`${API}/gst/bill/${lastInvoice.id}`, '_blank')}>
-              Download GST Bill PDF
-            </button>
+            <button className="btn btn-info" onClick={() => window.open(`${API}/sales/${lastInvoice.id}/receipt`, '_blank')}>Download Receipt PDF</button>
+            <button className="btn btn-warning" onClick={() => window.open(`${API}/gst/bill/${lastInvoice.id}`, '_blank')}>Download GST Bill PDF</button>
           </div>
         </div>
       )}
