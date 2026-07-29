@@ -103,6 +103,7 @@ app.get('/api/testdb', async (req, res) => {
 
 app.get('/api/category', async (req, res) => {
   try {
+    if (!req.query.id) { res.status(400).json({ success: false, error: 'id query param required' }); return; }
     const cat = await db.get('SELECT * FROM categories WHERE id = ?', [req.query.id]);
     if (!cat) { res.status(404).json({ success: false, error: 'Not found' }); return; }
     cat.subcategories = await db.all('SELECT * FROM subcategories WHERE category_id = ? ORDER BY id', [cat.id]);

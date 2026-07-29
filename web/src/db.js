@@ -127,7 +127,8 @@ function toRows(result) {
 
 async function query(sql, params = []) {
   const db = await getDb();
-  const result = await db.execute({ sql, args: params });
+  const safeParams = params.map(p => p === undefined ? null : p);
+  const result = await db.execute({ sql, args: safeParams });
   return result.rows || [];
 }
 
