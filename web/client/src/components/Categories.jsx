@@ -135,7 +135,7 @@ export default function Categories() {
                   )}
                 </div>
               ))}
-              {(!cat.subcategories || cat.subcategories.length < 6) && (
+              {(
                 <div style={{marginTop:8}}>
                   {addSubCat === cat.id ? (
                     <div style={{display:'flex', gap:6}}>
