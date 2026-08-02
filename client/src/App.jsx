@@ -6,15 +6,11 @@ import Categories from './components/Categories';
 import SalesPOS from './components/SalesPOS';
 import Purchases from './components/Purchases';
 import GSTInvoices from './components/GSTInvoices';
-import BarcodeManager from './components/BarcodeManager';
 import AIChat from './components/AIChat';
 import Settings from './components/Settings';
 import Reports from './components/Reports';
-import CRM from './components/CRM';
 import Servicing from './components/Servicing';
-import Suppliers from './components/Suppliers';
 import Accounting from './components/Accounting';
-import Brands from './components/Brands';
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -37,19 +33,18 @@ class ErrorBoundary extends Component {
 
 const TAB_ITEMS = [
   { path: '/', label: 'Dashboard', icon: '\u25A3' },
-  { path: '/products', label: 'Products', icon: '\u2693' },
   { path: '/pos', label: 'Sales', icon: '\u2699' },
+  { path: '/products', label: 'Products', icon: '\u2693' },
   { path: '/settings', label: 'Settings', icon: '\u2699' },
 ];
 const MORE_ITEMS = [
-  { path: '/categories', label: 'Categories', icon: 'C' },
-  { path: '/crm', label: 'CRM', icon: 'M' },
-  { path: '/invoices', label: 'Invoices', icon: 'I' },
   { path: '/purchases', label: 'Purchases', icon: 'B' },
-  { path: '/suppliers', label: 'Suppliers', icon: 'S' },
+  { path: '/invoices', label: 'Invoices', icon: 'I' },
   { path: '/reports', label: 'Reports', icon: 'T' },
-  { path: '/barcode', label: 'Barcodes', icon: 'B' },
+  { path: '/categories', label: 'Categories', icon: 'C' },
+  { path: '/accounting', label: 'Accounting', icon: '$' },
   { path: '/services', label: 'Servicing', icon: 'V' },
+  { path: '/ai', label: 'AI Assistant', icon: 'A' },
 ];
 
 function App() {
@@ -154,15 +149,11 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/products" element={<Products />} />
               <Route path="/categories" element={<Categories />} />
-              <Route path="/barcode" element={<BarcodeManager />} />
               <Route path="/pos" element={<SalesPOS />} />
               <Route path="/purchases" element={<Purchases />} />
               <Route path="/invoices" element={<GSTInvoices />} />
               <Route path="/reports" element={<Reports />} />
-              <Route path="/crm" element={<CRM />} />
-              <Route path="/suppliers" element={<Suppliers />} />
               <Route path="/accounting" element={<Accounting />} />
-              <Route path="/brands" element={<Brands />} />
               <Route path="/services" element={<Servicing />} />
               <Route path="/ai" element={<AIChat />} />
               <Route path="/settings" element={<Settings />} />

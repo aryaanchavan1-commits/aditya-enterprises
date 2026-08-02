@@ -1,0 +1,25 @@
+name: Keep Alive
+
+# Pings the production API and frontend every 10 minutes so the Render
+# free-tier instance never spins down after 15 minutes of inactivity.
+# Runs on GitHub's free cron (no external uptime service required).
+# The request itself is what wakes the server, so results are logged but
+# never treated as failures (a cold start can return 502/000 briefly).
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render API
+        run: |
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 https://aditya-enterprises-umgw.onrender.com/api/health)
+          echo "Render /api/health -> $code"
+      - name: Ping Vercel frontend
+        run: |
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 60 https://aditya-enterprises-erp.vercel.app/api/health)
+          echo "Vercel /api/health -> $code"

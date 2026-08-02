@@ -167,26 +167,6 @@ app.delete('/api/subcategory', async (req, res) => {
   catch (err) { fail(res, err.message); }
 });
 
-app.get('/api/status', async (req, res) => {
-  let dbOk = false;
-  let dbError = null;
-  try {
-    const db = require('../src/db');
-    await db.getDb();
-    dbOk = true;
-  } catch (e) { dbError = e.message; }
-  res.json({
-    success: true,
-    data: {
-      server: 'ok',
-      database: dbOk ? 'turso' : 'error',
-      db_connected: dbOk,
-      db_error: dbError,
-      environment: IS_PRODUCTION ? 'production' : 'development',
-    },
-  });
-});
-
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {
     return res.json({ success: false, error: `API route not found: ${req.method} ${req.originalUrl}` });
@@ -227,14 +207,16 @@ async function start() {
       console.log(`Aditya Enterprises ERP Web running on http://localhost:${PORT}`);
     });
 
-    // Keep-alive every 10 min — prevents Render free-tier spin-down after 15min inactivity
+    // Keep-alive every 10 min - prevents Render free-tier spin-down after 15min inactivity.
+    // Pings Render directly (via RENDER_EXTERNAL_URL if available) plus the Vercel frontend
+    // (whose /api rewrite reaches Render too). The GitHub Actions cron is the primary guard.
     const https = require('https');
     const KEEP_URLS = [
-      process.env.RENDER_EXTERNAL_URL,
+      process.env.RENDER_EXTERNAL_URL || 'https://aditya-enterprises-umgw.onrender.com',
       'https://aditya-enterprises-erp.vercel.app',
-    ].filter(Boolean);
+    ];
     function ping(url) {
-      https.get(`${url.replace(/\/+$/,'')}/api/health`, r => { r.resume(); }).on('error', () => {});
+      https.get(`${url.replace(/\/+$/, '')}/api/health`, r => { r.resume(); }).on('error', () => {});
     }
     setInterval(() => { KEEP_URLS.forEach(ping); }, 10 * 60 * 1000);
   }
