@@ -3,6 +3,7 @@ import { api, exportToExcel, readExcelFile } from '../api';
 import { useReactToPrint } from 'react-to-print';
 import { barcodeDataUrl } from '../barcode';
 import { printSmartLabel } from '../printer';
+import CameraScanner from './CameraScanner';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -14,6 +15,10 @@ export default function Products() {
   const [subcategories, setSubcategories] = useState([]);
   const [toast, setToast] = useState(null);
   const fileRef = useRef(null);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [cameFromScan, setCameFromScan] = useState(false);
+  const scanBarcodeRef = useRef(null);
+  const scanNameRef = useRef(null);
 
   const emptyProduct = {
     name: '', image: '', quantity: 0, description: '', hsn_code: '',
@@ -44,11 +49,13 @@ export default function Products() {
     setEditProduct(null);
     setForm(emptyProduct);
     setSubcategories([]);
+    setCameFromScan(false);
     setShowModal(true);
   };
 
   const openEdit = (p) => {
     setEditProduct(p);
+    setCameFromScan(false);
     setForm({ ...p, category_id: p.category_id || '', subcategory_id: p.subcategory_id || '' });
     if (p.category_id) {
       const cat = categories.find(c => c.id == p.category_id);
@@ -79,6 +86,40 @@ export default function Products() {
     } catch (err) { showToast('Image upload failed', 'error'); }
   };
 
+  // "Scan & Add" flow: camera (or a Bluetooth keyboard-wedge scanner typing
+  // into the focused barcode field) fills in the barcode, then the user adds
+  // name/price and saves. Label auto-prints on save.
+  const startScanAdd = () => setScanOpen(true);
+
+  const handleProductScan = async (code) => {
+    setScanOpen(false);
+    const clean = String(code || '').trim();
+    if (!clean) return;
+    try {
+      const existing = await api('/barcode/' + encodeURIComponent(clean));
+      if (existing.success && existing.data?.id) {
+        const p = existing.data;
+        showToast(`Already exists: ${p.name} (stock: ${p.quantity || 0})`);
+        setLabelProduct(p);
+        setLabelQty(Math.max(1, Math.min(100, Number(p.quantity) || 1)));
+        return;
+      }
+    } catch (e) {}
+    setEditProduct(null);
+    setForm({ ...emptyProduct, barcode: clean });
+    setSubcategories([]);
+    setCameFromScan(true);
+    setShowModal(true);
+    setTimeout(() => scanBarcodeRef.current?.focus(), 150);
+  };
+
+  const handleScanBarcodeKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      scanNameRef.current?.focus();
+    }
+  };
+
   const handleSave = async () => {
     if (!form.name) return showToast('Product name is required', 'error');
     const payload = { ...form };
@@ -89,6 +130,10 @@ export default function Products() {
       showToast(editProduct ? 'Product updated' : 'Product created');
       setShowModal(false);
       loadProducts();
+      if (cameFromScan) {
+        // Keep the scanner open for the next product - quick stock entry.
+        setTimeout(() => setScanOpen(true), 400);
+      }
       // New product -> print its barcode label automatically through
       // whichever printer is online (USB bridge first, else Bluetooth).
       if (!editProduct && d.data?.barcode) {
@@ -222,6 +267,7 @@ export default function Products() {
           <button className="btn btn-sm btn-outline hide-mobile" onClick={() => fileRefProducts.current?.click()}>Import</button>
           <input ref={fileRefProducts} type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={handleImportProducts} />
           <button className="btn btn-sm btn-outline hide-mobile" onClick={handleGenerateAllBarcodes} title="Generate barcodes for products without one">Barcode</button>
+          <button className="btn btn-sm btn-info" onClick={startScanAdd} title="Scan a barcode with the camera or a Bluetooth scanner to add the product">Scan & Add</button>
           <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ Add Product</button>
         </div>
       </div>
@@ -333,12 +379,13 @@ export default function Products() {
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal">
-            <h3>{editProduct ? 'Edit Product' : 'Add New Product'}</h3>
+            <h3>{editProduct ? 'Edit Product' : cameFromScan ? `Add Product - Barcode: ${form.barcode || '(scanned)'}` : 'Add New Product'}</h3>
+            {cameFromScan && <p style={{fontSize:12, color:'#777', marginTop:-6}}>Barcode pre-filled from scan. Save, then scan the next product - or scan again with your Bluetooth scanner into the Barcode field.</p>}
 
             <div className="form-row">
               <div className="form-group">
                 <label>Product Name *</label>
-                <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Product name" />
+                <input ref={scanNameRef} value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Product name" />
               </div>
               <div className="form-group">
                 <label>HSN Code</label>
@@ -387,7 +434,7 @@ export default function Products() {
               </div>
               <div className="form-group">
                 <label>Barcode</label>
-                <input value={form.barcode} onChange={e => setForm({...form, barcode: e.target.value})} placeholder="Auto-generated if empty" />
+                <input ref={scanBarcodeRef} value={form.barcode} onChange={e => setForm({...form, barcode: e.target.value})} onFocus={e => e.target.select()} onKeyDown={handleScanBarcodeKeyDown} placeholder="Auto-generated if empty" />
               </div>
             </div>
 
@@ -422,6 +469,13 @@ export default function Products() {
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSave}>{editProduct ? 'Update' : 'Create'} Product</button>
             </div>
+          </div>
+        </div>
+      )}
+      {scanOpen && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setScanOpen(false)}>
+          <div className="modal" style={{maxWidth:450}}>
+            <CameraScanner onScan={handleProductScan} onClose={() => setScanOpen(false)} />
           </div>
         </div>
       )}
