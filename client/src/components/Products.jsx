@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api, exportToExcel, readExcelFile } from '../api';
 import { useReactToPrint } from 'react-to-print';
 import { barcodeDataUrl } from '../barcode';
+import { printViaBridge } from '../printer';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -113,6 +114,40 @@ export default function Products() {
   };
 
   const labelBarcode = labelProduct?.barcode ? barcodeDataUrl(labelProduct.barcode, { maxWidthPx: 900, heightPx: 300 }) : '';
+
+  const [bridgeOnline, setBridgeOnline] = useState(false);
+  const [labelPrinting, setLabelPrinting] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      fetch('/api/print/bridge/status').then(r => r.json()).then(d => {
+        if (d.success) setBridgeOnline(!!d.data.bridgeOnline);
+      }).catch(() => {});
+    };
+    check();
+    const int = setInterval(check, 20000);
+    return () => clearInterval(int);
+  }, []);
+
+  const handleUsbLabels = async () => {
+    if (!labelProduct?.barcode) return;
+    if (!bridgeOnline) { showToast('USB print bridge is offline. See Settings → Printers for setup.', 'error'); return; }
+    setLabelPrinting(true);
+    try {
+      await printViaBridge('label', {
+        name: labelProduct.name,
+        price: Number(labelProduct.sell_price || 0),
+        barcode: labelProduct.barcode,
+        sku: labelProduct.serial_number || labelProduct.barcode,
+        copies: labelQty
+      });
+      showToast(`${labelQty} label(s) sent to USB printer`);
+    } catch (err) {
+      showToast('Print failed: ' + err.message, 'error');
+    } finally {
+      setLabelPrinting(false);
+    }
+  };
 
   const handleGenerateBarcode = async (id) => {
     const d = await api('/barcode/generate/' + id, { method: 'POST', body: {} });
@@ -282,6 +317,11 @@ export default function Products() {
             </div>
             <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:16}}>
               <button className="btn btn-outline" onClick={() => { setLabelProduct(null); setLabelQty(1); }}>Close</button>
+              {bridgeOnline && (
+                <button className="btn btn-warning" onClick={handleUsbLabels} disabled={labelPrinting}>
+                  {labelPrinting ? 'Printing...' : `Print ${labelQty} via USB`}
+                </button>
+              )}
               <button className="btn btn-primary" onClick={handlePrintLabel}>Print {labelQty} Label{labelQty > 1 ? 's' : ''}</button>
             </div>
           </div>

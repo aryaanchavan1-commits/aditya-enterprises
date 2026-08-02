@@ -269,6 +269,20 @@ export async function sendBytes(bytes) {
   }
 }
 
+// Send a print job to the local USB print bridge via the server queue.
+// The bridge app on the shop PC picks it up and prints it raw (ESC/POS)
+// to the USB printer - no browser print dialog, no driver needed.
+export async function printViaBridge(type, payload) {
+  const r = await fetch('/api/print/job', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, payload })
+  });
+  const d = await r.json();
+  if (!d.success) throw new Error(d.error || 'Could not send print job');
+  return d.data;
+}
+
 // ---------------- ESC/POS receipt builder (58mm = 32 chars, 80mm = 42) ----------------
 
 const ESC = 0x1b;

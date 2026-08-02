@@ -55,6 +55,7 @@ async function initSchema() {
     `CREATE TABLE IF NOT EXISTS cash_book (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, description TEXT NOT NULL, type TEXT NOT NULL CHECK(type IN ('in','out')), amount REAL NOT NULL, category TEXT DEFAULT '', reference TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, description TEXT NOT NULL, category TEXT DEFAULT '', amount REAL NOT NULL, payment_mode TEXT DEFAULT 'cash', reference TEXT DEFAULT '', notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS incomes (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, description TEXT NOT NULL, category TEXT DEFAULT '', amount REAL NOT NULL, payment_mode TEXT DEFAULT 'cash', reference TEXT DEFAULT '', notes TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS print_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, payload TEXT DEFAULT '{}', status TEXT DEFAULT 'pending', error TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, claimed_at DATETIME, done_at DATETIME)`,
   ];
   for (const sql of stmts) {
     try { await turso.execute(sql); } catch (e) { console.warn('Schema create:', e.message); }
@@ -75,6 +76,7 @@ async function initSchema() {
     { table: 'cash_book', cols: ['date', 'description', 'type', 'amount', 'category', 'reference', 'created_at'] },
     { table: 'expenses', cols: ['date', 'description', 'category', 'amount', 'payment_mode', 'reference', 'notes', 'created_at'] },
     { table: 'incomes', cols: ['date', 'description', 'category', 'amount', 'payment_mode', 'reference', 'notes', 'created_at'] },
+    { table: 'print_jobs', cols: ['type', 'payload', 'status', 'error', 'created_at', 'claimed_at', 'done_at'] },
   ];
   const migs = [];
   for (const t of allCols) {

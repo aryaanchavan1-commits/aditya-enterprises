@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import CameraScanner from './CameraScanner';
-import { bluetoothSupported, pairPrinter, getSavedPrinter, sendBytes, buildEscPos } from '../printer';
+import { bluetoothSupported, pairPrinter, getSavedPrinter, sendBytes, buildEscPos, printViaBridge } from '../printer';
 
 const API = '/api';
 
@@ -17,6 +17,7 @@ export default function SalesPOS() {
   const [showCamera, setShowCamera] = useState(false);
   const [btPrinter, setBtPrinter] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
+  const [bridgeOnline, setBridgeOnline] = useState(false);
   const thermalRef = useRef(null);
   const searchRef = useRef(null);
 
@@ -31,7 +32,38 @@ export default function SalesPOS() {
       if (d.success) setCompanyName(d.data.company_name || 'Aditya Enterprises');
     });
     setBtPrinter(getSavedPrinter());
+    const checkBridge = () => {
+      fetch(`${API}/print/bridge/status`).then(r => r.json()).then(d => {
+        if (d.success) setBridgeOnline(!!d.data.bridgeOnline);
+      }).catch(() => {});
+    };
+    checkBridge();
+    const bridgeInt = setInterval(checkBridge, 15000);
+    return () => clearInterval(bridgeInt);
   }, []);
+
+  const handleUsbPrint = async () => {
+    if (!lastInvoice) return showToast('Complete a sale first', 'error');
+    if (!bridgeOnline) return showToast('USB print bridge is offline. See Settings → Printers for setup.', 'error');
+    setBtBusy(true);
+    try {
+      await printViaBridge('receipt', {
+        companyName,
+        invoiceNumber: lastInvoice.invoice_number,
+        date: lastInvoice.sale_date,
+        customer: lastInvoice.customer_name,
+        items: lastInvoice.items || [],
+        subtotal: Number(lastInvoice.subtotal || 0),
+        gstAmount: Number((lastInvoice.cgst_total || 0) + (lastInvoice.sgst_total || 0) + (lastInvoice.igst_total || 0)),
+        grandTotal: Number(lastInvoice.grand_total || 0)
+      });
+      showToast('Receipt sent to USB printer');
+    } catch (err) {
+      showToast('Print failed: ' + (err.message || 'connection error'), 'error');
+    } finally {
+      setBtBusy(false);
+    }
+  };
 
   const connectBluetoothPrinter = async () => {
     if (!bluetoothSupported()) { showToast('Web Bluetooth needs Chrome/Edge over HTTPS', 'error'); return; }
@@ -261,6 +293,11 @@ export default function SalesPOS() {
               {!btPrinter && (
                 <button className="btn btn-sm btn-outline" onClick={connectBluetoothPrinter} disabled={btBusy}>
                   {btBusy ? 'Working...' : 'Pair Bluetooth Printer'}
+                </button>
+              )}
+              {bridgeOnline && (
+                <button className="btn btn-sm btn-warning" onClick={handleUsbPrint} disabled={btBusy}>
+                  Print via USB
                 </button>
               )}
               <button className="btn btn-sm btn-success" onClick={handleBluetoothPrint} disabled={btBusy}>

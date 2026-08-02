@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { bluetoothSupported, pairPrinter, reconnectPrinter, sendBytes, buildEscPosTest, getSavedPrinter, clearSavedPrinter, disconnectActive, isConnected } from '../printer';
+import { bluetoothSupported, pairPrinter, reconnectPrinter, sendBytes, buildEscPosTest, getSavedPrinter, clearSavedPrinter, disconnectActive, isConnected, printViaBridge } from '../printer';
 
 const API = '/api';
 
@@ -12,10 +12,40 @@ export default function Settings() {
   const [detectedScanners, setDetectedScanners] = useState([]);
   const [btPrinter, setBtPrinter] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
+  const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, lastJob: null });
+  const [bridgeBusy, setBridgeBusy] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  useEffect(() => {
+    const checkBridge = () => {
+      fetch(`${API}/print/bridge/status`).then(r => r.json()).then(d => {
+        if (d.success) setBridgeStatus(d.data);
+      }).catch(() => {});
+    };
+    checkBridge();
+    const int = setInterval(checkBridge, 8000);
+    return () => clearInterval(int);
+  }, []);
+
+  const testBridgePrint = async () => {
+    setBridgeBusy(true);
+    try {
+      await printViaBridge('test', { companyName: settings.company_name || 'Aditya Enterprises' });
+      showToast('Print job sent to USB printer');
+      setTimeout(() => {
+        fetch(`${API}/print/bridge/status`).then(r => r.json()).then(d => {
+          if (d.success && d.data.lastJob?.status === 'failed') showToast('USB print failed: ' + (d.data.lastJob.error || 'unknown'), 'error');
+        }).catch(() => {});
+      }, 5000);
+    } catch (err) {
+      showToast('Could not send print job: ' + err.message, 'error');
+    } finally {
+      setBridgeBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -291,6 +321,32 @@ export default function Settings() {
           )}
 
           <h4 style={{fontSize:14, marginTop:20, marginBottom:8}}>Printers</h4>
+
+          <div style={{marginBottom:12, padding:10, background:'#f8f9fa', borderRadius:8, border:'1px solid #eee'}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+              <span style={{fontSize:13, fontWeight:600}}>USB Printer (Print Bridge) - most reliable</span>
+              <span className={`badge ${bridgeStatus.bridgeOnline ? 'badge-success' : 'badge-danger'}`} style={{fontSize:10}}>
+                {bridgeStatus.bridgeOnline ? 'Bridge Online' : 'Bridge Offline'}
+              </span>
+            </div>
+            <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:6}}>
+              <button className="btn btn-sm btn-success" onClick={testBridgePrint} disabled={bridgeBusy}>
+                {bridgeBusy ? 'Sending...' : 'Test Print via USB'}
+              </button>
+            </div>
+            {bridgeStatus.lastJob?.error && (
+              <div style={{fontSize:11, color:'#e74c3c', marginBottom:4}}>Last job failed: {bridgeStatus.lastJob.error}</div>
+            )}
+            <div style={{fontSize:11, color:'#777', lineHeight:1.5}}>
+              Prints directly to the USB printer (ESC/POS) - no dialog, no driver issues. One-time setup:
+              <ol style={{margin:'4px 0 0 16px', padding:0}}>
+                <li>On the shop PC: right-click your Posiflow in <strong>Windows Settings → Bluetooth &amp; devices → Printers</strong> → <strong>Printer properties → Sharing</strong> → tick "Share this printer".</li>
+                <li>Install Node.js (nodejs.org) on that PC if not present.</li>
+                <li>Copy the <strong>print-bridge</strong> folder from the project onto the PC, run <strong>start-bridge.bat</strong> and keep it open.</li>
+              </ol>
+              When the bridge is running, the green badge above turns Online and "Print via USB" appears in the Sales page.
+            </div>
+          </div>
 
           <div style={{marginBottom:12, padding:10, background:'#f8f9fa', borderRadius:8, border:'1px solid #eee'}}>
             <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>Bluetooth Printer (direct printing, no dialog)</div>

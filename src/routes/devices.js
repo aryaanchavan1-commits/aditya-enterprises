@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { execFile } = require('child_process');
+const { get, all, run } = require('../db');
 
 const isWindows = process.platform === 'win32';
 
@@ -70,6 +71,58 @@ router.post('/print-test', (req, res) => {
     }
     res.json({ success: true, message: `Test print sent to ${name}` });
   });
+});
+
+// ---------- Print job queue (for the local USB print bridge) ----------
+
+// The web app creates a job here; the bridge app running on the shop PC
+// polls for jobs and prints them raw (ESC/POS) to the USB printer.
+
+router.post('/print/job', async (req, res) => {
+  try {
+    const { type, payload } = req.body || {};
+    if (!['receipt', 'label', 'test'].includes(type)) { res.json({ success: false, error: 'Invalid print job type' }); return; }
+    const r = await run('INSERT INTO print_jobs (type, payload) VALUES (?, ?)', [type, JSON.stringify(payload || {})]);
+    res.json({ success: true, data: { id: r.id || r.lastID, type } });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
+// Polled by the bridge. Claims one pending job and reports heartbeat.
+router.get('/print/job/next', async (req, res) => {
+  try {
+    await run("DELETE FROM print_jobs WHERE status IN ('done','failed') AND created_at < datetime('now', '-1 hour')");
+    const job = await get("SELECT * FROM print_jobs WHERE status = 'pending' ORDER BY id LIMIT 1");
+    if (job) {
+      await run("UPDATE print_jobs SET status = 'claimed', claimed_at = datetime('now') WHERE id = ?", [job.id]);
+      let payload = {};
+      try { payload = JSON.parse(job.payload || '{}'); } catch (e) {}
+      res.json({ success: true, data: { id: job.id, type: job.type, payload } });
+      return;
+    }
+    await run("INSERT INTO settings (key, value) VALUES ('bridge_last_seen', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+    res.json({ success: true, data: null });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
+// Called by the bridge after printing.
+router.post('/print/job/:id/status', async (req, res) => {
+  try {
+    const { status, error } = req.body || {};
+    const ok = status === 'done' || status === 'failed';
+    await run(`UPDATE print_jobs SET status = ?, error = ?, done_at = datetime('now') WHERE id = ?`, [ok ? status : 'failed', (error || '').slice(0, 500), req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
+// Status for the Settings page: is the bridge running?
+router.get('/print/bridge/status', async (req, res) => {
+  try {
+    const seen = await get("SELECT value FROM settings WHERE key = 'bridge_last_seen'");
+    const lastJob = await get("SELECT type, status, error, created_at, done_at FROM print_jobs ORDER BY id DESC LIMIT 1");
+    const lastSeen = seen?.value ? new Date(seen.value.replace(' ', 'T') + 'Z') : null;
+    const online = !!lastSeen && (Date.now() - lastSeen.getTime()) < 20000;
+    res.json({ success: true, data: { bridgeOnline: online, lastSeen: lastSeen?.toISOString() || null, lastJob } });
+  } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 module.exports = router;
