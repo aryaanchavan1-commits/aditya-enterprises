@@ -503,30 +503,30 @@ tbody tr:active td { background: #f0f2f5; }
 .thermal-receipt .tr-total { text-align: center; font-weight: 700; font-size: 12px; margin: 4px 0; }
 .thermal-receipt .tr-footer { text-align: center; font-size: 9px; color: #666; margin-top: 4px; }
 
-/* ===== PRODUCT LABEL (4x6) ===== */
-.label-print-area { padding: 10px; }
+/* ===== PRODUCT LABEL (58mm x 40mm thermal) ===== */
+.label-print-area { padding: 0; }
 .label-card {
-  width: 4in; height: 6in; margin: 0 auto; padding: 20px;
-  border: 1px solid #ddd; border-radius: 8px;
+  width: 58mm; min-height: 40mm; margin: 0 auto; padding: 2mm;
+  border: none;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; font-family: Arial, sans-serif;
 }
-.label-card .label-name { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
-.label-card .label-price { font-size: 28px; font-weight: 700; color: #2c3e50; margin-bottom: 16px; }
-.label-card .label-barcode { max-width: 80%; height: auto; margin-bottom: 10px; }
+.label-card .label-name { font-size: 10px; font-weight: 700; margin-bottom: 1mm; max-width: 54mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.label-card .label-price { font-size: 12px; font-weight: 700; color: #2c3e50; margin-bottom: 1mm; }
+.label-card .label-barcode { width: 52mm; height: auto; margin-bottom: 1mm; }
 .label-card .label-barcode-text { font-family: 'Libre Barcode 128', monospace; font-size: 28px; letter-spacing: 1px; margin-bottom: 10px; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 3.5in; }
-.label-card .label-sku { font-size: 11px; color: #888; }
+.label-card .label-sku { font-size: 7px; color: #555; }
 @media print {
   body * { visibility: hidden; }
   .label-print-area, .label-print-area * { visibility: visible; }
-  .label-print-area { position: absolute; left: 0; top: 0; width: 4in; }
-  .label-card { border: 1px solid #ddd; width: 3.9in; min-height: 3in; padding: 0.2in; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .label-card .label-name { font-size: 22px; }
-  .label-card .label-price { font-size: 28px; }
-  .label-card .label-barcode { max-width: 90%; }
+  .label-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+  .label-card { border: none; width: 58mm; min-height: 40mm; padding: 2mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .label-card .label-name { font-size: 10px; }
+  .label-card .label-price { font-size: 12px; }
+  .label-card .label-barcode { width: 52mm; height: auto; }
   .label-card .label-barcode-text { font-size: 32px; }
-  .label-card { page-break-after: always; }
-  .label-card:last-child { page-break-after: auto; }
+  .label-card { page-break-after: always; break-after: page; }
+  .label-card:last-child { page-break-after: auto; break-after: auto; }
 }
 
 /* ===== PURCHASES ===== */

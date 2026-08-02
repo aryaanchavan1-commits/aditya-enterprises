@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api, exportToExcel } from '../api';
 import { useReactToPrint } from 'react-to-print';
+import { barcodeDataUrl } from '../barcode';
 
 export default function BarcodeManager() {
   const [products, setProducts] = useState([]);
@@ -25,6 +26,15 @@ export default function BarcodeManager() {
   useEffect(() => { loadProducts(); }, [search]);
 
   const handlePrintLabel = useReactToPrint({ contentRef: labelRef, documentTitle: 'Product_Label' });
+
+  const openLabel = (p) => {
+    setLabelProduct(p);
+    // One label per unit in stock, so multi-quantity products get a
+    // complete set of identical, perfect labels.
+    setLabelQty(Math.max(1, Math.min(100, Number(p.quantity) || 1)));
+  };
+
+  const labelBarcode = labelProduct?.barcode ? barcodeDataUrl(labelProduct.barcode, { maxWidthPx: 900, heightPx: 300 }) : '';
 
   const handleGenerateBarcode = async (id) => {
     const d = await api('/barcode/generate/' + id, { method: 'POST', body: {} });
@@ -88,7 +98,7 @@ export default function BarcodeManager() {
                     <td>Rs.{Number(p.sell_price).toLocaleString('en-IN')}</td>
                     <td>
                       {p.barcode ? (
-                        <button className="btn btn-sm btn-primary" onClick={() => { setLabelProduct(p); setLabelQty(1); }}>Label</button>
+                        <button className="btn btn-sm btn-primary" onClick={() => openLabel(p)}>Label</button>
                       ) : (
                         <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Generate</button>
                       )}
@@ -125,7 +135,7 @@ export default function BarcodeManager() {
               </div>
               <div className="mobile-card-actions">
                 {p.barcode
-                  ? <button className="btn btn-sm btn-primary" onClick={() => { setLabelProduct(p); setLabelQty(1); }}>Label</button>
+                  ? <button className="btn btn-sm btn-primary" onClick={() => openLabel(p)}>Label</button>
                   : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Generate</button>}
               </div>
             </div>
@@ -146,11 +156,11 @@ export default function BarcodeManager() {
             </div>
             <div ref={labelRef} className="label-print-area">
               {Array.from({ length: labelQty }).map((_, i) => (
-                <div key={i} className="label-card" style={i > 0 ? { marginTop: 20, pageBreakBefore: 'always' } : {}}>
+                <div key={i} className="label-card">
                   <div className="label-name">{labelProduct.name}</div>
                   <div className="label-price">Rs. {Number(labelProduct.sell_price).toLocaleString('en-IN')}</div>
-                  {labelProduct.barcode_image
-                    ? <img src={labelProduct.barcode_image} alt="barcode" className="label-barcode" />
+                  {labelBarcode
+                    ? <img src={labelBarcode} alt="barcode" className="label-barcode" />
                     : labelProduct.barcode
                       ? <div className="label-barcode-text">{labelProduct.barcode}</div>
                       : null}

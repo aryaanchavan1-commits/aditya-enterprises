@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api, exportToExcel, readExcelFile } from '../api';
 import { useReactToPrint } from 'react-to-print';
+import { barcodeDataUrl } from '../barcode';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -103,6 +104,15 @@ export default function Products() {
   const [labelQty, setLabelQty] = useState(1);
   const labelRef = useRef(null);
   const handlePrintLabel = useReactToPrint({ contentRef: labelRef, documentTitle: 'Product_Label' });
+
+  const openLabel = (p) => {
+    setLabelProduct(p);
+    // One label per unit in stock, so multi-quantity products get a
+    // complete set of identical, perfect labels.
+    setLabelQty(Math.max(1, Math.min(100, Number(p.quantity) || 1)));
+  };
+
+  const labelBarcode = labelProduct?.barcode ? barcodeDataUrl(labelProduct.barcode, { maxWidthPx: 900, heightPx: 300 }) : '';
 
   const handleGenerateBarcode = async (id) => {
     const d = await api('/barcode/generate/' + id, { method: 'POST', body: {} });
@@ -238,7 +248,7 @@ export default function Products() {
               <div className="mobile-card-actions">
                 <button className="btn btn-sm btn-info" onClick={() => openEdit(p)}>Edit</button>
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Delete</button>
-                {p.barcode ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)}>Label</button> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Barcode</button>}
+                {p.barcode ? <button className="btn btn-sm btn-outline" onClick={() => openLabel(p)}>Label</button> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)}>Barcode</button>}
               </div>
             </div>
           ))}
@@ -258,11 +268,11 @@ export default function Products() {
             </div>
             <div ref={labelRef} className="label-print-area">
               {Array.from({ length: labelQty }).map((_, i) => (
-                <div key={i} className="label-card" style={i > 0 ? {marginTop:20, pageBreakBefore:'always'} : {}}>
+                <div key={i} className="label-card">
                   <div className="label-name">{labelProduct.name}</div>
                   <div className="label-price">Rs. {Number(labelProduct.sell_price).toLocaleString('en-IN')}</div>
-                  {labelProduct.barcode_image
-                    ? <img src={labelProduct.barcode_image} alt="barcode" className="label-barcode" />
+                  {labelBarcode
+                    ? <img src={labelBarcode} alt="barcode" className="label-barcode" />
                     : labelProduct.barcode
                       ? <div className="label-barcode-text">{labelProduct.barcode}</div>
                       : null}
