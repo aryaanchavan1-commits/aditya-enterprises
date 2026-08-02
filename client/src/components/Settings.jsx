@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { bluetoothSupported, pairPrinter, reconnectPrinter, sendBytes, buildEscPosTest, getSavedPrinter, clearSavedPrinter, disconnectActive, isConnected } from '../printer';
 
 const API = '/api';
 
@@ -9,6 +10,8 @@ export default function Settings() {
   const [scannerStatus, setScannerStatus] = useState('');
   const [detectedPrinters, setDetectedPrinters] = useState([]);
   const [detectedScanners, setDetectedScanners] = useState([]);
+  const [btPrinter, setBtPrinter] = useState(null);
+  const [btBusy, setBtBusy] = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -18,6 +21,15 @@ export default function Settings() {
   useEffect(() => {
     fetch(`${API}/settings`)
       .then(r => r.json()).then(d => { if (d.success) setSettings(d.data); });
+    const saved = getSavedPrinter();
+    if (saved) {
+      setBtPrinter(saved);
+      setPrinterStatus(`Printer "${saved.name}" is paired. Reconnecting...`);
+      reconnectPrinter().then(info => {
+        if (info) { setBtPrinter(info); setPrinterStatus(`Connected to ${info.name}`); }
+        else setPrinterStatus(`Paired with "${saved.name}" - press Connect to re-establish the link`);
+      }).catch(() => {});
+    }
   }, []);
 
   const updateSetting = async (key, value) => {
@@ -35,11 +47,10 @@ export default function Settings() {
     try {
       const r = await fetch(`${API}/devices/printers`);
       const d = await r.json();
-      if (d.success) {
-        setDetectedPrinters(d.data);
-        setPrinterStatus(d.data.length > 0 ? `${d.data.length} printer(s) detected` : 'No printers found');
-        showToast(d.data.length > 0 ? 'Printers detected' : 'No printers detected', d.data.length > 0 ? 'success' : 'error');
-      }
+      const real = (d.data || []).filter(p => p.source !== 'web');
+      setDetectedPrinters(real);
+      setPrinterStatus(real.length > 0 ? `${real.length} printer(s) detected` : '');
+      if (real.length > 0) showToast(`${real.length} printer(s) detected`);
     } catch (err) { showToast('Printer detection failed', 'error'); }
   };
 
@@ -106,6 +117,53 @@ export default function Settings() {
         detectScanners();
       }
     } catch (err) { showToast(err.message || 'USB connection cancelled', 'error'); }
+  };
+
+  const connectBluetoothPrinter = async () => {
+    if (!bluetoothSupported()) { showToast('Web Bluetooth needs Chrome/Edge over HTTPS', 'error'); return; }
+    setBtBusy(true);
+    try {
+      const info = await pairPrinter();
+      setBtPrinter(info);
+      setPrinterStatus(`Connected to ${info.name}`);
+      showToast(`Bluetooth printer connected: ${info.name}`);
+      // Immediate confirmation print so you know the selected printer works.
+      setTimeout(() => {
+        sendBytes(buildEscPosTest({ companyName: settings.company_name || 'Aditya Enterprises' }))
+          .then(() => showToast('Test print sent - check the printer'))
+          .catch(e => setPrinterStatus(`Paired with "${info.name}" but test print failed: ${e.message}`));
+      }, 400);
+    } catch (err) {
+      showToast(err.message || 'Bluetooth printer pairing cancelled', 'error');
+    } finally {
+      setBtBusy(false);
+    }
+  };
+
+  const disconnectBluetoothPrinter = async () => {
+    await disconnectActive();
+    clearSavedPrinter();
+    setBtPrinter(null);
+    setPrinterStatus('');
+    showToast('Bluetooth printer disconnected');
+  };
+
+  const testBluetoothPrint = async () => {
+    if (!btPrinter) return showToast('Connect a Bluetooth printer first', 'error');
+    setBtBusy(true);
+    try {
+      await sendBytes(buildEscPosTest({ companyName: settings.company_name || 'Aditya Enterprises' }));
+      showToast('Test print sent to: ' + btPrinter.name);
+    } catch (err) {
+      if (/not found|connect it again|connect the printer again/i.test(err.message || '')) {
+        showToast(err.message, 'error');
+        setPrinterStatus('Printer connection lost - press "Reconnect Bluetooth Printer"');
+      } else {
+        showToast('Print failed: ' + (err.message || 'connection error'), 'error');
+      }
+    } finally {
+      setBtBusy(false);
+    }
   };
 
   return (
@@ -233,9 +291,33 @@ export default function Settings() {
           )}
 
           <h4 style={{fontSize:14, marginTop:20, marginBottom:8}}>Printers</h4>
+
+          <div style={{marginBottom:12, padding:10, background:'#f8f9fa', borderRadius:8, border:'1px solid #eee'}}>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>Bluetooth Printer (direct printing, no dialog)</div>
+            <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:6}}>
+              <button className="btn btn-sm btn-primary" onClick={connectBluetoothPrinter} disabled={btBusy}>
+                {btBusy ? 'Working...' : (btPrinter ? 'Reconnect Bluetooth Printer' : 'Connect Bluetooth Printer')}
+              </button>
+              {btPrinter && (
+                <>
+                  <button className="btn btn-sm btn-success" onClick={testBluetoothPrint} disabled={btBusy}>Test Print</button>
+                  <button className="btn btn-sm btn-outline" onClick={disconnectBluetoothPrinter}>Disconnect</button>
+                </>
+              )}
+            </div>
+            {btPrinter ? (
+              <div style={{fontSize:12, color:'#27ae60'}}>Connected: <strong>{btPrinter.name}</strong></div>
+            ) : (
+              <div style={{fontSize:11, color:'#777'}}>
+                Pair your Posiflow / thermal receipt printer with the browser (Chrome/Edge). After pairing, the POS prints receipts directly to it. Printer must be switched on and in Bluetooth pairing mode.
+              </div>
+            )}
+            {printerStatus && <div style={{fontSize:11, marginTop:4, color:'#777'}}>{printerStatus}</div>}
+          </div>
+
           <div style={{marginBottom:12}}>
-            <button className="btn btn-sm btn-info" onClick={detectPrinters}>Scan for Printers</button>
-            {printerStatus && <span style={{fontSize:12, marginLeft:8, color: printerStatus.includes('No')?'#e74c3c':'#27ae60'}}>{printerStatus}</span>}
+            <button className="btn btn-sm btn-info" onClick={detectPrinters}>Scan for Printers (Windows/USB)</button>
+            {detectedPrinters.length > 0 && printerStatus && <span style={{fontSize:12, marginLeft:8, color:'#27ae60'}}>{printerStatus}</span>}
           </div>
           {detectedPrinters.length > 0 ? (
             detectedPrinters.map((p, i) => (
@@ -247,20 +329,12 @@ export default function Settings() {
                   {p.source && <span>Source: {p.source}</span>}
                   {p.isDefault && <span className="badge badge-info" style={{marginLeft:4}}>Default</span>}
                 </div>
-                <div style={{marginTop:4}}>
-                  <button className="btn btn-sm btn-success" style={{marginRight:4}}
-                    onClick={async () => {
-                      try { await fetch(`${API}/devices/print-test`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ barcode:'AE1781782184962387', printer_path:p.port || p.name }) }); showToast('Test print sent to: ' + p.name); }
-                      catch(e) { showToast('Print failed', 'error'); }
-                    }}>Test Print</button>
-                  {p.source === 'spooler' && <span className="badge badge-success" style={{marginLeft:4}}>Ready</span>}
-                  {p.source === 'pnp' && <span className="badge badge-info" style={{marginLeft:4}}>USB Connected</span>}
-                </div>
               </div>
             ))
           ) : (
             <p style={{fontSize:11, color:'#777'}}>
-              No printers detected. For barcode/thermal printers, connect via USB and install drivers. Receipt printing uses your default Windows printer.
+              USB thermal printers (like your Posiflow connected via USB) cannot be accessed directly by a browser - Windows keeps control of them. Instead:
+              open the POS, complete a sale and click <strong>Print Receipt</strong>, then choose your Posiflow printer in the browser print dialog (it appears there because it is installed in Windows). For direct one-tap printing, pair the same printer over <strong>Bluetooth</strong> using the button above.
             </p>
           )}
         </div>

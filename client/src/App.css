@@ -481,11 +481,13 @@ tbody tr:active td { background: #f0f2f5; }
 /* ===== THERMAL RECEIPT (58mm) ===== */
 .thermal-receipt-print { display: none; }
 @media print {
+  @page { size: auto; margin: 0; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .thermal-receipt-print { display: block !important; }
   .thermal-receipt-print ~ *:not(.thermal-receipt-print) { display: none !important; }
 }
 .thermal-receipt {
-  font-family: 'Courier New', monospace; font-size: 10px; width: 58mm; margin: 0 auto;
+  font-family: 'Courier New', monospace; font-size: 10px; width: 72mm; margin: 0 auto;
   padding: 8px 4px; color: #000; background: #fff;
 }
 .thermal-receipt .tr-header { text-align: center; font-size: 13px; font-weight: 700; margin-bottom: 2px; }

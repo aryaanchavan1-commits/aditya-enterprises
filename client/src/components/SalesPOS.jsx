@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import CameraScanner from './CameraScanner';
+import { bluetoothSupported, pairPrinter, getSavedPrinter, sendBytes, buildEscPos } from '../printer';
 
 const API = '/api';
 
@@ -14,6 +15,8 @@ export default function SalesPOS() {
   const [lastInvoice, setLastInvoice] = useState(null);
   const [companyName, setCompanyName] = useState('Aditya Enterprises');
   const [showCamera, setShowCamera] = useState(false);
+  const [btPrinter, setBtPrinter] = useState(null);
+  const [btBusy, setBtBusy] = useState(false);
   const thermalRef = useRef(null);
   const searchRef = useRef(null);
 
@@ -27,7 +30,64 @@ export default function SalesPOS() {
     fetch(`${API}/settings`).then(r => r.json()).then(d => {
       if (d.success) setCompanyName(d.data.company_name || 'Aditya Enterprises');
     });
+    setBtPrinter(getSavedPrinter());
   }, []);
+
+  const connectBluetoothPrinter = async () => {
+    if (!bluetoothSupported()) { showToast('Web Bluetooth needs Chrome/Edge over HTTPS', 'error'); return; }
+    setBtBusy(true);
+    try {
+      const info = await pairPrinter();
+      setBtPrinter(info);
+      showToast(`Bluetooth printer connected: ${info.name}`);
+    } catch (err) {
+      showToast(err.message || 'Bluetooth pairing cancelled', 'error');
+    } finally {
+      setBtBusy(false);
+    }
+  };
+
+  const handleBluetoothPrint = async () => {
+    if (!lastInvoice) return showToast('Complete a sale first', 'error');
+    if (!btPrinter) return connectBluetoothPrinter();
+    if (btBusy) return;
+    setBtBusy(true);
+    try {
+      await sendInvoiceToPrinter(lastInvoice);
+      showToast(`Receipt sent to ${btPrinter.name}`);
+    } catch (err) {
+      if (/not found|connect it again|connect the printer again/i.test(err.message || '')) {
+        showToast('Printer connection lost - pairing again...', 'error');
+        try {
+          const info = await pairPrinter();
+          setBtPrinter(info);
+          await sendInvoiceToPrinter(lastInvoice);
+          showToast(`Receipt sent to ${info.name}`);
+        } catch (e2) {
+          showToast('Print failed: ' + (e2.message || 're-pairing failed'), 'error');
+        }
+      } else {
+        showToast('Print failed: ' + (err.message || 'connection error'), 'error');
+      }
+    } finally {
+      setBtBusy(false);
+    }
+  };
+
+  const sendInvoiceToPrinter = async (invoice) => {
+    const gstTotal = Number((invoice.cgst_total || 0) + (invoice.sgst_total || 0) + (invoice.igst_total || 0));
+    const bytes = buildEscPos({
+      companyName,
+      invoiceNumber: invoice.invoice_number,
+      date: invoice.sale_date,
+      customer: invoice.customer_name,
+      items: invoice.items || [],
+      subtotal: Number(invoice.subtotal || 0),
+      gstAmount: gstTotal,
+      grandTotal: Number(invoice.grand_total || 0)
+    });
+    await sendBytes(bytes);
+  };
 
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -192,9 +252,22 @@ export default function SalesPOS() {
 
       {lastInvoice && (
         <div className="card" style={{marginTop:16}}>
-          <div className="card-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <h3>Invoice: {lastInvoice.invoice_number}</h3>
-            <button className="btn btn-primary" onClick={handlePrint}>Print Receipt</button>
+          <div className="card-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <h3 style={{margin:0}}>Invoice: {lastInvoice.invoice_number}</h3>
+              {btPrinter && <span className="badge badge-success" style={{fontSize:11}}>BT: {btPrinter.name}</span>}
+            </div>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+              {!btPrinter && (
+                <button className="btn btn-sm btn-outline" onClick={connectBluetoothPrinter} disabled={btBusy}>
+                  {btBusy ? 'Working...' : 'Pair Bluetooth Printer'}
+                </button>
+              )}
+              <button className="btn btn-sm btn-success" onClick={handleBluetoothPrint} disabled={btBusy}>
+                {btBusy ? 'Printing...' : 'Print Direct (Bluetooth)'}
+              </button>
+              <button className="btn btn-primary" onClick={handlePrint}>Print Receipt (Windows/USB)</button>
+            </div>
           </div>
         </div>
       )}
