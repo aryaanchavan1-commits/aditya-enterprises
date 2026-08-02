@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api, exportToExcel, readExcelFile } from '../api';
 import { useReactToPrint } from 'react-to-print';
 import { barcodeDataUrl } from '../barcode';
-import { printViaBridge } from '../printer';
+import { printSmartLabel } from '../printer';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -89,6 +89,21 @@ export default function Products() {
       showToast(editProduct ? 'Product updated' : 'Product created');
       setShowModal(false);
       loadProducts();
+      // New product -> print its barcode label automatically through
+      // whichever printer is online (USB bridge first, else Bluetooth).
+      if (!editProduct && d.data?.barcode) {
+        printSmartLabel({
+          name: d.data.name,
+          price: Number(d.data.sell_price || 0),
+          barcode: d.data.barcode,
+          sku: d.data.serial_number || d.data.barcode,
+          copies: 1
+        }).then(r => {
+          if (r.via === 'usb') showToast('Barcode label sent to USB printer');
+          else if (r.via === 'bluetooth') showToast(`Barcode label printed via Bluetooth (${r.target})`);
+          else showToast('No printer detected - pair Bluetooth or run the USB bridge (Settings → Printers)', 'error');
+        }).catch(err => showToast('Label print failed: ' + err.message, 'error'));
+      }
     } else {
       showToast(d.error || 'Save failed', 'error');
     }
@@ -115,33 +130,22 @@ export default function Products() {
 
   const labelBarcode = labelProduct?.barcode ? barcodeDataUrl(labelProduct.barcode, { maxWidthPx: 900, heightPx: 300 }) : '';
 
-  const [bridgeOnline, setBridgeOnline] = useState(false);
   const [labelPrinting, setLabelPrinting] = useState(false);
-
-  useEffect(() => {
-    const check = () => {
-      fetch('/api/print/bridge/status').then(r => r.json()).then(d => {
-        if (d.success) setBridgeOnline(!!d.data.bridgeOnline);
-      }).catch(() => {});
-    };
-    check();
-    const int = setInterval(check, 20000);
-    return () => clearInterval(int);
-  }, []);
 
   const handleUsbLabels = async () => {
     if (!labelProduct?.barcode) return;
-    if (!bridgeOnline) { showToast('USB print bridge is offline. See Settings → Printers for setup.', 'error'); return; }
     setLabelPrinting(true);
     try {
-      await printViaBridge('label', {
+      const r = await printSmartLabel({
         name: labelProduct.name,
         price: Number(labelProduct.sell_price || 0),
         barcode: labelProduct.barcode,
         sku: labelProduct.serial_number || labelProduct.barcode,
         copies: labelQty
       });
-      showToast(`${labelQty} label(s) sent to USB printer`);
+      if (r.via === 'usb') showToast(`${labelQty} label(s) sent to USB printer`);
+      else if (r.via === 'bluetooth') showToast(`${labelQty} label(s) printed via Bluetooth (${r.target})`);
+      else showToast('No printer detected - pair Bluetooth or run the USB bridge (Settings → Printers)', 'error');
     } catch (err) {
       showToast('Print failed: ' + err.message, 'error');
     } finally {
@@ -317,11 +321,9 @@ export default function Products() {
             </div>
             <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:16}}>
               <button className="btn btn-outline" onClick={() => { setLabelProduct(null); setLabelQty(1); }}>Close</button>
-              {bridgeOnline && (
-                <button className="btn btn-warning" onClick={handleUsbLabels} disabled={labelPrinting}>
-                  {labelPrinting ? 'Printing...' : `Print ${labelQty} via USB`}
-                </button>
-              )}
+              <button className="btn btn-warning" onClick={handleUsbLabels} disabled={labelPrinting} title="USB bridge if online, else paired Bluetooth printer">
+                {labelPrinting ? 'Printing...' : `Print ${labelQty} via Printer`}
+              </button>
               <button className="btn btn-primary" onClick={handlePrintLabel}>Print {labelQty} Label{labelQty > 1 ? 's' : ''}</button>
             </div>
           </div>

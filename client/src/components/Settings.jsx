@@ -322,6 +322,17 @@ export default function Settings() {
 
           <h4 style={{fontSize:14, marginTop:20, marginBottom:8}}>Printers</h4>
 
+          <div style={{marginBottom:12, padding:10, background:'#fffbe6', borderRadius:8, border:'1px solid #f1c40f'}}>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Detected printer</div>
+            {bridgeStatus.bridgeOnline ? (
+              <div style={{fontSize:12}}>🖨️ <strong>USB printer</strong> (shop PC bridge online) — automatic label &amp; receipt printing will use USB</div>
+            ) : btPrinter ? (
+              <div style={{fontSize:12}}>🖨️ <strong>{btPrinter.name}</strong> (Bluetooth paired) — printing will use Bluetooth</div>
+            ) : (
+              <div style={{fontSize:12, color:'#e74c3c'}}>No printer detected yet — start the USB bridge on the shop PC (below) or pair the Bluetooth printer (below).</div>
+            )}
+          </div>
+
           <div style={{marginBottom:12, padding:10, background:'#f8f9fa', borderRadius:8, border:'1px solid #eee'}}>
             <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
               <span style={{fontSize:13, fontWeight:600}}>USB Printer (Print Bridge) - most reliable</span>
@@ -344,7 +355,7 @@ export default function Settings() {
                 <li>Install Node.js (nodejs.org) on that PC if not present.</li>
                 <li>Copy the <strong>print-bridge</strong> folder from the project onto the PC, run <strong>start-bridge.bat</strong> and keep it open.</li>
               </ol>
-              When the bridge is running, the green badge above turns Online and "Print via USB" appears in the Sales page.
+              When the bridge is running, the green badge above turns Online and printing uses USB automatically (falls back to Bluetooth when the bridge is off).
             </div>
           </div>
 

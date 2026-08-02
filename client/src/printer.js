@@ -283,6 +283,50 @@ export async function printViaBridge(type, payload) {
   return d.data;
 }
 
+// Is the local USB print bridge (shop PC) online right now?
+export async function getBridgeStatus() {
+  try {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
+    const r = await fetch('/api/print/bridge/status', ctrl ? { signal: ctrl.signal } : {});
+    const d = await r.json();
+    if (t) clearTimeout(t);
+    return { online: !!(d.success && d.data && d.data.bridgeOnline), lastJob: d.data?.lastJob || null };
+  } catch (e) {
+    return { online: false, lastJob: null };
+  }
+}
+
+// Print through whichever printer is available: the USB bridge on the shop
+// PC if it is online, otherwise the paired Bluetooth printer. Returns
+// { via: 'usb' | 'bluetooth' | null, target } so callers can tell the user
+// which printer actually printed.
+async function printViaBest(type, bytes, payload) {
+  const st = await getBridgeStatus();
+  if (st.online) {
+    await printViaBridge(type, payload);
+    return { via: 'usb', target: 'USB printer (shop PC bridge)' };
+  }
+  const saved = getSavedPrinter();
+  if (saved) {
+    if (!isConnected()) {
+      const re = await reconnectPrinter();
+      if (!re) return { via: null, target: '' };
+    }
+    await sendBytes(bytes);
+    return { via: 'bluetooth', target: saved.name || 'Bluetooth printer' };
+  }
+  return { via: null, target: '' };
+}
+
+export async function printSmartLabel(payload) {
+  return printViaBest('label', buildLabelEscPos(payload), payload);
+}
+
+export async function printSmartReceipt(payload) {
+  return printViaBest('receipt', buildEscPos(payload), payload);
+}
+
 // ---------------- ESC/POS receipt builder (58mm = 32 chars, 80mm = 42) ----------------
 
 const ESC = 0x1b;
@@ -367,4 +411,124 @@ export function buildEscPosTest({ companyName = 'Aditya Enterprises', width = 32
     subtotal: 1, gstAmount: 0, grandTotal: 1,
     width
   });
+}
+
+// ---------------- ESC/POS barcode label builder (58mm x 40mm) ----------------
+
+const CODE128 = [
+  '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
+  '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
+  '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211',
+  '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
+  '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331',
+  '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111',
+  '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214',
+  '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
+  '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141',
+  '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141',
+  '114131', '311141', '411131', '211412', '211214', '211232', '2331112'
+];
+
+function encodeCode128(text) {
+  const t = String(text);
+  let mode = 'B';
+  const values = [];
+  let i = 0;
+  if (/^\d+$/.test(t) && t.length % 2 === 0) { values.push(105); mode = 'C'; }
+  else values.push(104);
+
+  while (i < t.length) {
+    if (mode === 'C') {
+      if (i + 1 < t.length && /\d/.test(t[i]) && /\d/.test(t[i + 1])) {
+        values.push(parseInt(t.slice(i, i + 2), 10));
+        i += 2;
+      } else {
+        values.push(100);
+        mode = 'B';
+      }
+    } else {
+      const run = t.slice(i).match(/^\d+/);
+      if (run && run[0].length >= 4) {
+        let r = run[0];
+        if (r.length % 2 === 1) r = r.slice(0, -1);
+        values.push(99);
+        mode = 'C';
+        for (let j = 0; j < r.length; j += 2) values.push(parseInt(r.slice(j, j + 2), 10));
+        i += r.length;
+      } else {
+        const c = t.charCodeAt(i);
+        if (c < 32 || c > 126) return null;
+        values.push(c - 32);
+        i++;
+      }
+    }
+  }
+
+  let checksum = values[0];
+  for (let k = 1; k < values.length; k++) checksum += values[k] * k;
+  checksum %= 103;
+
+  const pattern = [];
+  for (const v of [...values, checksum, 106]) pattern.push(...CODE128[v].split('').map(Number));
+  return pattern;
+}
+
+function rasterBitmap(pattern, maxWidthPx, heightPx) {
+  const quiet = 10;
+  const totalModules = quiet * 2 + pattern.length;
+  const module = Math.max(1, Math.floor(maxWidthPx / totalModules));
+  const widthPx = totalModules * module;
+  const widthBytes = Math.ceil(widthPx / 8);
+  const bitmap = new Uint8Array(widthBytes * heightPx);
+  let x = quiet * module;
+  let isBar = true;
+  for (const m of pattern) {
+    if (isBar) {
+      for (let col = x; col < x + m * module; col++) {
+        const byte = col >> 3;
+        const bit = 7 - (col & 7);
+        for (let row = 0; row < heightPx; row++) bitmap[row * widthBytes + byte] |= (1 << bit);
+      }
+    }
+    x += m * module;
+    isBar = !isBar;
+  }
+  const header = [GS, 0x76, 0x30, 0x00, widthBytes & 0xff, (widthBytes >> 8) & 0xff, heightPx & 0xff, (heightPx >> 8) & 0xff];
+  const out = new Uint8Array(header.length + bitmap.length);
+  out.set(header, 0);
+  out.set(bitmap, header.length);
+  return out;
+}
+
+export function buildLabelEscPos({ name = '', price = 0, barcode = '', sku = '', copies = 1 }) {
+  const parts = [];
+  const pattern = barcode ? encodeCode128(barcode) : null;
+
+  for (let c = 0; c < Math.max(1, Number(copies) || 1); c++) {
+    const b = [];
+    b.push(ESC, 0x40);
+    b.push(ESC, 0x61, 1);
+    b.push(GS, 0x21, 17);
+    b.push(ESC, 0x45, 1);
+    b.push(...text(String(name).slice(0, 16)), 0x0a);
+    b.push(GS, 0x21, 0);
+    b.push(...text('Rs. ' + (Number(price) || 0).toLocaleString('en-IN')), 0x0a);
+    if (pattern) {
+      b.push(ESC, 0x61, 1);
+      b.push(...rasterBitmap(pattern, 384, 96));
+      b.push(0x0a);
+    }
+    b.push(ESC, 0x45, 0);
+    b.push(...text(String(sku).slice(0, 32)), 0x0a);
+    b.push(ESC, 0x64, 2);
+    b.push(GS, 0x56, 66, 0);
+    parts.push(Uint8Array.from(b));
+  }
+
+  if (parts.length === 1) return parts[0];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
 }
