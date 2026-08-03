@@ -116,14 +116,47 @@ router.post('/print/job/:id/status', async (req, res) => {
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
+// Called by the bridge to report which printer it detected on the shop PC.
+router.post('/print/bridge/report', async (req, res) => {
+  try {
+    const { printerName, printerShare, version, lastError } = req.body || {};
+    const vals = {
+      bridge_printer: String(printerName || '').slice(0, 200),
+      bridge_share: String(printerShare || '').slice(0, 100),
+      bridge_version: String(version || '').slice(0, 50),
+      bridge_last_error: String(lastError || '').slice(0, 300),
+    };
+    for (const [k, v] of Object.entries(vals)) {
+      await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [k, v]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
 // Status for the Settings page: is the bridge running?
 router.get('/print/bridge/status', async (req, res) => {
   try {
     const seen = await get("SELECT value FROM settings WHERE key = 'bridge_last_seen'");
+    const printer = await get("SELECT value FROM settings WHERE key = 'bridge_printer'");
+    const share = await get("SELECT value FROM settings WHERE key = 'bridge_share'");
+    const version = await get("SELECT value FROM settings WHERE key = 'bridge_version'");
+    const lastError = await get("SELECT value FROM settings WHERE key = 'bridge_last_error'");
     const lastJob = await get("SELECT type, status, error, created_at, done_at FROM print_jobs ORDER BY id DESC LIMIT 1");
-    const lastSeen = seen?.value ? new Date(seen.value.replace(' ', 'T') + 'Z') : null;
-    const online = !!lastSeen && (Date.now() - lastSeen.getTime()) < 20000;
-    res.json({ success: true, data: { bridgeOnline: online, lastSeen: lastSeen?.toISOString() || null, lastJob } });
+    let ts = seen?.value ? new Date(seen.value) : null;
+    if (ts && isNaN(ts.getTime())) ts = new Date(seen.value.replace(' ', 'T') + 'Z');
+    const online = !!ts && (Date.now() - ts.getTime()) < 25000;
+    res.json({
+      success: true,
+      data: {
+        bridgeOnline: online,
+        lastSeen: ts ? ts.toISOString() : null,
+        bridgePrinter: printer?.value || '',
+        bridgeShare: share?.value || '',
+        bridgeVersion: version?.value || '',
+        bridgeLastError: lastError?.value || '',
+        lastJob
+      }
+    });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 

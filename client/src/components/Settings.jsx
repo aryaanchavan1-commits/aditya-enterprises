@@ -12,7 +12,7 @@ export default function Settings() {
   const [detectedScanners, setDetectedScanners] = useState([]);
   const [btPrinter, setBtPrinter] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
-  const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, lastJob: null });
+  const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, bridgePrinter: '', bridgeShare: '', bridgeVersion: '', bridgeLastError: '', lastJob: null });
   const [bridgeBusy, setBridgeBusy] = useState(false);
 
   const showToast = (msg, type = 'success') => {
@@ -81,6 +81,7 @@ export default function Settings() {
       setDetectedPrinters(real);
       setPrinterStatus(real.length > 0 ? `${real.length} printer(s) detected` : '');
       if (real.length > 0) showToast(`${real.length} printer(s) detected`);
+      else if (d.message) showToast(d.message);
     } catch (err) { showToast('Printer detection failed', 'error'); }
   };
 
@@ -325,7 +326,11 @@ export default function Settings() {
           <div style={{marginBottom:12, padding:10, background:'#fffbe6', borderRadius:8, border:'1px solid #f1c40f'}}>
             <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Detected printer</div>
             {bridgeStatus.bridgeOnline ? (
-              <div style={{fontSize:12}}>🖨️ <strong>USB printer</strong> (shop PC bridge online) — automatic label &amp; receipt printing will use USB</div>
+              bridgeStatus.bridgePrinter ? (
+                <div style={{fontSize:12}}>🖨️ <strong>{bridgeStatus.bridgePrinter}</strong>{bridgeStatus.bridgeShare ? ` (share: ${bridgeStatus.bridgeShare})` : ''} — detected by the USB bridge on the shop PC; automatic label &amp; receipt printing will use USB</div>
+              ) : (
+                <div style={{fontSize:12, color:'#e67e22'}}>USB bridge is online on the shop PC, but it found <strong>no printers</strong>. Check the USB cable / that the printer is on, then restart <strong>start-bridge.bat</strong>.</div>
+              )
             ) : btPrinter ? (
               <div style={{fontSize:12}}>🖨️ <strong>{btPrinter.name}</strong> (Bluetooth paired) — printing will use Bluetooth</div>
             ) : (
@@ -347,6 +352,9 @@ export default function Settings() {
             </div>
             {bridgeStatus.lastJob?.error && (
               <div style={{fontSize:11, color:'#e74c3c', marginBottom:4}}>Last job failed: {bridgeStatus.lastJob.error}</div>
+            )}
+            {bridgeStatus.bridgeOnline && !bridgeStatus.bridgePrinter && (
+              <div style={{fontSize:11, color:'#e67e22', marginBottom:4}}>Bridge running, but it reported no printer found on the shop PC.</div>
             )}
             <div style={{fontSize:11, color:'#777', lineHeight:1.5}}>
               Prints directly to the USB printer (ESC/POS) - no dialog, no driver issues. One-time setup:
@@ -400,8 +408,7 @@ export default function Settings() {
             ))
           ) : (
             <p style={{fontSize:11, color:'#777'}}>
-              USB thermal printers (like your Posiflow connected via USB) cannot be accessed directly by a browser - Windows keeps control of them. Instead:
-              open the POS, complete a sale and click <strong>Print Receipt</strong>, then choose your Posiflow printer in the browser print dialog (it appears there because it is installed in Windows). For direct one-tap printing, pair the same printer over <strong>Bluetooth</strong> using the button above.
+              The cloud API cannot see your USB printer - only the <strong>bridge running on the shop PC</strong> can detect it. Start <strong>start-bridge.bat</strong> there and this page will show the detected printer name automatically. Alternatively pair the printer over <strong>Bluetooth</strong> using the button above.
             </p>
           )}
         </div>

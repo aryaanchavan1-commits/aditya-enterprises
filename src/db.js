@@ -25,8 +25,8 @@ async function getDb() {
     try {
       const { createClient } = require('@libsql/client');
       turso = createClient({ url, authToken: token });
-      await withTimeout(turso.execute('SELECT 1'), 8000);
-      await withTimeout(initSchema(), 20000);
+      await withTimeout(turso.execute('SELECT 1'), 10000);
+      await withTimeout(initSchema(), 25000);
       return turso;
     } catch (e) {
       turso = null;
@@ -78,30 +78,53 @@ async function initSchema() {
     { table: 'incomes', cols: ['date', 'description', 'category', 'amount', 'payment_mode', 'reference', 'notes', 'created_at'] },
     { table: 'print_jobs', cols: ['type', 'payload', 'status', 'error', 'created_at', 'claimed_at', 'done_at'] },
   ];
-  const migs = [];
-  for (const t of allCols) {
-    for (const col of t.cols) {
-      let def = 'TEXT DEFAULT ""';
-      if (['id', 'quantity', 'category_id', 'subcategory_id', 'supplier_id', 'customer_id', 'product_id', 'is_editable', 'is_active', 'is_barcode_scan'].includes(col)) def = 'INTEGER DEFAULT 0';
-      if (col === 'low_stock_threshold') def = 'INTEGER DEFAULT 5';
-      if (['sell_price', 'inward_price', 'discount_percent', 'gst_rate', 'subtotal', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'grand_total', 'gst_total', 'opening_balance'].includes(col)) def = 'REAL DEFAULT 0';
-      if (['serial_number', 'barcode'].includes(col)) def = 'TEXT';
-      if (['name', 'invoice_number'].includes(col)) def = 'TEXT DEFAULT ""';
-      if (['sale_date', 'purchase_date', 'created_at', 'updated_at'].includes(col)) def = 'DATETIME DEFAULT CURRENT_TIMESTAMP';
-      migs.push({ table: t.table, col, def });
-    }
-  }
-  for (const m of migs) {
-    try { await turso.execute(`ALTER TABLE ${m.table} ADD COLUMN ${m.col} ${m.def}`); } catch (e) {}
-  }
   const idx = [
     'CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id)',
     'CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)',
     'CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date)',
     'CREATE INDEX IF NOT EXISTS idx_parties_type ON parties(party_type)',
   ];
-  for (const sql of idx) {
-    try { await turso.execute(sql); } catch (e) {}
+  try {
+    await turso.batch([...stmts, ...idx]);
+  } catch (e) {
+    console.warn('Schema create batch failed, retrying individually:', e.message);
+    for (const sql of stmts) { try { await turso.execute(sql); } catch (e2) {} }
+    for (const sql of idx) { try { await turso.execute(sql); } catch (e2) {} }
+  }
+  const existingCols = {};
+  try {
+    const pragmas = allCols.map(t => `PRAGMA table_info(${t.table})`);
+    const results = await turso.batch(pragmas);
+    results.forEach((r, i) => { existingCols[allCols[i].table] = (r.rows || []).map(x => x.name); });
+  } catch (e) {
+    for (const t of allCols) {
+      try { const r = await turso.execute(`PRAGMA table_info(${t.table})`); existingCols[t.table] = r.rows.map(x => x.name); }
+      catch (e2) { existingCols[t.table] = []; }
+    }
+  }
+  const missing = [];
+  for (const t of allCols) {
+    for (const col of t.cols) {
+      if (existingCols[t.table].includes(col)) continue;
+      let def = 'TEXT DEFAULT ""';
+      if (['id', 'quantity', 'category_id', 'subcategory_id', 'supplier_id', 'customer_id', 'product_id', 'is_editable', 'is_active', 'is_barcode_scan'].includes(col)) def = 'INTEGER DEFAULT 0';
+      if (col === 'low_stock_threshold') def = 'INTEGER DEFAULT 5';
+      if (['sell_price', 'inward_price', 'discount_percent', 'gst_rate', 'subtotal', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'grand_total', 'gst_total', 'opening_balance'].includes(col)) def = 'REAL DEFAULT 0';
+      if (['serial_number', 'barcode'].includes(col)) def = 'TEXT';
+      if (['name', 'invoice_number'].includes(col)) def = 'TEXT DEFAULT ""';
+      if (['sale_date', 'purchase_date', 'created_at', 'updated_at'].includes(col)) def = 'DATETIME';
+      missing.push({ table: t.table, col, def });
+    }
+  }
+  if (missing.length) {
+    try {
+      await turso.batch(missing.map(m => `ALTER TABLE ${m.table} ADD COLUMN ${m.col} ${m.def}`));
+    } catch (e) {
+      console.warn('Alter batch failed, falling back:', e.message);
+      for (const m of missing) {
+        try { await turso.execute(`ALTER TABLE ${m.table} ADD COLUMN ${m.col} ${m.def}`); } catch (e2) {}
+      }
+    }
   }
   await fixIdTypes();
   await seedIfEmpty();

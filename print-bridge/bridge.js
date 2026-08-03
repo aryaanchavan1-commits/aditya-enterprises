@@ -23,6 +23,20 @@ const API = (process.env.AE_API || 'https://aditya-enterprises-erp.vercel.app').
 const POLL_MS = 3000;
 
 let config = { printerName: '', printerShare: '' };
+let lastReportAt = 0;
+
+// Tell the ERP server which printer this bridge detected, so the Settings
+// page can show it even though the API runs in the cloud.
+async function reportStatus(force) {
+  if (!force && Date.now() - lastReportAt < 15000) return;
+  lastReportAt = Date.now();
+  await apiRequest('POST', '/api/devices/print/bridge/report', {
+    printerName: config.printerName || '',
+    printerShare: config.printerShare || '',
+    version: 'bridge-2.0',
+    lastError: config.lastError || ''
+  });
+}
 
 function log(msg) {
   console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
@@ -367,10 +381,12 @@ async function handleJob(job) {
   }
 
   await apiRequest('POST', `/api/devices/print/job/${job.id}/status`, { status: result.ok ? 'done' : 'failed', error: result.error || '' });
+  config.lastError = result.ok ? '' : result.error;
   log(result.ok ? `Job #${job.id} (${job.type}) printed` : `Job #${job.id} (${job.type}) FAILED: ${result.error}`);
 }
 
 async function tick() {
+  await reportStatus(false);
   const res = await apiRequest('GET', '/api/devices/print/job/next');
   if (!res.success || !res.data) return;
   try { await handleJob(res.data); }
@@ -385,6 +401,7 @@ async function tick() {
 log('Aditya ERP USB Print Bridge');
 log('Server: ' + API);
 loadOrDetectConfig();
+reportStatus(true);
 
 if (!config.printerName) {
   log('No printer found. Reconnect the USB printer and restart this bridge.');
