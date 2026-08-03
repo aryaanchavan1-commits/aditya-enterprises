@@ -86,8 +86,8 @@ router.post('/', async (req, res) => {
       enrichedItems.push({ ...item, product_name: p?.name || '', hsn_code: p?.hsn_code || '' });
     }
 
-    await run(`INSERT INTO sales (invoice_number, sale_date, customer_name, customer_phone, customer_gstin, customer_address, items, subtotal, discount_total, cgst_total, sgst_total, igst_total, cess_total, grand_total, payment_mode, is_barcode_scan) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [invoiceNum, saleDate, data.customer_name || 'Walk-in Customer', data.customer_phone || '', data.customer_gstin || '', data.customer_address || '', JSON.stringify(enrichedItems), subtotal, discountTotal, cgstTotal, sgstTotal, igstTotal, cessTotal, grandTotal, data.payment_mode || 'cash', data.is_barcode_scan || 0]);
+    await run(`INSERT INTO sales (invoice_number, sale_date, customer_name, customer_phone, customer_gstin, customer_address, items, subtotal, discount_total, cgst_total, sgst_total, igst_total, cess_total, grand_total, payment_mode, is_barcode_scan, is_gst) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [invoiceNum, saleDate, data.customer_name || 'Walk-in Customer', data.customer_phone || '', data.customer_gstin || '', data.customer_address || '', JSON.stringify(enrichedItems), subtotal, discountTotal, cgstTotal, sgstTotal, igstTotal, cessTotal, grandTotal, data.payment_mode || 'cash', data.is_barcode_scan || 0, data.is_gst !== false ? 1 : 0]);
 
     for (const item of items) {
       await run('UPDATE products SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [item.quantity, item.product_id]);
@@ -96,7 +96,6 @@ router.post('/', async (req, res) => {
 
     const sale = await get('SELECT * FROM sales WHERE invoice_number = ?', [invoiceNum]);
     sale.items = JSON.parse(sale.items || '[]');
-    sale.is_gst = data.is_gst !== false;
     res.json({ success: true, data: sale, message: 'Sale completed' });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
@@ -121,12 +120,13 @@ router.get('/:id/receipt', async (req, res) => {
 
     doc.fontSize(10).font('Helvetica-Bold').text((settings.company_name || 'Aditya Enterprises'), { align: 'center' });
     doc.fontSize(7).font('Helvetica').text((settings.company_address || ''), { align: 'center' });
-    doc.text(`GST: ${settings.company_gstin || ''}`, { align: 'center' });
+    const isGst = sale.is_gst !== 0 && sale.is_gst !== false;
+    if (isGst) doc.text(`GST: ${settings.company_gstin || ''}`, { align: 'center' });
     doc.moveDown(0.3);
-    doc.text(`Invoice: ${sale.invoice_number}`, { align: 'center' });
+    if (isGst) doc.text(`Invoice: ${sale.invoice_number}`, { align: 'center' });
     doc.text(`Date: ${sale.sale_date}`, { align: 'center' });
     doc.text(`Customer: ${sale.customer_name}`, { align: 'center' });
-    if (sale.customer_gstin) doc.text(`GSTIN: ${sale.customer_gstin}`, { align: 'center' });
+    if (isGst && sale.customer_gstin) doc.text(`GSTIN: ${sale.customer_gstin}`, { align: 'center' });
     doc.moveDown(0.3);
 
     doc.fontSize(7).font('Helvetica-Bold');
@@ -142,8 +142,10 @@ router.get('/:id/receipt', async (req, res) => {
     doc.moveDown(0.2);
     doc.fontSize(7).font('Helvetica-Bold');
     doc.text('Subtotal:'.padEnd(26) + String(Math.round(sale.subtotal * 100) / 100).padStart(8));
-    doc.text('CGST:'.padEnd(26) + String(Math.round(sale.cgst_total * 100) / 100).padStart(8));
-    doc.text('SGST:'.padEnd(26) + String(Math.round(sale.sgst_total * 100) / 100).padStart(8));
+    if (isGst) {
+      doc.text('CGST:'.padEnd(26) + String(Math.round(sale.cgst_total * 100) / 100).padStart(8));
+      doc.text('SGST:'.padEnd(26) + String(Math.round(sale.sgst_total * 100) / 100).padStart(8));
+    }
     doc.text('Total:'.padEnd(26) + String(Math.round(sale.grand_total * 100) / 100).padStart(8));
     doc.text(`Payment: ${(sale.payment_mode || 'cash').toUpperCase()}`, { align: 'center' });
     doc.moveDown(0.3);

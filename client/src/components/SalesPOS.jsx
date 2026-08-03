@@ -14,6 +14,8 @@ export default function SalesPOS() {
   const [toast, setToast] = useState(null);
   const [lastInvoice, setLastInvoice] = useState(null);
   const [companyName, setCompanyName] = useState('Aditya Enterprises');
+  const [companyGstin, setCompanyGstin] = useState('');
+  const [billType, setBillType] = useState('gst');
   const [showCamera, setShowCamera] = useState(false);
   const [btPrinter, setBtPrinter] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
@@ -28,7 +30,10 @@ export default function SalesPOS() {
   useEffect(() => {
     fetch(`${API}/products`).then(r => r.json()).then(d => { if (d.success) setProducts(d.data); });
     fetch(`${API}/settings`).then(r => r.json()).then(d => {
-      if (d.success) setCompanyName(d.data.company_name || 'Aditya Enterprises');
+      if (d.success) {
+        setCompanyName(d.data.company_name || 'Aditya Enterprises');
+        setCompanyGstin(d.data.company_gstin || '');
+      }
     });
     setBtPrinter(getSavedPrinter());
   }, []);
@@ -45,7 +50,10 @@ export default function SalesPOS() {
         items: lastInvoice.items || [],
         subtotal: Number(lastInvoice.subtotal || 0),
         gstAmount: Number((lastInvoice.cgst_total || 0) + (lastInvoice.sgst_total || 0) + (lastInvoice.igst_total || 0)),
-        grandTotal: Number(lastInvoice.grand_total || 0)
+        grandTotal: Number(lastInvoice.grand_total || 0),
+        isGst: lastInvoice.is_gst !== 0 && lastInvoice.is_gst !== false,
+        gstin: companyGstin,
+        customerGstin: lastInvoice.customer_gstin || ''
       });
       if (r.via === 'usb') showToast('Receipt sent to USB printer');
       else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
@@ -108,7 +116,10 @@ export default function SalesPOS() {
       items: invoice.items || [],
       subtotal: Number(invoice.subtotal || 0),
       gstAmount: gstTotal,
-      grandTotal: Number(invoice.grand_total || 0)
+      grandTotal: Number(invoice.grand_total || 0),
+      isGst: invoice.is_gst !== 0 && invoice.is_gst !== false,
+      gstin: companyGstin,
+      customerGstin: invoice.customer_gstin || ''
     });
     await sendBytes(bytes);
   };
@@ -187,7 +198,7 @@ export default function SalesPOS() {
             product_id: item.id, product_name: item.name,
             quantity: item.qty, sell_price: item.price, discount_percent: 0
           })),
-          customer_name: customerName, payment_mode: paymentMode, is_gst: true
+          customer_name: customerName, payment_mode: paymentMode, is_gst: billType === 'gst'
         })
       });
       const d = await r.json();
@@ -215,7 +226,10 @@ export default function SalesPOS() {
         items: invoice.items || [],
         subtotal: Number(invoice.subtotal || 0),
         gstAmount: Number((invoice.cgst_total || 0) + (invoice.sgst_total || 0) + (invoice.igst_total || 0)),
-        grandTotal: Number(invoice.grand_total || 0)
+        grandTotal: Number(invoice.grand_total || 0),
+        isGst: invoice.is_gst !== 0 && invoice.is_gst !== false,
+        gstin: companyGstin,
+        customerGstin: invoice.customer_gstin || ''
       });
       if (r.via === 'usb') showToast('Receipt sent to USB printer');
       else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
@@ -268,6 +282,14 @@ export default function SalesPOS() {
             <div className="form-group">
               <label>Customer Name</label>
               <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Walk-in Customer" />
+            </div>
+            <div className="form-group">
+              <label>Bill Type</label>
+              <div style={{display:'flex', gap:6}}>
+                <button type="button" className={`btn btn-sm ${billType === 'gst' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setBillType('gst')}>GST Bill</button>
+                <button type="button" className={`btn btn-sm ${billType === 'non-gst' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setBillType('non-gst')}>Non-GST Bill</button>
+              </div>
+              {billType === 'non-gst' && <div style={{fontSize:11, color:'#777', marginTop:4}}>Plain bill - no invoice number, no GSTIN, no tax shown.</div>}
             </div>
             <div className="form-group">
               <label>Payment</label>
@@ -335,13 +357,21 @@ export default function SalesPOS() {
       )}
 
       {lastInvoice && (
-        <div ref={thermalRef} className="thermal-receipt-print">
+          <div ref={thermalRef} className="thermal-receipt-print">
           <div className="thermal-receipt">
             <div className="tr-header">{companyName}</div>
+            {lastInvoice.is_gst !== 0 && lastInvoice.is_gst !== false && companyGstin && (
+              <div className="tr-row" style={{justifyContent:'center'}}><span>GSTIN: {companyGstin}</span></div>
+            )}
             <div className="tr-divider"></div>
-            <div className="tr-row"><span>Invoice:</span><span>{lastInvoice.invoice_number}</span></div>
+            {lastInvoice.is_gst !== 0 && lastInvoice.is_gst !== false && (
+              <div className="tr-row"><span>Invoice:</span><span>{lastInvoice.invoice_number}</span></div>
+            )}
             <div className="tr-row"><span>Date:</span><span>{lastInvoice.sale_date}</span></div>
             <div className="tr-row"><span>Customer:</span><span>{lastInvoice.customer_name}</span></div>
+            {lastInvoice.is_gst !== 0 && lastInvoice.is_gst !== false && lastInvoice.customer_gstin && (
+              <div className="tr-row"><span>GSTIN:</span><span>{lastInvoice.customer_gstin}</span></div>
+            )}
             <div className="tr-divider"></div>
             <div className="tr-table-header"><span>Item</span><span>Qty</span><span>Amt</span></div>
             <div className="tr-divider"></div>
@@ -354,7 +384,9 @@ export default function SalesPOS() {
             ))}
             <div className="tr-divider"></div>
             <div className="tr-row"><span>Subtotal</span><span>Rs. {Number(lastInvoice.subtotal).toFixed(2)}</span></div>
-            <div className="tr-row"><span>GST @18%</span><span>Rs. {Number((lastInvoice.cgst_total||0)+(lastInvoice.sgst_total||0)+(lastInvoice.igst_total||0)).toFixed(2)}</span></div>
+            {lastInvoice.is_gst !== 0 && lastInvoice.is_gst !== false && (
+              <div className="tr-row"><span>GST @18%</span><span>Rs. {Number((lastInvoice.cgst_total||0)+(lastInvoice.sgst_total||0)+(lastInvoice.igst_total||0)).toFixed(2)}</span></div>
+            )}
             <div className="tr-total">Total: Rs. {Number(lastInvoice.grand_total).toFixed(2)}</div>
             <div className="tr-divider"></div>
             <div className="tr-footer">Thank you! Visit again.</div>

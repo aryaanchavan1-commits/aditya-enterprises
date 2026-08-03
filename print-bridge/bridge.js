@@ -468,7 +468,7 @@ function rasterBitmap(pattern, maxWidthPx, heightPx) {
   ]);
 }
 
-function buildReceiptBytes({ companyName = '', invoiceNumber = '', date = '', customer = '', items = [], subtotal = 0, gstAmount = 0, grandTotal = 0, width = 32 }) {
+function buildReceiptBytes({ companyName = '', invoiceNumber = '', date = '', customer = '', items = [], subtotal = 0, gstAmount = 0, grandTotal = 0, width = 32, isGst = true, gstin = '', customerGstin = '' }) {
   const b = [];
   const init = () => b.push(ESC, 0x40);
   const align = n => b.push(ESC, 0x61, n);
@@ -483,11 +483,13 @@ function buildReceiptBytes({ companyName = '', invoiceNumber = '', date = '', cu
   if (companyName) {
     align(1); size(17); bold(true); line(companyName.slice(0, Math.floor(width / 2))); size(0); bold(false);
   }
+  if (isGst && gstin) { align(1); line('GSTIN: ' + gstin); }
   align(1); line('');
   align(0); divider();
-  line(pad('Invoice: ' + (invoiceNumber || ''), width));
+  if (isGst) line(pad('Invoice: ' + (invoiceNumber || ''), width));
   line(pad('Date: ' + (date || ''), width));
   line(pad('Customer: ' + (customer || 'Walk-in Customer'), width));
+  if (isGst && customerGstin) line(pad('GSTIN: ' + customerGstin, width));
   divider();
   line(pad('Item', 22) + pad('Qty', 4, 'right') + pad('Amt', 6, 'right'));
   divider();
@@ -500,7 +502,7 @@ function buildReceiptBytes({ companyName = '', invoiceNumber = '', date = '', cu
   });
   divider();
   line(pad('Subtotal', width - 14, 'left') + pad('Rs.' + Number(subtotal).toFixed(2), 14, 'right'));
-  line(pad('GST @18%', width - 14, 'left') + pad('Rs.' + Number(gstAmount).toFixed(2), 14, 'right'));
+  if (isGst) line(pad('GST @18%', width - 14, 'left') + pad('Rs.' + Number(gstAmount).toFixed(2), 14, 'right'));
   bold(true);
   line(pad('TOTAL', width - 14, 'left') + pad('Rs.' + Number(grandTotal).toFixed(2), 14, 'right'));
   bold(false);
@@ -541,12 +543,15 @@ function buildLabelBytes({ name = '', price = 0, barcode = '', sku = '', copies 
 
 function receiptTextFallback(p) {
   const W = 32;
+  const isGst = p.isGst !== false;
   const items = (p.items || []).map(it => {
     const qty = Number(it.quantity) || 1;
     const price = Number(it.sell_price || it.price || 0);
     return `${String(it.product_name || it.name).slice(0, W)}\n` + pad('', 22) + pad(String(qty), 4, 'right') + pad('Rs.' + (qty * price).toFixed(0), 6, 'right');
   }).join('\n');
-  return `${p.companyName || ''}\nInvoice: ${p.invoiceNumber || ''}\nDate: ${p.date || ''}\nCustomer: ${p.customer || ''}\n-------------------------------\nItem                   Qty   Amt\n${items}\n-------------------------------\nSubtotal             Rs.${Number(p.subtotal || 0).toFixed(2)}\nGST @18%             Rs.${Number(p.gstAmount || 0).toFixed(2)}\nTOTAL                Rs.${Number(p.grandTotal || 0).toFixed(2)}\n\nThank you! Visit again.\n`;
+  const head = `${p.companyName || ''}\n${isGst && p.gstin ? 'GSTIN: ' + p.gstin + '\n' : ''}${isGst ? 'Invoice: ' + (p.invoiceNumber || '') + '\n' : ''}Date: ${p.date || ''}\nCustomer: ${p.customer || ''}${isGst && p.customerGstin ? '\nGSTIN: ' + p.customerGstin : ''}\n`;
+  const totals = `${'Subtotal'.padEnd(22)}Rs.${Number(p.subtotal || 0).toFixed(2)}\n${isGst ? 'GST @18%'.padEnd(22) + 'Rs.' + Number(p.gstAmount || 0).toFixed(2) + '\n' : ''}${'TOTAL'.padEnd(22)}Rs.${Number(p.grandTotal || 0).toFixed(2)}\n`;
+  return `${head}-------------------------------\nItem                   Qty   Amt\n${items}\n-------------------------------\n${totals}\nThank you! Visit again.\n`;
 }
 
 function labelTextFallback(p) {
@@ -558,28 +563,30 @@ function labelTextFallback(p) {
 
 function buildReceiptLines(p) {
   const W = 52;
+  const isGst = p.isGst !== false;
   const lines = [];
-  const add = (t, bold) => lines.push(t);
-  add(p.companyName || 'Aditya Enterprises');
-  add('====================================================');
-  add(`Invoice: ${p.invoiceNumber || ''}`);
-  add(`Date: ${p.date || ''}`);
-  add(`Customer: ${p.customer || 'Walk-in Customer'}`);
-  add('====================================================');
-  add('Item                    Qty       Amount');
-  add('====================================================');
+  lines.push(p.companyName || 'Aditya Enterprises');
+  if (isGst && p.gstin) lines.push('GSTIN: ' + p.gstin);
+  lines.push('====================================================');
+  if (isGst) lines.push(`Invoice: ${p.invoiceNumber || ''}`);
+  lines.push(`Date: ${p.date || ''}`);
+  lines.push(`Customer: ${p.customer || 'Walk-in Customer'}`);
+  if (isGst && p.customerGstin) lines.push(`GSTIN: ${p.customerGstin}`);
+  lines.push('====================================================');
+  lines.push('Item                    Qty       Amount');
+  lines.push('====================================================');
   (p.items || []).forEach(item => {
     const qty = Number(item.quantity) || 1;
     const price = Number(item.sell_price || item.price || 0);
     lines.push(...wrapLines(String(item.product_name || item.name || ''), W));
     lines.push(''.padEnd(36) + String(qty).padStart(6) + ('Rs.' + (qty * price).toFixed(0)).padStart(12));
   });
-  add('====================================================');
-  add('Subtotal' + 'Rs.' + Number(p.subtotal || 0).toFixed(2).padStart(W - 8));
-  add('GST @18%' + 'Rs.' + Number(p.gstAmount || 0).toFixed(2).padStart(W - 7));
-  add('TOTAL' + 'Rs.' + Number(p.grandTotal || 0).toFixed(2).padStart(W - 5));
-  add('====================================================');
-  add('Thank you! Visit again.');
+  lines.push('====================================================');
+  lines.push('Subtotal' + 'Rs.' + Number(p.subtotal || 0).toFixed(2).padStart(W - 8));
+  if (isGst) lines.push('GST @18%' + 'Rs.' + Number(p.gstAmount || 0).toFixed(2).padStart(W - 7));
+  lines.push('TOTAL' + 'Rs.' + Number(p.grandTotal || 0).toFixed(2).padStart(W - 5));
+  lines.push('====================================================');
+  lines.push('Thank you! Visit again.');
   return lines;
 }
 
@@ -605,7 +612,10 @@ async function handleJob(job) {
       items: job.type === 'test' ? [{ product_name: 'Printer Test', quantity: 1, sell_price: 1 }] : (p.items || []),
       subtotal: job.type === 'test' ? 1 : Number(p.subtotal || 0),
       gstAmount: job.type === 'test' ? 0 : Number(p.gstAmount || 0),
-      grandTotal: job.type === 'test' ? 1 : Number(p.grandTotal || 0)
+      grandTotal: job.type === 'test' ? 1 : Number(p.grandTotal || 0),
+      isGst: job.type === 'test' ? true : (p.isGst !== false),
+      gstin: p.gstin || '',
+      customerGstin: p.customerGstin || ''
     };
     if (isNormal) {
       result = printReceiptViaGdi(config.printerName, buildReceiptLines(receipt));

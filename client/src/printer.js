@@ -360,7 +360,7 @@ function pad(str, n, dir) {
   return dir === 'right' ? str.padStart(n) : dir === 'center' ? str.padStart(Math.floor((n + str.length) / 2)).padEnd(n) : str.padEnd(n);
 }
 
-export function buildEscPos({ companyName = '', address = '', invoiceNumber = '', date = '', customer = '', items = [], subtotal = 0, gstAmount = 0, grandTotal = 0, width = 32 }) {
+export function buildEscPos({ companyName = '', address = '', invoiceNumber = '', date = '', customer = '', items = [], subtotal = 0, gstAmount = 0, grandTotal = 0, width = 32, isGst = true, gstin = '', customerGstin = '' }) {
   const b = [];
   const init = () => b.push(ESC, 0x40);
   const align = n => b.push(ESC, 0x61, n);
@@ -377,12 +377,14 @@ export function buildEscPos({ companyName = '', address = '', invoiceNumber = ''
     align(1); size(17); bold(true); line(companyName.slice(0, Math.floor(width / 2))); size(0); bold(false);
   }
   if (address) { align(1); line(address); }
+  if (isGst && gstin) { align(1); line('GSTIN: ' + gstin); }
   align(1); line('');
 
   align(0); divider();
-  line(pad('Invoice: ' + (invoiceNumber || ''), width));
+  if (isGst) line(pad('Invoice: ' + (invoiceNumber || ''), width));
   line(pad('Date: ' + (date || ''), width));
   line(pad('Customer: ' + (customer || 'Walk-in Customer'), width));
+  if (isGst && customerGstin) line(pad('GSTIN: ' + customerGstin, width));
   divider();
 
   line(pad('Item', 22) + pad('Qty', 4, 'right') + pad('Amt', 6, 'right'));
@@ -398,7 +400,7 @@ export function buildEscPos({ companyName = '', address = '', invoiceNumber = ''
 
   divider();
   line(pad('Subtotal', width - 14, 'left') + pad('Rs.' + Number(subtotal).toFixed(2), 14, 'right'));
-  line(pad('GST @18%', width - 14, 'left') + pad('Rs.' + Number(gstAmount).toFixed(2), 14, 'right'));
+  if (isGst) line(pad('GST @18%', width - 14, 'left') + pad('Rs.' + Number(gstAmount).toFixed(2), 14, 'right'));
   bold(true);
   line(pad('TOTAL', width - 14, 'left') + pad('Rs.' + Number(grandTotal).toFixed(2), 14, 'right'));
   bold(false);
