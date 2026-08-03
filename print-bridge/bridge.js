@@ -650,8 +650,20 @@ function buildLabelBytes({ name = '', price = 0, barcode = '', sku = '', copies 
     b.push(...toBytes('Rs. ' + (Number(price) || 0).toLocaleString ? (Number(price) || 0).toLocaleString('en-IN') : Number(price) || 0), 0x0a);
     if (pattern) {
       b.push(ESC, 0x61, 1);
-      b.push(...rasterBitmap(pattern, 384, 96));
-      b.push(0x0a);
+      const code = String(barcode);
+      if (code && /^[\x20-\x7e]+$/.test(code)) {
+        // Native Code128 (GS k 73) - every thermal printer supports this,
+        // unlike raster images which cheap printers silently drop.
+        b.push(GS, 0x68, 80);              // barcode height 80 dots
+        b.push(GS, 0x77, 2);               // 2x wide
+        b.push(GS, 0x48, 2);               // HRI text below
+        b.push(GS, 0x6b, 73, code.length); // GS k 73 n
+        b.push(...toBytes(code));
+        b.push(0x0a);
+      } else {
+        b.push(...rasterBitmap(pattern, 384, 96));
+        b.push(0x0a);
+      }
     }
     b.push(ESC, 0x45, 0);
     b.push(...toBytes(String(sku).slice(0, 32)), 0x0a);

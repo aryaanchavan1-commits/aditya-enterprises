@@ -792,8 +792,20 @@ export function buildLabelEscPos({ name = '', price = 0, barcode = '', sku = '',
     b.push(...text('Rs. ' + (Number(price) || 0).toLocaleString('en-IN')), 0x0a);
     if (pattern) {
       b.push(ESC, 0x61, 1);
-      b.push(...rasterBitmap(pattern, 384, 96));
-      b.push(0x0a);
+      const code = String(barcode);
+      if (code && /^[\x20-\x7e]+$/.test(code)) {
+        // Native Code128 (GS k 73) - every thermal printer supports this,
+        // unlike raster images which cheap printers silently drop.
+        b.push(GS, 0x68, 80);
+        b.push(GS, 0x77, 2);
+        b.push(GS, 0x48, 2);
+        b.push(GS, 0x6b, 73, code.length);
+        b.push(...text(code));
+        b.push(0x0a);
+      } else {
+        b.push(...rasterBitmap(pattern, 384, 96));
+        b.push(0x0a);
+      }
     }
     b.push(ESC, 0x45, 0);
     b.push(...text(String(sku).slice(0, 32)), 0x0a);
