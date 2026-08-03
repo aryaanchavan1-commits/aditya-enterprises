@@ -19,7 +19,7 @@ const os = require('os');
 const { execFileSync, execSync } = require('child_process');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
-const API = (process.env.AE_API || 'https://aditya-enterprises-umgw.onrender.com').replace(/\/+$/, '');
+const API = (process.env.AE_API || 'https://aditya-enterprises-erp.vercel.app').replace(/\/+$/, '');
 const POLL_MS = 3000;
 
 let config = { printerName: '', printerShare: '' };

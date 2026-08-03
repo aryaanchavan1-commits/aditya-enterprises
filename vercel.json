@@ -3,7 +3,7 @@
   "buildCommand": "cd client && npm install && npm run build",
   "outputDirectory": "client/dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://aditya-enterprises-umgw.onrender.com/api/$1" },
+    { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/data/(.*)", "destination": "https://aditya-enterprises-umgw.onrender.com/data/$1" },
     { "source": "/barcodes/(.*)", "destination": "https://aditya-enterprises-umgw.onrender.com/barcodes/$1" },
     { "source": "/uploads/(.*)", "destination": "https://aditya-enterprises-umgw.onrender.com/uploads/$1" },
