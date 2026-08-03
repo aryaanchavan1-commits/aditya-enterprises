@@ -560,6 +560,7 @@ async function printViaBest(type, bytes, payload) {
   return {
     via: null,
     target: '',
+    needsChooser: !!(serialSupported() || usbSupported()),
     message: firstError
       ? firstError + '. Tried automatic backup printers too - fix the USB connection (Settings → Printers) or switch the printer on.'
       : (directCapable
@@ -568,12 +569,37 @@ async function printViaBest(type, bytes, payload) {
   };
 }
 
+// Pop the browser's device chooser (once) so the user can pick their printer
+// straight from the print button - no need to visit Settings first.
+async function autoConnectPrinter() {
+  if (serialSupported()) return connectSerialPrinter(DEFAULT_BAUD);
+  if (usbSupported()) return connectUsbPrinter();
+  throw new Error('No direct printer option in this browser - use Chrome or Edge.');
+}
+
+export const DEFAULT_BAUD = 9600;
+
+// Smart print that auto-detects: tries the already-connected printer, then
+// the USB bridge / Bluetooth / system fallbacks, and if nothing is connected
+// pops the browser chooser automatically and then prints immediately.
+async function smartPrint(type, bytes, payload) {
+  let r = await printViaBest(type, bytes, payload);
+  if (r.via === null && r.needsChooser) {
+    try {
+      await autoConnectPrinter();
+      r = await printViaBest(type, bytes, payload);
+      if (r.via === 'usb') r.connected = true;
+    } catch (e) { /* user cancelled - original message stands */ }
+  }
+  return r;
+}
+
 export async function printSmartLabel(payload) {
-  return printViaBest('label', buildLabelEscPos(payload), payload);
+  return smartPrint('label', buildLabelEscPos(payload), payload);
 }
 
 export async function printSmartReceipt(payload) {
-  return printViaBest('receipt', buildEscPos(payload), payload);
+  return smartPrint('receipt', buildEscPos(payload), payload);
 }
 
 // ---------------- ESC/POS receipt builder (58mm = 32 chars, 80mm = 42) ----------------

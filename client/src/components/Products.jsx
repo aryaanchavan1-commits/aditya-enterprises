@@ -401,10 +401,9 @@ export default function Products() {
             </div>
             <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:16}}>
               <button className="btn btn-outline" onClick={() => { setLabelProduct(null); setLabelQty(1); }}>Close</button>
-              <button className="btn btn-warning" onClick={handleUsbLabels} disabled={labelPrinting} title="USB bridge if online, else paired Bluetooth printer">
-                {labelPrinting ? 'Printing...' : `Print ${labelQty} via Printer`}
+              <button className="btn btn-primary" onClick={handleUsbLabels} disabled={labelPrinting} title="Auto-detects your printer - prints without a dialog, or falls back to the system dialog">
+                {labelPrinting ? 'Printing...' : `Print ${labelQty} Label${labelQty > 1 ? 's' : ''}`}
               </button>
-              <button className="btn btn-primary" onClick={handlePrintLabel}>Print {labelQty} Label{labelQty > 1 ? 's' : ''}</button>
             </div>
           </div>
         </div>

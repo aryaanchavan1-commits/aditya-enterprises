@@ -94,29 +94,17 @@ export default function Settings() {
   }, []);
 
   const connectDirectUsb = async () => {
-    if (!serialSupported()) { showToast('Direct USB needs Chrome or Edge on a PC (Web Serial). For phones use "Connect via USB-OTG" below.', 'error'); return; }
     setDirectBusy(true);
     try {
-      const info = await connectSerialPrinter(serialBaud);
+      let info;
+      if (serialSupported()) info = await connectSerialPrinter(serialBaud);
+      else if (usbSupported()) info = await connectUsbPrinter();
+      else { showToast('Direct printing needs Chrome or Edge (Web Serial on PC, WebUSB on Android).', 'error'); return; }
       setDirectPrinter(info);
-      showToast(`USB printer connected: ${info.name}`);
+      showToast(`Printer connected: ${info.name}`);
     } catch (err) {
       if (err.name !== 'NotFoundError') showToast(err.message || 'Connection cancelled', 'error');
-      else showToast('No port selected. If the list was empty: install the CH340/CH341 driver, replug the printer, then click Connect again (see the notes above).', 'error');
-    } finally {
-      setDirectBusy(false);
-    }
-  };
-
-  const connectAndroidUsb = async () => {
-    if (!usbSupported()) { showToast('USB-OTG needs Chrome/Edge on Android or a PC with WebUSB.', 'error'); return; }
-    setDirectBusy(true);
-    try {
-      const info = await connectUsbPrinter();
-      setDirectPrinter(info);
-      showToast(`USB printer connected: ${info.name}`);
-    } catch (err) {
-      if (err.name !== 'NotFoundError') showToast(err.message || 'Connection cancelled', 'error');
+      else showToast('No printer selected. If the list was empty: install the CH340/CH341 driver, replug the printer, then click Connect again.', 'error');
     } finally {
       setDirectBusy(false);
     }
@@ -406,24 +394,23 @@ export default function Settings() {
               {directPrinter ? <span className="badge badge-success" style={{fontSize:10}}>Connected</span> : <span className="badge badge-secondary" style={{fontSize:10, background:'#ccc', color:'#333'}}>Not connected</span>}
             </div>
             {directPrinter ? (
-              <div style={{fontSize:12, color:'#27ae60', marginBottom:6}}>Connected: <strong>{directPrinter.name}</strong> {directPrinter.type === 'serial' ? '(Web Serial)' : '(WebUSB)'}</div>
+              <div style={{fontSize:12, color:'#27ae60', marginBottom:6}}>Connected: <strong>{directPrinter.name}</strong> — labels, receipts &amp; bills print to it automatically</div>
             ) : (
               <div style={{fontSize:11, color:'#555', marginBottom:6}}>
-                Plug the thermal printer (USB) into <strong>this</strong> PC or phone and connect it straight from the browser - no bridge, no software. Everything (labels, receipts, GST/non-GST bills) prints directly. Needs Chrome or Edge.
+                Plug the printer (USB) into <strong>this</strong> PC or phone and press Connect. The app picks the right way automatically (USB on PC, USB-OTG on Android) - no software, no bridge. From then on, printing is fully automatic: sales, labels, receipts and GST/non-GST bills print on their own.
               </div>
             )}
             <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:6}}>
-              <button className="btn btn-sm btn-success" onClick={connectDirectUsb} disabled={directBusy || !!directPrinter} title="Opens the browser's device list - pick your printer's USB port">
-                {directBusy ? 'Connecting...' : 'Connect USB Printer (PC)'}
+              <button className="btn btn-sm btn-success" onClick={connectDirectUsb} disabled={directBusy || !!directPrinter} title="Shows the browser's device list - pick your printer">
+                {directBusy ? 'Connecting...' : (directPrinter ? 'Printer Connected' : 'Connect Printer')}
               </button>
-              <button className="btn btn-sm btn-info" onClick={connectAndroidUsb} disabled={directBusy || !!directPrinter} title="Android phone/tablet with a USB-OTG cable, or a PC with WebUSB">
-                Connect via USB-OTG (Android)
-              </button>
-              <select value={serialBaud} onChange={e => setSerialBaud(Number(e.target.value))} disabled={!!directPrinter} style={{fontSize:12, padding:'4px 6px'}} title="Most thermal printers use 9600. Check the printer manual / sticker if nothing prints.">
-                <option value={9600}>9600 baud (default)</option>
-                <option value={19200}>19200 baud</option>
-                <option value={115200}>115200 baud</option>
-              </select>
+              {!directPrinter && serialSupported() && (
+                <select value={serialBaud} onChange={e => setSerialBaud(Number(e.target.value))} style={{fontSize:12, padding:'4px 6px'}} title="Most thermal printers use 9600. Try others if nothing prints.">
+                  <option value={9600}>9600 baud</option>
+                  <option value={19200}>19200 baud</option>
+                  <option value={115200}>115200 baud</option>
+                </select>
+              )}
               {directPrinter && (
                 <>
                   <button className="btn btn-sm btn-warning" onClick={testDirectPrint} disabled={directBusy}>Test Print</button>
@@ -431,13 +418,18 @@ export default function Settings() {
                 </>
               )}
             </div>
-            <div style={{fontSize:11, lineHeight:1.5, color:'#7f8c8d', borderTop:'1px dashed #b8d4c9', paddingTop:6}}>
-              <strong>No port shows up in the list?</strong> Most 58mm/80mm printers use a CH340/CH341 USB-serial chip - the COM port only appears after its driver is installed (Windows usually installs it automatically). Check &amp; fix:
-              <ul style={{margin:'4px 0 0 16px', padding:0}}>
-                <li>Open Device Manager → <strong>Ports (COM &amp; LPT)</strong> / <strong>Universal Serial Bus devices</strong>. If you see "CH340" with a warning icon, right-click → Update driver (online).</li>
-                <li>Unplug the printer, <strong>close any printer software</strong> that may have claimed the port, plug it back in, then press Connect again.</li>
-                <li>If the printer installs as a <strong>Windows printer with its own driver</strong> (no COM port appears - some POS-58 models), the browser cannot reach it directly - use the USB Bridge below or the <strong>Print dialog</strong> for that one.</li>
-              </ul>
+            {!directPrinter && (
+              <details style={{fontSize:11, color:'#7f8c8d'}}>
+                <summary style={{cursor:'pointer'}}>No printer in the list? Check this</summary>
+                <ul style={{margin:'4px 0 0 16px', padding:0, lineHeight:1.6}}>
+                  <li>Open <strong>Device Manager → Ports (COM &amp; LPT)</strong>. If you see "CH340" with a warning icon, right-click → Update driver (online). The port only appears after the driver is installed.</li>
+                  <li>Close any printer software that may have claimed the port, then replug the printer.</li>
+                  <li>If the printer installs with its own Windows driver and <strong>never shows a COM port</strong>, browsers can't reach it directly - see "Other printing options" below.</li>
+                </ul>
+              </details>
+            )}
+            <div style={{fontSize:11, color:'#888'}}>
+              Connect once per device - after that the app reconnects automatically and prints with no clicks.
             </div>
           </div>
 
@@ -454,18 +446,24 @@ export default function Settings() {
             ) : btPrinter ? (
               <div style={{fontSize:12}}>🖨️ <strong>{btPrinter.name}</strong> (Bluetooth paired) — printing will use Bluetooth</div>
             ) : (
-              <div style={{fontSize:12, color:'#e74c3c'}}>No printer connected — plug one into this PC/phone and tap "Connect USB Printer" above, or pair the Bluetooth printer below.</div>
+              <div style={{fontSize:12, color:'#e74c3c'}}>No printer connected — plug one into this PC/phone and press "Connect Printer" above.</div>
             )}
           </div>
 
+          <details style={{marginBottom:12}}>
+            <summary style={{cursor:'pointer', fontSize:13, fontWeight:600, color:'#555'}}>
+              Other printing options (Bluetooth · Shop-PC bridge · Windows-driver printers)
+            </summary>
+            <div style={{padding:'8px 0 0 4px'}}>
+
           <div style={{marginBottom:12, padding:10, background:'#f8f9fa', borderRadius:8, border:'1px solid #eee'}}>
             <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
-              <span style={{fontSize:13, fontWeight:600}}>Optional: USB Bridge (prints to a different shop PC)</span>
+              <span style={{fontSize:13, fontWeight:600}}>USB Bridge (printer on a different PC)</span>
               <span className={`badge ${bridgeStatus.bridgeOnline ? 'badge-success' : 'badge-danger'}`} style={{fontSize:10}}>
                 {bridgeStatus.bridgeOnline ? 'Bridge Online' : 'Bridge Offline'}
               </span>
             </div>
-            <div style={{fontSize:11, color:'#777', marginBottom:6}}>Only needed if the printer stays plugged into a <strong>different</strong> PC than the one you're using the app from (e.g. sales from a phone, printer on the shop PC). With "Direct USB Printing" above, no bridge is needed at all.</div>
+            <div style={{fontSize:11, color:'#777', marginBottom:6}}>For when the printer stays plugged into a <strong>different</strong> PC than the device you're using. Setup: plug in the printer, copy the <strong>print-bridge</strong> folder there, run <strong>install-bridge.bat</strong> once (starts with Windows).</div>
             <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:6}}>
               <button className="btn btn-sm btn-success" onClick={testBridgePrint} disabled={bridgeBusy}>
                 {bridgeBusy ? 'Sending...' : 'Test Print via USB'}
@@ -478,17 +476,12 @@ export default function Settings() {
               <div style={{fontSize:11, color:'#e67e22', marginBottom:4}}>Bridge running, but it reported no printer found on the shop PC.</div>
             )}
             <div style={{fontSize:11, color:'#777', lineHeight:1.5}}>
-              Prints automatically to ANY printer on that PC - thermal printers (Posiflow etc.) get fast ESC/POS codes, normal printers (HP/Canon/Brother) get a proper rendered print via the Windows driver. No dialog needed. One-time setup on the Windows PC where the printer is plugged in:
-              <ol style={{margin:'4px 0 0 16px', padding:0}}>
-                <li>Plug in the Posiflow (USB) and install its Windows driver if Windows asks.</li>
-                <li>Copy the <strong>print-bridge</strong> folder onto that PC and run <strong>install-bridge.bat</strong> once. It installs everything and sets the bridge to start automatically with Windows.</li>
-              </ol>
-              When the bridge is running, the green badge above turns Online and printing uses USB automatically (falls back to Bluetooth when the bridge is off).
+              Thermal printers (Posiflow etc.) get fast ESC/POS codes, normal printers (HP/Canon/Brother) get a rendered print via the Windows driver. No dialog needed.
             </div>
           </div>
 
           <div style={{marginBottom:12, padding:10, background:'#f8f9fa', borderRadius:8, border:'1px solid #eee'}}>
-            <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>Bluetooth Printer (direct printing, no dialog)</div>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>Bluetooth Printer</div>
             <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:6}}>
               <button className="btn btn-sm btn-primary" onClick={connectBluetoothPrinter} disabled={btBusy}>
                 {btBusy ? 'Working...' : (btPrinter ? 'Reconnect Bluetooth Printer' : 'Connect Bluetooth Printer')}
@@ -504,46 +497,21 @@ export default function Settings() {
               <div style={{fontSize:12, color:'#27ae60'}}>Connected: <strong>{btPrinter.name}</strong></div>
             ) : (
               <div style={{fontSize:11, color:'#777'}}>
-                Pair your Posiflow / thermal receipt printer with the browser (Chrome/Edge). After pairing, the POS prints receipts directly to it. Printer must be switched on and in Bluetooth pairing mode.
+                Pair a Bluetooth thermal printer once (Chrome/Edge) - printer must be ON and in pairing mode.
               </div>
             )}
             {printerStatus && <div style={{fontSize:11, marginTop:4, color:'#777'}}>{printerStatus}</div>}
           </div>
 
-          <div style={{marginBottom:12, padding:10, background:'#eef6ff', borderRadius:8, border:'1px solid #bcd9f5'}}>
-            <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>How does printing work? (choose your setup)</div>
-            <div style={{fontSize:11, color:'#555', lineHeight:1.6}}>
-              <ul style={{margin:'0 0 6px 16px', padding:0}}>
-                <li><strong>Direct USB (recommended, no install):</strong> plug the thermal printer into the same PC or phone you use the app on, tap "Connect USB Printer" once, done. Chrome/Edge talks to the printer directly (Web Serial on PC, USB-OTG on Android). Auto-reconnects on that device afterwards.</li>
-                <li><strong>Bluetooth:</strong> pair a Bluetooth thermal printer once (Chrome/Edge). Works from PC or Android.</li>
-                <li><strong>USB Bridge (optional):</strong> only when the printer is plugged into a <strong>different</strong> PC than the device you're using. A tiny free program runs once on that PC (install-bridge.bat) and prints jobs sent from anywhere. Setup steps below.</li>
-                <li><strong>Normal printers (HP/Canon/Brother):</strong> use "Print Receipt" — the browser's own print dialog handles them on any device.</li>
-              </ul>
-              Bridge setup (only for that shop-PC scenario): plug in the printer, copy the <strong>print-bridge</strong> folder there, run <strong>install-bridge.bat</strong> once — it starts automatically with Windows afterwards.
+          <div style={{marginBottom:12, padding:10, background:'#f8f9fa', borderRadius:8, border:'1px solid #eee'}}>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:6}}>Windows-driver printers (HP/Canon/Brother)</div>
+            <div style={{fontSize:11, color:'#777'}}>
+              These can't receive raw data from a browser. Use the <strong>Print</strong> button in the POS / Products screen - it opens the browser's print dialog, which prints to any installed printer, including barcodes on labels.
             </div>
           </div>
 
-          <div style={{marginBottom:12}}>
-            <button className="btn btn-sm btn-info" onClick={detectPrinters}>Scan for Printers (Windows/USB)</button>
-            {detectedPrinters.length > 0 && printerStatus && <span style={{fontSize:12, marginLeft:8, color:'#27ae60'}}>{printerStatus}</span>}
-          </div>
-          {detectedPrinters.length > 0 ? (
-            detectedPrinters.map((p, i) => (
-              <div key={i} style={{fontSize:12, padding:'6px 8px', marginBottom:4, background:'#f0fff0', borderRadius:6, borderLeft:'3px solid #27ae60'}}>
-                <div><strong>{p.name}</strong></div>
-                <div style={{fontSize:10, color:'#777'}}>
-                  {p.driver && <span>Driver: {p.driver} | </span>}
-                  {p.port && <span>Port: {p.port} | </span>}
-                  {p.source && <span>Source: {p.source}</span>}
-                  {p.isDefault && <span className="badge badge-info" style={{marginLeft:4}}>Default</span>}
-                </div>
-              </div>
-            ))
-          ) : (
-            <p style={{fontSize:11, color:'#777'}}>
-              The cloud API cannot see your USB printer - only the <strong>bridge running on the shop PC</strong> can detect it. Start <strong>start-bridge.bat</strong> there and this page will show the detected printer name automatically. Alternatively pair the printer over <strong>Bluetooth</strong> using the button above.
-            </p>
-          )}
+            </div>
+          </details>
         </div>
 
         {/* Danger Zone */}

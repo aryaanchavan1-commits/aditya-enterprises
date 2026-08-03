@@ -57,9 +57,12 @@ export default function SalesPOS() {
         gstin: companyGstin,
         customerGstin: lastInvoice.customer_gstin || ''
       });
-      if (r.via === 'usb') showToast('Receipt sent to USB printer');
+      if (r.via === 'usb') showToast('Receipt sent to printer');
       else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
-      else showToast(r.message || 'No printer detected - pair Bluetooth or run the USB bridge (Settings → Printers)', 'error');
+      else {
+        showToast(r.message || 'No printer connected - opening the system print dialog instead', 'error');
+        setTimeout(() => handlePrint(), 600);
+      }
     } catch (err) {
       showToast('Print failed: ' + (err.message || 'connection error'), 'error');
     } finally {
@@ -237,7 +240,7 @@ export default function SalesPOS() {
       });
       if (r.via === 'usb') showToast('Receipt sent to USB printer');
       else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
-      else showToast('No printer connected - use "Print Receipt" or "Smart Print" below', 'error');
+      else showToast('No printer connected - use the "Print Receipt" button below', 'error');
     } catch (e) { /* keep the sale toast - printing can be retried below */ }
   };
 
@@ -361,13 +364,9 @@ export default function SalesPOS() {
                   {btBusy ? 'Working...' : 'Pair Bluetooth Printer'}
                 </button>
               )}
-              <button className="btn btn-sm btn-warning" onClick={handleUsbPrint} disabled={btBusy} title="USB bridge if online, else paired Bluetooth printer">
-                Smart Print
+              <button className="btn btn-primary" onClick={handleUsbPrint} disabled={btBusy} title="Auto-detects your printer (USB/Bluetooth) - prints without a dialog">
+                Print Receipt
               </button>
-              <button className="btn btn-sm btn-success" onClick={handleBluetoothPrint} disabled={btBusy}>
-                {btBusy ? 'Printing...' : 'Print Direct (Bluetooth)'}
-              </button>
-              <button className="btn btn-primary" onClick={handlePrint}>Print Receipt (Windows/USB)</button>
             </div>
           </div>
         </div>
