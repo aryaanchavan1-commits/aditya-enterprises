@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { bluetoothSupported, pairPrinter, reconnectPrinter, sendBytes, buildEscPosTest, getSavedPrinter, clearSavedPrinter, disconnectActive, isConnected, printViaBridge } from '../printer';
+import { bluetoothSupported, pairPrinter, reconnectPrinter, sendBytes, buildEscPosTest, getSavedPrinter, clearSavedPrinter, disconnectActive, isConnected, printViaBridge, serialSupported, connectSerialPrinter, disconnectSerial, serialConnected, usbSupported, connectUsbPrinter, disconnectUsb, usbConnected, getDirectPrinter, printViaSerial, printViaUsb } from '../printer';
 
 const API = '/api';
 
@@ -11,6 +11,9 @@ export default function Settings() {
   const [scannerStatus, setScannerStatus] = useState('');
   const [detectedPrinters, setDetectedPrinters] = useState([]);
   const [detectedScanners, setDetectedScanners] = useState([]);
+  const [directPrinter, setDirectPrinter] = useState(null);
+  const [directBusy, setDirectBusy] = useState(false);
+  const [serialBaud, setSerialBaud] = useState(9600);
   const [btPrinter, setBtPrinter] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, bridgePrinter: '', bridgeShare: '', bridgePrinterMode: '', bridgeVersion: '', bridgeLastError: '', lastJob: null });
@@ -83,6 +86,67 @@ export default function Settings() {
         });
       } catch (err) { showToast('Failed to save', 'error'); }
     }, 800);
+  };
+
+  // Re-attach to a previously allowed USB printer without the chooser.
+  useEffect(() => {
+    getDirectPrinter().then(p => { if (p) setDirectPrinter(p); }).catch(() => {});
+  }, []);
+
+  const connectDirectUsb = async () => {
+    if (!serialSupported()) { showToast('Direct USB needs Chrome or Edge on a PC (Web Serial). For phones use "Connect via USB-OTG" below.', 'error'); return; }
+    setDirectBusy(true);
+    try {
+      const info = await connectSerialPrinter(serialBaud);
+      setDirectPrinter(info);
+      showToast(`USB printer connected: ${info.name}`);
+    } catch (err) {
+      if (err.name !== 'NotFoundError') showToast(err.message || 'Connection cancelled', 'error');
+    } finally {
+      setDirectBusy(false);
+    }
+  };
+
+  const connectAndroidUsb = async () => {
+    if (!usbSupported()) { showToast('USB-OTG needs Chrome/Edge on Android or a PC with WebUSB.', 'error'); return; }
+    setDirectBusy(true);
+    try {
+      const info = await connectUsbPrinter();
+      setDirectPrinter(info);
+      showToast(`USB printer connected: ${info.name}`);
+    } catch (err) {
+      if (err.name !== 'NotFoundError') showToast(err.message || 'Connection cancelled', 'error');
+    } finally {
+      setDirectBusy(false);
+    }
+  };
+
+  const testDirectPrint = async () => {
+    if (!directPrinter) { showToast('Connect a USB printer first', 'error'); return; }
+    setDirectBusy(true);
+    try {
+      const bytes = buildEscPosTest({ companyName: settings.company_name || 'Aditya Enterprises' });
+      if (directPrinter.type === 'serial') await printViaSerial('test', bytes);
+      else await printViaUsb('test', bytes);
+      showToast('Test page sent to the printer');
+    } catch (err) {
+      showToast('USB print failed: ' + (err.message || 'printer unreachable'), 'error');
+      setDirectPrinter(null);
+    } finally {
+      setDirectBusy(false);
+    }
+  };
+
+  const disconnectDirect = async () => {
+    setDirectBusy(true);
+    try {
+      if (directPrinter?.type === 'serial') await disconnectSerial();
+      else await disconnectUsb();
+      setDirectPrinter(null);
+      showToast('USB printer disconnected');
+    } finally {
+      setDirectBusy(false);
+    }
   };
 
   const detectPrinters = async () => {
@@ -335,9 +399,47 @@ export default function Settings() {
 
           <h4 style={{fontSize:14, marginTop:20, marginBottom:8}}>Printers</h4>
 
+          <div style={{marginBottom:12, padding:10, background:'#eafaf1', borderRadius:8, border:'1px solid #a9dfbf'}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
+              <span style={{fontSize:13, fontWeight:600}}>Direct USB Printing - no install needed</span>
+              {directPrinter ? <span className="badge badge-success" style={{fontSize:10}}>Connected</span> : <span className="badge badge-secondary" style={{fontSize:10, background:'#ccc', color:'#333'}}>Not connected</span>}
+            </div>
+            {directPrinter ? (
+              <div style={{fontSize:12, color:'#27ae60', marginBottom:6}}>Connected: <strong>{directPrinter.name}</strong> {directPrinter.type === 'serial' ? '(Web Serial)' : '(WebUSB)'}</div>
+            ) : (
+              <div style={{fontSize:11, color:'#555', marginBottom:6}}>
+                Plug the thermal printer (USB) into <strong>this</strong> PC or phone and connect it straight from the browser - no bridge, no software. Everything (labels, receipts, GST/non-GST bills) prints directly. Needs Chrome or Edge.
+              </div>
+            )}
+            <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:6}}>
+              <button className="btn btn-sm btn-success" onClick={connectDirectUsb} disabled={directBusy || !!directPrinter} title="Opens the browser printer chooser - pick the USB printer's port">
+                {directBusy ? 'Connecting...' : 'Connect USB Printer (PC)'}
+              </button>
+              <button className="btn btn-sm btn-info" onClick={connectAndroidUsb} disabled={directBusy || !!directPrinter} title="Android phone/tablet with a USB-OTG cable, or a PC with WebUSB">
+                Connect via USB-OTG (Android)
+              </button>
+              <select value={serialBaud} onChange={e => setSerialBaud(Number(e.target.value))} disabled={!!directPrinter} style={{fontSize:12, padding:'4px 6px'}} title="Most thermal printers use 9600. Check the printer manual / sticker if nothing prints.">
+                <option value={9600}>9600 baud (default)</option>
+                <option value={19200}>19200 baud</option>
+                <option value={115200}>115200 baud</option>
+              </select>
+              {directPrinter && (
+                <>
+                  <button className="btn btn-sm btn-warning" onClick={testDirectPrint} disabled={directBusy}>Test Print</button>
+                  <button className="btn btn-sm btn-outline" onClick={disconnectDirect} disabled={directBusy}>Disconnect</button>
+                </>
+              )}
+            </div>
+            <div style={{fontSize:11, color:'#888'}}>
+              After connecting once, the app reconnects automatically on this device - no chooser popup again. On a phone, use a USB-OTG cable and a driver-free thermal printer.
+            </div>
+          </div>
+
           <div style={{marginBottom:12, padding:10, background:'#fffbe6', borderRadius:8, border:'1px solid #f1c40f'}}>
             <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Detected printer</div>
-            {bridgeStatus.bridgeOnline ? (
+            {directPrinter ? (
+              <div style={{fontSize:12}}>🖨️ <strong>{directPrinter.name}</strong> (direct USB via browser) — automatic label &amp; receipt printing uses it</div>
+            ) : bridgeStatus.bridgeOnline ? (
               bridgeStatus.bridgePrinter ? (
                 <div style={{fontSize:12}}>🖨️ <strong>{bridgeStatus.bridgePrinter}</strong>{bridgeStatus.bridgeShare ? ` (share: ${bridgeStatus.bridgeShare})` : ''} — {bridgeStatus.bridgePrinterMode === 'thermal' ? 'thermal printer, prints fast via ESC/POS' : 'normal printer (HP/Canon/Brother...), prints via the Windows driver'} — automatic label &amp; receipt printing uses it</div>
               ) : (
@@ -346,17 +448,18 @@ export default function Settings() {
             ) : btPrinter ? (
               <div style={{fontSize:12}}>🖨️ <strong>{btPrinter.name}</strong> (Bluetooth paired) — printing will use Bluetooth</div>
             ) : (
-              <div style={{fontSize:12, color:'#e74c3c'}}>No printer detected yet — start the USB bridge on the shop PC (below) or pair the Bluetooth printer (below).</div>
+              <div style={{fontSize:12, color:'#e74c3c'}}>No printer connected — plug one into this PC/phone and tap "Connect USB Printer" above, or pair the Bluetooth printer below.</div>
             )}
           </div>
 
           <div style={{marginBottom:12, padding:10, background:'#f8f9fa', borderRadius:8, border:'1px solid #eee'}}>
             <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
-              <span style={{fontSize:13, fontWeight:600}}>USB Printer (Print Bridge) - most reliable</span>
+              <span style={{fontSize:13, fontWeight:600}}>Optional: USB Bridge (prints to a different shop PC)</span>
               <span className={`badge ${bridgeStatus.bridgeOnline ? 'badge-success' : 'badge-danger'}`} style={{fontSize:10}}>
                 {bridgeStatus.bridgeOnline ? 'Bridge Online' : 'Bridge Offline'}
               </span>
             </div>
+            <div style={{fontSize:11, color:'#777', marginBottom:6}}>Only needed if the printer stays plugged into a <strong>different</strong> PC than the one you're using the app from (e.g. sales from a phone, printer on the shop PC). With "Direct USB Printing" above, no bridge is needed at all.</div>
             <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:6}}>
               <button className="btn btn-sm btn-success" onClick={testBridgePrint} disabled={bridgeBusy}>
                 {bridgeBusy ? 'Sending...' : 'Test Print via USB'}
@@ -402,14 +505,15 @@ export default function Settings() {
           </div>
 
           <div style={{marginBottom:12, padding:10, background:'#eef6ff', borderRadius:8, border:'1px solid #bcd9f5'}}>
-            <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>What is the USB bridge? (2-minute setup, once)</div>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>How does printing work? (choose your setup)</div>
             <div style={{fontSize:11, color:'#555', lineHeight:1.6}}>
-              A browser or phone <strong>cannot plug into a USB printer directly</strong> - Windows keeps control of it. The bridge is a tiny free program you run <strong>once on the Windows PC where the Posiflow printer is plugged in</strong>. It connects to your app over the internet and prints instantly when you tap print:
-              <ul style={{margin:'4px 0 0 16px', padding:0}}>
-                <li><strong>From any phone or laptop</strong> - add a product or make a sale, and the label/receipt prints by itself at the shop.</li>
-                <li><strong>No dialogs, no cables to swap</strong> - the job travels over the internet to the bridge PC.</li>
+              <ul style={{margin:'0 0 6px 16px', padding:0}}>
+                <li><strong>Direct USB (recommended, no install):</strong> plug the thermal printer into the same PC or phone you use the app on, tap "Connect USB Printer" once, done. Chrome/Edge talks to the printer directly (Web Serial on PC, USB-OTG on Android). Auto-reconnects on that device afterwards.</li>
+                <li><strong>Bluetooth:</strong> pair a Bluetooth thermal printer once (Chrome/Edge). Works from PC or Android.</li>
+                <li><strong>USB Bridge (optional):</strong> only when the printer is plugged into a <strong>different</strong> PC than the device you're using. A tiny free program runs once on that PC (install-bridge.bat) and prints jobs sent from anywhere. Setup steps below.</li>
+                <li><strong>Normal printers (HP/Canon/Brother):</strong> use "Print Receipt" — the browser's own print dialog handles them on any device.</li>
               </ul>
-              After the one-time setup it <strong>starts automatically with Windows</strong> and keeps working in the background. You only need: Node.js (free, nodejs.org) and the <strong>print-bridge</strong> folder from this project. Plug in the printer, run <strong>install-bridge.bat</strong> once, done.
+              Bridge setup (only for that shop-PC scenario): plug in the printer, copy the <strong>print-bridge</strong> folder there, run <strong>install-bridge.bat</strong> once — it starts automatically with Windows afterwards.
             </div>
           </div>
 

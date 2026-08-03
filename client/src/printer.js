@@ -269,6 +269,220 @@ export async function sendBytes(bytes) {
   }
 }
 
+// ================= Direct USB printing - no bridge, no install =================
+// Browsers can now talk to USB printers directly:
+//   - Web Serial  (navigator.serial)  Chrome/Edge on Windows/Mac/Linux: opens the
+//                 printer's COM port and writes raw ESC/POS. Best for shop PCs.
+//   - Web USB     (navigator.usb)     Chrome/Edge on Android (USB-OTG) and PC:
+//                 claims the device and writes ESC/POS to its bulk OUT endpoint.
+// Both are built into the browser - free, open, no software to install, and they
+// work with any ESC/POS thermal printer (POS58/80, TSP, iMini, Zjiang...).
+// The old USB bridge on the shop PC remains as an optional fallback.
+
+// ---------------- Web Serial ----------------
+
+let serialPort = null;
+let serialPortInfo = null;
+const SERIAL_KEY = 'ae_serial_printer';
+const SERIAL_CHUNK = 256;
+
+export function serialSupported() {
+  return typeof navigator !== 'undefined' && !!navigator.serial;
+}
+
+export function getSavedSerial() {
+  try { return JSON.parse(localStorage.getItem(SERIAL_KEY)) || null; } catch (e) { return null; }
+}
+
+function saveSerial(info) {
+  try { localStorage.setItem(SERIAL_KEY, JSON.stringify(info)); } catch (e) {}
+}
+
+function serialLabel(port) {
+  const info = port.getInfo ? port.getInfo() : {};
+  return `USB Printer${info.vendorId ? ` (VID:${info.vendorId.toString(16)})` : ''}`;
+}
+
+async function openSerialPort(port, baud) {
+  try {
+    if (!port.readable && !port.writable) {
+      await port.open({ baudRate: baud || 9600, bufferSize: 4096 });
+    }
+    serialPort = port;
+    serialPortInfo = port.getInfo ? port.getInfo() : {};
+    saveSerial({ vendorId: serialPortInfo.vendorId, productId: serialPortInfo.productId, baud: baud || 9600 });
+    return true;
+  } catch (e) {
+    throw new Error('Could not open USB port: ' + (e.message || 'is the printer switched on?'));
+  }
+}
+
+export async function connectSerialPrinter(baud) {
+  if (!serialSupported()) throw new Error('Web Serial not supported in this browser. Use Chrome or Edge on a PC.');
+  const port = await navigator.serial.requestPort();
+  await openSerialPort(port, baud);
+  return { type: 'serial', name: serialLabel(port), baud: baud || 9600 };
+}
+
+// Re-attach to a printer the user allowed earlier (no chooser dialog).
+export async function restoreSerialPrinter() {
+  if (!serialSupported() || serialPort) return serialPort;
+  const saved = getSavedSerial();
+  if (!saved) return null;
+  try {
+    const ports = await navigator.serial.getPorts();
+    for (const port of ports) {
+      const info = port.getInfo ? port.getInfo() : {};
+      if (String(info.vendorId) === String(saved.vendorId) && String(info.productId) === String(saved.productId)) {
+        await openSerialPort(port, saved.baud || 9600);
+        return serialPort;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+export function serialConnected() {
+  return !!(serialPort && (serialPort.readable || serialPort.writable));
+}
+
+export async function disconnectSerial() {
+  if (serialPort) {
+    try {
+      const writer = serialPort.writable && serialPort.writable.getWriter();
+      if (writer) { writer.releaseLock(); }
+      await serialPort.close();
+    } catch (e) {}
+  }
+  serialPort = null;
+  try { localStorage.removeItem(SERIAL_KEY); } catch (e) {}
+}
+
+async function writeSerial(bytes) {
+  if (!serialPort || !serialPort.writable) throw new Error('USB printer not connected. Connect it in Settings → Printers.');
+  const writer = serialPort.writable.getWriter();
+  try {
+    for (let i = 0; i < bytes.length; i += SERIAL_CHUNK) {
+      const chunk = bytes.subarray(i, Math.min(i + SERIAL_CHUNK, bytes.length));
+      await writer.write(chunk);
+      if (i + SERIAL_CHUNK < bytes.length) await new Promise(r => setTimeout(r, 15));
+    }
+  } finally {
+    try { writer.releaseLock(); } catch (e) {}
+  }
+}
+
+export async function printViaSerial(type, bytes) {
+  if (!serialConnected()) {
+    if (!await restoreSerialPrinter()) throw new Error('USB printer not connected');
+  }
+  await writeSerial(bytes);
+  return { type: 'serial', name: serialLabel(serialPort) };
+}
+
+// ---------------- Web USB (Android + PC) ----------------
+
+let usbDevice = null;
+let usbEndpoint = null;
+let usbInterfaceNumber = null;
+const USB_KEY = 'ae_usb_printer';
+
+export function usbSupported() {
+  return typeof navigator !== 'undefined' && !!navigator.usb;
+}
+
+export function getSavedUsb() {
+  try { return JSON.parse(localStorage.getItem(USB_KEY)) || null; } catch (e) { return null; }
+}
+
+function saveUsb(info) {
+  try { localStorage.setItem(USB_KEY, JSON.stringify(info)); } catch (e) {}
+}
+
+function usbLabel(device) {
+  return device.productName || 'USB Printer';
+}
+
+async function openUsbDevice(device) {
+  await device.open();
+  await device.selectConfiguration(1);
+  const config = device.configuration;
+  let chosen = null;
+  for (const iface of config.interfaces) {
+    const out = iface.alternate && iface.alternate.endpoints.find(ep => ep.direction === 'out');
+    if (out) { chosen = { iface, out }; break; }
+  }
+  if (!chosen) {
+    try { await device.close(); } catch (e) {}
+    throw new Error('No writable USB endpoint on this printer.');
+  }
+  await device.claimInterface(chosen.iface.interfaceNumber);
+  usbDevice = device;
+  usbEndpoint = chosen.out.endpointNumber;
+  usbInterfaceNumber = chosen.iface.interfaceNumber;
+  saveUsb({ vendorId: device.vendorId, productId: device.productId });
+}
+
+export async function connectUsbPrinter() {
+  if (!usbSupported()) throw new Error('WebUSB not supported in this browser. Use Chrome/Edge (Android works with a USB-OTG cable).');
+  const device = await navigator.usb.requestDevice({ filters: [] });
+  await openUsbDevice(device);
+  return { type: 'usb', name: usbLabel(device) };
+}
+
+export async function restoreUsbPrinter() {
+  if (!usbSupported() || usbDevice) return usbDevice;
+  const saved = getSavedUsb();
+  if (!saved) return null;
+  try {
+    const devices = await navigator.usb.getDevices();
+    const device = devices.find(d => String(d.vendorId) === String(saved.vendorId) && String(d.productId) === String(saved.productId));
+    if (device) {
+      await openUsbDevice(device);
+      return usbDevice;
+    }
+  } catch (e) {}
+  return null;
+}
+
+export function usbConnected() {
+  return !!(usbDevice && usbDevice.opened);
+}
+
+export async function disconnectUsb() {
+  if (usbDevice) {
+    try { await usbDevice.close(); } catch (e) {}
+  }
+  usbDevice = null;
+  usbEndpoint = null;
+  try { localStorage.removeItem(USB_KEY); } catch (e) {}
+}
+
+async function writeUsb(bytes) {
+  if (!usbDevice || !usbEndpoint) throw new Error('USB printer not connected. Connect it in Settings → Printers.');
+  for (let i = 0; i < bytes.length; i += SERIAL_CHUNK) {
+    const chunk = bytes.subarray(i, Math.min(i + SERIAL_CHUNK, bytes.length));
+    await usbDevice.transferOut(usbEndpoint, chunk);
+  }
+}
+
+export async function printViaUsb(type, bytes) {
+  if (!usbConnected()) {
+    if (!await restoreUsbPrinter()) throw new Error('USB printer not connected');
+  }
+  await writeUsb(bytes);
+  return { type: 'usb', name: usbLabel(usbDevice) };
+}
+
+// Which direct printer is currently connected (for the Settings page / POS badge).
+export async function getDirectPrinter() {
+  if (serialConnected()) return { type: 'serial', name: serialLabel(serialPort) };
+  if (usbConnected()) return { type: 'usb', name: usbLabel(usbDevice) };
+  if (serialSupported() && await restoreSerialPrinter()) return { type: 'serial', name: serialLabel(serialPort) };
+  if (usbSupported() && await restoreUsbPrinter()) return { type: 'usb', name: usbLabel(usbDevice) };
+  return null;
+}
+
 // Send a print job to the local USB print bridge via the server queue.
 // The bridge app on the shop PC picks it up and prints it raw (ESC/POS)
 // to the USB printer - no browser print dialog, no driver needed.
@@ -302,11 +516,27 @@ export async function getBridgeStatus() {
   }
 }
 
-// Print through whichever printer is available: the USB bridge on the shop
-// PC if it is online AND has a printer connected, otherwise the paired
-// Bluetooth printer. Returns { via: 'usb' | 'bluetooth' | null, target, message }
-// so callers can tell the user which printer actually printed.
+// Print through whichever printer is available - direct browser printing first
+// (Web Serial / WebUSB - no install needed), then the USB bridge on the shop
+// PC, then Bluetooth. Returns { via, target, message } so callers can tell the
+// user which printer actually printed.
 async function printViaBest(type, bytes, payload) {
+  try {
+    if (serialConnected() || (serialSupported() && await restoreSerialPrinter())) {
+      await writeSerial(bytes);
+      return { via: 'usb', target: serialLabel(serialPort) };
+    }
+  } catch (e) {
+    return { via: null, target: '', message: 'USB print failed: ' + (e.message || 'printer unreachable') };
+  }
+  try {
+    if (usbConnected() || (usbSupported() && await restoreUsbPrinter())) {
+      await writeUsb(bytes);
+      return { via: 'usb', target: usbLabel(usbDevice) };
+    }
+  } catch (e) {
+    return { via: null, target: '', message: 'USB print failed: ' + (e.message || 'printer unreachable') };
+  }
   const st = await getBridgeStatus();
   if (st.online && st.bridgePrinter) {
     await printViaBridge(type, payload);
@@ -328,7 +558,7 @@ async function printViaBest(type, bytes, payload) {
   return {
     via: null,
     target: '',
-    message: st.online ? 'USB bridge is online but found no printer connected to the shop PC. Plug the USB printer in there (it auto-detects within 30 seconds).' : 'No printer detected. Start the USB bridge on the shop PC (Settings → Printers) or pair the Bluetooth printer.'
+    message: 'No printer connected to this device. In Settings → Printers tap "Connect USB Printer" (plug the thermal printer into this PC or phone) or pair the Bluetooth printer.'
   };
 }
 
