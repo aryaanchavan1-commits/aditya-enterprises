@@ -303,7 +303,7 @@ export default function SalesPOS() {
                 <button type="button" className={`btn btn-sm ${billType === 'gst' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setBillType('gst')}>GST Bill</button>
                 <button type="button" className={`btn btn-sm ${billType === 'non-gst' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setBillType('non-gst')}>Non-GST Bill</button>
               </div>
-              {billType === 'non-gst' && <div style={{fontSize:11, color:'#777', marginTop:4}}>Plain bill - no invoice number, no GSTIN, no tax shown.</div>}
+              {billType === 'non-gst' && <div style={{fontSize:11, color:'#777', marginTop:4}}>Plain bill - no GSTIN, no tax shown. Still saves to Invoices with a bill number.</div>}
             </div>
             <div className="form-group">
               <label>Payment</label>

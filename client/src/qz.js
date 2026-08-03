@@ -154,7 +154,7 @@ export function buildQzReceiptHtml(payload = {}) {
     ${isGst && gstin ? `<div>GSTIN: ${gstin}</div>` : ''}
     <div style="margin-top:4px">&nbsp;</div>
   </div>
-  ${isGst ? `<div class="row"><span>Invoice: ${invoiceNumber}</span></div>` : ''}
+  <div class="row"><span>Invoice: ${invoiceNumber}</span></div>
   <div class="row"><span>Date: ${date}</span></div>
   <div class="row"><span>Customer: ${customer}</span></div>
   ${isGst && customerGstin ? `<div class="row"><span>GSTIN: ${customerGstin}</span></div>` : ''}

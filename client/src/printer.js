@@ -675,7 +675,7 @@ export function buildEscPos({ companyName = '', address = '', invoiceNumber = ''
   align(1); line('');
 
   align(0); divider();
-  if (isGst) line(pad('Invoice: ' + (invoiceNumber || ''), width));
+  line(pad('Invoice: ' + (invoiceNumber || ''), width));
   line(pad('Date: ' + (date || ''), width));
   line(pad('Customer: ' + (customer || 'Walk-in Customer'), width));
   if (isGst && customerGstin) line(pad('GSTIN: ' + customerGstin, width));

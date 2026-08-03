@@ -22,21 +22,27 @@ router.get('/bill/:saleId', async (req, res) => {
       pan: settings.company_pan || '',
     };
 
+    const isGst = sale.is_gst !== 0 && sale.is_gst !== false;
+    const gstRate = Number(sale.gst_rate) || Number(settings['gst_rate']) || 18;
+    const halfRate = gstRate / 2;
+    const isInterState = Number(sale.igst_total || 0) > 0;
+
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     const chunks = [];
     doc.on('data', c => chunks.push(c));
     doc.on('end', () => {
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="GST_Invoice_${sale.invoice_number.replace(/\//g, '_')}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="Invoice_${sale.invoice_number.replace(/\//g, '_')}.pdf"`);
       res.send(Buffer.concat(chunks));
     });
 
-    doc.fontSize(18).font('Helvetica-Bold').text('TAX INVOICE', { align: 'center' });
+    doc.fontSize(18).font('Helvetica-Bold').text(isGst ? 'TAX INVOICE' : 'INVOICE', { align: 'center' });
     doc.moveDown(0.5);
     doc.fontSize(12).font('Helvetica-Bold').text(company.name, { align: 'center' });
     doc.fontSize(8).font('Helvetica').text(company.address, { align: 'center' });
     doc.text(`Phone: ${company.phone}  |  Email: ${company.email}`, { align: 'center' });
-    doc.text(`GSTIN: ${company.gstin}  |  PAN: ${company.pan}`, { align: 'center' });
+    if (isGst) doc.text(`GSTIN: ${company.gstin}  |  PAN: ${company.pan}`, { align: 'center' });
+    else if (company.pan) doc.text(`PAN: ${company.pan}`, { align: 'center' });
     doc.moveDown(1);
 
     const y0 = doc.y;
@@ -45,14 +51,16 @@ router.get('/bill/:saleId', async (req, res) => {
     doc.text(`Invoice No: ${sale.invoice_number}`, 50, y0 + 5);
     doc.text(`Date: ${sale.sale_date}`, 50, y0 + 20);
     doc.text(`Payment: ${(sale.payment_mode || 'CASH').toUpperCase()}`, 50, y0 + 35);
-    doc.text(`Place of Supply: Maharashtra (27)`, 50, y0 + 50);
+    if (isGst) doc.text(`Place of Supply: Maharashtra (27)`, 50, y0 + 50);
     doc.text(`Customer: ${sale.customer_name}`, 320, y0 + 5);
-    if (sale.customer_gstin) doc.text(`GSTIN: ${sale.customer_gstin}`, 320, y0 + 20);
+    if (isGst && sale.customer_gstin) doc.text(`GSTIN: ${sale.customer_gstin}`, 320, y0 + 20);
     if (sale.customer_phone) doc.text(`Phone: ${sale.customer_phone}`, 320, y0 + 35);
     doc.moveDown(3);
 
     const tableTop = doc.y;
-    const cols = { sno: 30, desc: 150, hsn: 60, qty: 40, rate: 55, disc: 45, taxable: 60, cgst: 50, sgst: 50, total: 55 };
+    const cols = isGst
+      ? { sno: 30, desc: 150, hsn: 60, qty: 40, rate: 55, disc: 45, taxable: 60, cgst: 50, sgst: 50, total: 55 }
+      : { sno: 30, desc: 200, qty: 60, rate: 80, disc: 60, taxable: 80, total: 80 };
     let cx = 40;
     const colX = {};
     for (const [k, w] of Object.entries(cols)) { colX[k] = cx; cx += w; }
@@ -61,39 +69,40 @@ router.get('/bill/:saleId', async (req, res) => {
     doc.fill('#ffffff').fontSize(7).font('Helvetica-Bold');
     doc.text('#', colX.sno + 2, tableTop + 4);
     doc.text('Description', colX.desc + 2, tableTop + 4);
-    doc.text('HSN/SAC', colX.hsn + 2, tableTop + 4);
+    if (isGst) doc.text('HSN/SAC', colX.hsn + 2, tableTop + 4);
     doc.text('Qty', colX.qty + 2, tableTop + 4);
     doc.text('Rate', colX.rate + 2, tableTop + 4);
     doc.text('Disc%', colX.disc + 2, tableTop + 4);
     doc.text('Taxable', colX.taxable + 2, tableTop + 4);
-    doc.text(`CGST${halfRate}%`, colX.cgst + 2, tableTop + 4);
-    doc.text(`SGST${halfRate}%`, colX.sgst + 2, tableTop + 4);
+    if (isGst) {
+      doc.text(`CGST${halfRate}%`, colX.cgst + 2, tableTop + 4);
+      doc.text(`SGST${halfRate}%`, colX.sgst + 2, tableTop + 4);
+    }
     doc.text('Total', colX.total + 2, tableTop + 4);
 
     let y = tableTop + 18;
-    const gstRate = Number(sale.gst_rate) || Number(settings['gst_rate']) || 18;
-    const halfRate = gstRate / 2;
-    const isInterState = Number(sale.igst_total || 0) > 0;
     sale.items.forEach((item, i) => {
       const lineTotal = item.sell_price * item.quantity;
       const discAmt = lineTotal * (item.discount_percent || 0) / 100;
       const taxable = lineTotal - discAmt;
-      const cgstAmt = isInterState ? 0 : taxable * halfRate / 100;
-      const sgstAmt = isInterState ? 0 : taxable * halfRate / 100;
-      const igstAmt = isInterState ? taxable * gstRate / 100 : 0;
+      const cgstAmt = isGst && !isInterState ? taxable * halfRate / 100 : 0;
+      const sgstAmt = isGst && !isInterState ? taxable * halfRate / 100 : 0;
+      const igstAmt = isGst && isInterState ? taxable * gstRate / 100 : 0;
       const totalAmt = taxable + cgstAmt + sgstAmt + igstAmt;
 
       if (y > 750) { doc.addPage(); y = 40; }
       doc.fill('#000000').fontSize(7).font('Helvetica');
       doc.text(String(i + 1), colX.sno + 2, y + 2, { width: colX.sno - 2 });
-      doc.text((item.product_name || '').substring(0, 20), colX.desc + 2, y + 2, { width: colX.desc - 2 });
-      doc.text(item.hsn_code || '-', colX.hsn + 2, y + 2, { width: colX.hsn - 2 });
+      doc.text((item.product_name || '').substring(0, isGst ? 20 : 28), colX.desc + 2, y + 2, { width: colX.desc - 2 });
+      if (isGst) doc.text(item.hsn_code || '-', colX.hsn + 2, y + 2, { width: colX.hsn - 2 });
       doc.text(String(item.quantity || 0), colX.qty + 2, y + 2, { width: colX.qty - 2 });
       doc.text(Number(item.sell_price || 0).toFixed(2), colX.rate + 2, y + 2, { width: colX.rate - 2 });
       doc.text(String(item.discount_percent || 0), colX.disc + 2, y + 2, { width: colX.disc - 2 });
       doc.text(taxable.toFixed(2), colX.taxable + 2, y + 2, { width: colX.taxable - 2 });
-      doc.text(cgstAmt > 0 ? cgstAmt.toFixed(2) : (igstAmt > 0 ? igstAmt.toFixed(2) : '-'), colX.cgst + 2, y + 2, { width: colX.cgst - 2 });
-      doc.text(sgstAmt > 0 ? sgstAmt.toFixed(2) : '-', colX.sgst + 2, y + 2, { width: colX.sgst - 2 });
+      if (isGst) {
+        doc.text(cgstAmt > 0 ? cgstAmt.toFixed(2) : (igstAmt > 0 ? igstAmt.toFixed(2) : '-'), colX.cgst + 2, y + 2, { width: colX.cgst - 2 });
+        doc.text(sgstAmt > 0 ? sgstAmt.toFixed(2) : '-', colX.sgst + 2, y + 2, { width: colX.sgst - 2 });
+      }
       doc.text(totalAmt.toFixed(2), colX.total + 2, y + 2, { width: colX.total - 2 });
       y += 16;
     });
@@ -104,11 +113,13 @@ router.get('/bill/:saleId', async (req, res) => {
     doc.fontSize(9).font('Helvetica-Bold');
     doc.text(`Subtotal: Rs.${Number(sale.subtotal || 0).toFixed(2)}`, 50, y + 5);
     if (sale.discount_total > 0) doc.text(`Discount: -Rs.${Number(sale.discount_total).toFixed(2)}`, 50, y + 20);
-    if (isInterState) {
-      doc.text(`IGST (${gstRate}%): Rs.${Number(sale.igst_total || 0).toFixed(2)}`, 50, y + 35);
-    } else {
-      doc.text(`CGST (${halfRate}%): Rs.${Number(sale.cgst_total || 0).toFixed(2)}`, 50, y + 35);
-      doc.text(`SGST (${halfRate}%): Rs.${Number(sale.sgst_total || 0).toFixed(2)}`, 50, y + 50);
+    if (isGst) {
+      if (isInterState) {
+        doc.text(`IGST (${gstRate}%): Rs.${Number(sale.igst_total || 0).toFixed(2)}`, 50, y + 35);
+      } else {
+        doc.text(`CGST (${halfRate}%): Rs.${Number(sale.cgst_total || 0).toFixed(2)}`, 50, y + 35);
+        doc.text(`SGST (${halfRate}%): Rs.${Number(sale.sgst_total || 0).toFixed(2)}`, 50, y + 50);
+      }
     }
     doc.fontSize(12).font('Helvetica-Bold').text(`GRAND TOTAL: Rs.${Number(sale.grand_total || 0).toFixed(2)}`, 250, y + 65);
 

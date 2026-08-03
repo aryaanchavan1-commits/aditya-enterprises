@@ -186,7 +186,12 @@ async function run(sql, params = []) {
   const result = await db.execute({ sql, args: params });
   return {
     id: Number(result.lastInsertRowid || 0),
-    changes: Number(result.rowsWritten || 0) || (Number(result.lastInsertRowid || 0) > 0 ? 1 : 0)
+    // @libsql/client exposes the affected-row count as `rowsAffected`
+    // (not `rowsWritten`). This is what the stock-race check in sales.js
+    // relies on - without it every UPDATE looks like it changed 0 rows and
+    // every sale gets rolled back as "Stock changed while selling".
+    changes: Number(result.rowsAffected !== undefined ? result.rowsAffected : (result.rowsWritten || 0))
+      || (Number(result.lastInsertRowid || 0) > 0 ? 1 : 0)
   };
 }
 

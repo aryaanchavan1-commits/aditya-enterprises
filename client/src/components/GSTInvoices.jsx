@@ -88,14 +88,21 @@ export default function GSTInvoices() {
                 <tbody>
                   {sales.map(s => (
                     <tr key={s.id}>
-                      <td><strong>{s.invoice_number}</strong></td>
+                      <td>
+                        <strong>{s.invoice_number}</strong>{' '}
+                        {s.is_gst === 0 || s.is_gst === false ? (
+                          <span className="badge badge-secondary" style={{background:'#bdc3c7',color:'#2c3e50',fontSize:10}}>Non-GST</span>
+                        ) : (
+                          <span className="badge badge-warning" style={{fontSize:10}}>GST</span>
+                        )}
+                      </td>
                       <td>{s.sale_date}</td>
                       <td>{s.customer_name}</td>
                       <td><strong>Rs.{Number(s.grand_total).toLocaleString('en-IN', {minimumFractionDigits:2})}</strong></td>
                       <td><span className="badge badge-info">{s.payment_mode}</span></td>
                       <td style={{display:'flex', gap:4, flexWrap:'wrap'}}>
                         <button className="btn btn-sm btn-info" onClick={() => window.open(`${API}/sales/${s.id}/receipt`, '_blank')}>Receipt</button>
-                        <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>GST Bill</button>
+                        <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>{s.is_gst === 0 || s.is_gst === false ? 'Bill' : 'GST Bill'}</button>
                         <button className="btn btn-sm btn-success" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`*Aditya Enterprises - Invoice ${s.invoice_number}*\nDate: ${s.sale_date}\nCustomer: ${s.customer_name}\nTotal: Rs.${Number(s.grand_total).toLocaleString('en-IN')}\n\nView Bill: ${window.location.origin}${API}/gst/bill/${s.id}\nThank you!`)}`, '_blank')}>Share</button>
                         <button className="btn btn-sm btn-danger" onClick={() => handleDelete(s.id)}>Del</button>
                       </td>
@@ -111,7 +118,7 @@ export default function GSTInvoices() {
             <div className="mobile-cards">
               {sales.map(s => (
                 <div key={s.id} className="mobile-card">
-                  <div className="mobile-card-header">{s.invoice_number}</div>
+                  <div className="mobile-card-header">{s.invoice_number} {s.is_gst === 0 || s.is_gst === false ? <span className="badge badge-secondary" style={{background:'#bdc3c7',color:'#2c3e50',fontSize:10}}>Non-GST</span> : <span className="badge badge-warning" style={{fontSize:10}}>GST</span>}</div>
                   <div className="mobile-card-row">
                     <span className="label">Customer</span>
                     <span className="value">{s.customer_name}</span>
@@ -130,7 +137,7 @@ export default function GSTInvoices() {
                   </div>
                   <div className="mobile-card-actions">
                     <button className="btn btn-sm btn-info" onClick={() => window.open(`${API}/sales/${s.id}/receipt`, '_blank')}>Receipt</button>
-                    <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>GST Bill</button>
+                    <button className="btn btn-sm btn-warning" onClick={() => window.open(`${API}/gst/bill/${s.id}`, '_blank')}>{s.is_gst === 0 || s.is_gst === false ? 'Bill' : 'GST Bill'}</button>
                     <button className="btn btn-sm btn-success" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent('*Aditya Enterprises - Invoice ' + s.invoice_number + '*\nDate: ' + s.sale_date + '\nCustomer: ' + s.customer_name + '\nTotal: Rs.' + Number(s.grand_total).toLocaleString('en-IN') + '\n\nView Bill: ' + window.location.origin + API + '/gst/bill/' + s.id + '\nThank you!')}`, '_blank')}>Share</button>
                     <button className="btn btn-sm btn-danger" onClick={() => handleDelete(s.id)}>Del</button>
                   </div>

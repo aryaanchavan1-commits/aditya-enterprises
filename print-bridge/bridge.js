@@ -607,7 +607,7 @@ function buildReceiptBytes({ companyName = '', invoiceNumber = '', date = '', cu
   if (isGst && gstin) { align(1); line('GSTIN: ' + gstin); }
   align(1); line('');
   align(0); divider();
-  if (isGst) line(pad('Invoice: ' + (invoiceNumber || ''), width));
+  line(pad('Invoice: ' + (invoiceNumber || ''), width));
   line(pad('Date: ' + (date || ''), width));
   line(pad('Customer: ' + (customer || 'Walk-in Customer'), width));
   if (isGst && customerGstin) line(pad('GSTIN: ' + customerGstin, width));
@@ -683,7 +683,7 @@ function receiptTextFallback(p) {
     const price = Number(it.sell_price || it.price || 0);
     return `${String(it.product_name || it.name).slice(0, W)}\n` + pad('', 22) + pad(String(qty), 4, 'right') + pad('Rs.' + (qty * price).toFixed(0), 6, 'right');
   }).join('\n');
-  const head = `${p.companyName || ''}\n${isGst && p.gstin ? 'GSTIN: ' + p.gstin + '\n' : ''}${isGst ? 'Invoice: ' + (p.invoiceNumber || '') + '\n' : ''}Date: ${p.date || ''}\nCustomer: ${p.customer || ''}${isGst && p.customerGstin ? '\nGSTIN: ' + p.customerGstin : ''}\n`;
+  const head = `${p.companyName || ''}\n${isGst && p.gstin ? 'GSTIN: ' + p.gstin + '\n' : ''}Invoice: ${p.invoiceNumber || ''}\nDate: ${p.date || ''}\nCustomer: ${p.customer || ''}${isGst && p.customerGstin ? '\nGSTIN: ' + p.customerGstin : ''}\n`;
   const totals = `${'Subtotal'.padEnd(22)}Rs.${Number(p.subtotal || 0).toFixed(2)}\n${isGst ? `GST @${gstRate}%`.padEnd(22) + 'Rs.' + Number(p.gstAmount || 0).toFixed(2) + '\n' : ''}${'TOTAL'.padEnd(22)}Rs.${Number(p.grandTotal || 0).toFixed(2)}\n`;
   return `${head}-------------------------------\nItem                   Qty   Amt\n${items}\n-------------------------------\n${totals}\nThank you! Visit again.\n`;
 }
@@ -800,7 +800,7 @@ function buildReceiptLines(p) {
   lines.push(p.companyName || 'Aditya Enterprises');
   if (isGst && p.gstin) lines.push('GSTIN: ' + p.gstin);
   lines.push('====================================================');
-  if (isGst) lines.push(`Invoice: ${p.invoiceNumber || ''}`);
+  lines.push(`Invoice: ${p.invoiceNumber || ''}`);
   lines.push(`Date: ${p.date || ''}`);
   lines.push(`Customer: ${p.customer || 'Walk-in Customer'}`);
   if (isGst && p.customerGstin) lines.push(`GSTIN: ${p.customerGstin}`);

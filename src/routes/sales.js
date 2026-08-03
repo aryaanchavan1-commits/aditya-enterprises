@@ -145,7 +145,7 @@ router.get('/:id/receipt', async (req, res) => {
     const isGst = sale.is_gst !== 0 && sale.is_gst !== false;
     if (isGst) doc.text(`GST: ${settings.company_gstin || ''}`, { align: 'center' });
     doc.moveDown(0.3);
-    if (isGst) doc.text(`Invoice: ${sale.invoice_number}`, { align: 'center' });
+    doc.text(`Invoice: ${sale.invoice_number}`, { align: 'center' });
     doc.text(`Date: ${sale.sale_date}`, { align: 'center' });
     doc.text(`Customer: ${sale.customer_name}`, { align: 'center' });
     if (isGst && sale.customer_gstin) doc.text(`GSTIN: ${sale.customer_gstin}`, { align: 'center' });
