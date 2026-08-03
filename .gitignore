@@ -10,3 +10,8 @@ desktop.ini
 .vercel/
 
 .vercel
+
+# local bridge build artifacts
+print-bridge/bridge.exe
+print-bridge/bridge.blob
+

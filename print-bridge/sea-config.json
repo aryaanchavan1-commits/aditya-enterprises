@@ -1,0 +1,5 @@
+{
+  "main": "bridge.js",
+  "output": "bridge.blob",
+  "disableExperimentalSEAWarning": true
+}

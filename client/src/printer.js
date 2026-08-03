@@ -291,32 +291,45 @@ export async function getBridgeStatus() {
     const r = await fetch('/api/devices/print/bridge/status', ctrl ? { signal: ctrl.signal } : {});
     const d = await r.json();
     if (t) clearTimeout(t);
-    return { online: !!(d.success && d.data && d.data.bridgeOnline), lastJob: d.data?.lastJob || null };
+    return {
+      online: !!(d.success && d.data && d.data.bridgeOnline),
+      bridgePrinter: d.data?.bridgePrinter || '',
+      bridgeLastError: d.data?.bridgeLastError || '',
+      lastJob: d.data?.lastJob || null
+    };
   } catch (e) {
-    return { online: false, lastJob: null };
+    return { online: false, bridgePrinter: '', bridgeLastError: '', lastJob: null };
   }
 }
 
 // Print through whichever printer is available: the USB bridge on the shop
-// PC if it is online, otherwise the paired Bluetooth printer. Returns
-// { via: 'usb' | 'bluetooth' | null, target } so callers can tell the user
-// which printer actually printed.
+// PC if it is online AND has a printer connected, otherwise the paired
+// Bluetooth printer. Returns { via: 'usb' | 'bluetooth' | null, target, message }
+// so callers can tell the user which printer actually printed.
 async function printViaBest(type, bytes, payload) {
   const st = await getBridgeStatus();
-  if (st.online) {
+  if (st.online && st.bridgePrinter) {
     await printViaBridge(type, payload);
-    return { via: 'usb', target: 'USB printer (shop PC bridge)' };
+    return { via: 'usb', target: st.bridgePrinter };
   }
   const saved = getSavedPrinter();
   if (saved) {
     if (!isConnected()) {
       const re = await reconnectPrinter();
-      if (!re) return { via: null, target: '' };
+      if (!re) return { via: null, target: '', message: st.online ? 'USB bridge is online but found no printer on the shop PC, and the Bluetooth printer could not be reached. Connect the USB printer to the shop PC or switch the Bluetooth printer on.' : 'Bluetooth printer could not be reached. Switch it on and press "Reconnect Bluetooth Printer" in Settings.' };
     }
-    await sendBytes(bytes);
-    return { via: 'bluetooth', target: saved.name || 'Bluetooth printer' };
+    try {
+      await sendBytes(bytes);
+      return { via: 'bluetooth', target: saved.name || 'Bluetooth printer' };
+    } catch (e) {
+      return { via: null, target: '', message: 'Bluetooth print failed: ' + e.message };
+    }
   }
-  return { via: null, target: '' };
+  return {
+    via: null,
+    target: '',
+    message: st.online ? 'USB bridge is online but found no printer connected to the shop PC. Plug the USB printer in there (it auto-detects within 30 seconds).' : 'No printer detected. Start the USB bridge on the shop PC (Settings → Printers) or pair the Bluetooth printer.'
+  };
 }
 
 export async function printSmartLabel(payload) {

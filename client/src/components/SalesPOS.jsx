@@ -49,7 +49,7 @@ export default function SalesPOS() {
       });
       if (r.via === 'usb') showToast('Receipt sent to USB printer');
       else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
-      else showToast('No printer detected - pair Bluetooth or run the USB bridge (Settings → Printers)', 'error');
+      else showToast(r.message || 'No printer detected - pair Bluetooth or run the USB bridge (Settings → Printers)', 'error');
     } catch (err) {
       showToast('Print failed: ' + (err.message || 'connection error'), 'error');
     } finally {

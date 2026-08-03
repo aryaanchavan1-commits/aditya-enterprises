@@ -69,6 +69,9 @@ function apiRequest(method, pathUrl, body) {
 
 // ---------------- Windows printer detection ----------------
 
+// Real hardware printers only - ignore virtual ones (OneNote, PDF, Fax...)
+const VIRTUAL_PRINTERS = ['onenote', 'print to pdf', 'microsoft print to pdf', 'fax', 'xps', 'pdf24', 'adobe', 'microsoft software printer', 'one drive', 'save as'];
+
 function detectPrinters() {
   try {
     const out = execFileSync('powershell.exe', [
@@ -77,9 +80,30 @@ function detectPrinters() {
     ], { timeout: 15000, encoding: 'utf8' });
     let list = JSON.parse(out.trim() || 'null');
     if (!Array.isArray(list)) list = list ? [list] : [];
-    return list.filter(p => p && p.Name);
+    return list.filter(p => p && p.Name && !VIRTUAL_PRINTERS.some(v => String(p.Name).toLowerCase().includes(v)));
   } catch (e) {
     return [];
+  }
+}
+
+// Re-detect when no printer was found, so plugging in / installing the
+// printer later gets picked up automatically without restarting the bridge.
+let noPrinterTicks = 0;
+
+function maybeRedetect() {
+  if (config.printerName || config.printerShare) return;
+  noPrinterTicks++;
+  if (noPrinterTicks < 10) return; // every ~30s
+  noPrinterTicks = 0;
+  log('No printer yet - re-scanning for USB printers...');
+  const printers = detectPrinters();
+  if (printers.length) {
+    const shared = printers.find(p => p.ShareName);
+    config.printerName = printers[0].Name;
+    config.printerShare = shared ? shared.ShareName : '';
+    try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch (e) {}
+    if (config.printerShare) log(`Auto-detected printer "${config.printerName}" (share: ${config.printerShare})`);
+    else log(`FOUND printer "${config.printerName}" but it is not shared - using text fallback.`);
   }
 }
 
@@ -386,6 +410,7 @@ async function handleJob(job) {
 }
 
 async function tick() {
+  maybeRedetect();
   await reportStatus(false);
   const res = await apiRequest('GET', '/api/devices/print/job/next');
   if (!res.success || !res.data) return;

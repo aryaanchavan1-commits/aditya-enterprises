@@ -32,6 +32,14 @@ export default function Settings() {
   }, []);
 
   const testBridgePrint = async () => {
+    if (bridgeStatus.bridgeOnline && !bridgeStatus.bridgePrinter) {
+      showToast('Bridge is online, but no printer is connected to the shop PC yet. Plug in the USB printer - it auto-detects within 30 seconds.', 'error');
+      return;
+    }
+    if (!bridgeStatus.bridgeOnline) {
+      showToast('USB bridge is not running. Start start-bridge.bat on the shop PC first (see below).', 'error');
+      return;
+    }
     setBridgeBusy(true);
     try {
       await printViaBridge('test', { companyName: settings.company_name || 'Aditya Enterprises' });
@@ -329,7 +337,7 @@ export default function Settings() {
               bridgeStatus.bridgePrinter ? (
                 <div style={{fontSize:12}}>🖨️ <strong>{bridgeStatus.bridgePrinter}</strong>{bridgeStatus.bridgeShare ? ` (share: ${bridgeStatus.bridgeShare})` : ''} — detected by the USB bridge on the shop PC; automatic label &amp; receipt printing will use USB</div>
               ) : (
-                <div style={{fontSize:12, color:'#e67e22'}}>USB bridge is online on the shop PC, but it found <strong>no printers</strong>. Check the USB cable / that the printer is on, then restart <strong>start-bridge.bat</strong>.</div>
+                <div style={{fontSize:12, color:'#e67e22'}}>USB bridge is online, but it found <strong>no printer</strong> on that PC. Plug the printer in (USB) and install its Windows driver - the bridge auto-detects it within 30 seconds.</div>
               )
             ) : btPrinter ? (
               <div style={{fontSize:12}}>🖨️ <strong>{btPrinter.name}</strong> (Bluetooth paired) — printing will use Bluetooth</div>
@@ -357,11 +365,10 @@ export default function Settings() {
               <div style={{fontSize:11, color:'#e67e22', marginBottom:4}}>Bridge running, but it reported no printer found on the shop PC.</div>
             )}
             <div style={{fontSize:11, color:'#777', lineHeight:1.5}}>
-              Prints directly to the USB printer (ESC/POS) - no dialog, no driver issues. One-time setup:
+              Prints directly to the USB printer (ESC/POS) - no dialog, no driver issues. One-time setup on the Windows PC where the printer is plugged in:
               <ol style={{margin:'4px 0 0 16px', padding:0}}>
-                <li>On the shop PC: right-click your Posiflow in <strong>Windows Settings → Bluetooth &amp; devices → Printers</strong> → <strong>Printer properties → Sharing</strong> → tick "Share this printer".</li>
-                <li>Install Node.js (nodejs.org) on that PC if not present.</li>
-                <li>Copy the <strong>print-bridge</strong> folder from the project onto the PC, run <strong>start-bridge.bat</strong> and keep it open.</li>
+                <li>Plug in the Posiflow (USB) and install its Windows driver if Windows asks.</li>
+                <li>Copy the <strong>print-bridge</strong> folder onto that PC and run <strong>install-bridge.bat</strong> once. It installs everything and sets the bridge to start automatically with Windows.</li>
               </ol>
               When the bridge is running, the green badge above turns Online and printing uses USB automatically (falls back to Bluetooth when the bridge is off).
             </div>
@@ -388,6 +395,18 @@ export default function Settings() {
               </div>
             )}
             {printerStatus && <div style={{fontSize:11, marginTop:4, color:'#777'}}>{printerStatus}</div>}
+          </div>
+
+          <div style={{marginBottom:12, padding:10, background:'#eef6ff', borderRadius:8, border:'1px solid #bcd9f5'}}>
+            <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>What is the USB bridge? (2-minute setup, once)</div>
+            <div style={{fontSize:11, color:'#555', lineHeight:1.6}}>
+              A browser or phone <strong>cannot plug into a USB printer directly</strong> - Windows keeps control of it. The bridge is a tiny free program you run <strong>once on the Windows PC where the Posiflow printer is plugged in</strong>. It connects to your app over the internet and prints instantly when you tap print:
+              <ul style={{margin:'4px 0 0 16px', padding:0}}>
+                <li><strong>From any phone or laptop</strong> - add a product or make a sale, and the label/receipt prints by itself at the shop.</li>
+                <li><strong>No dialogs, no cables to swap</strong> - the job travels over the internet to the bridge PC.</li>
+              </ul>
+              After the one-time setup it <strong>starts automatically with Windows</strong> and keeps working in the background. You only need: Node.js (free, nodejs.org) and the <strong>print-bridge</strong> folder from this project. Plug in the printer, run <strong>install-bridge.bat</strong> once, done.
+            </div>
           </div>
 
           <div style={{marginBottom:12}}>
