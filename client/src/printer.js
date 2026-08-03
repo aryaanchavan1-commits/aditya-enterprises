@@ -555,10 +555,13 @@ async function printViaBest(type, bytes, payload) {
       return { via: null, target: '', message: 'Bluetooth print failed: ' + e.message };
     }
   }
+  const directCapable = (serialSupported() || usbSupported()) && bluetoothSupported();
   return {
     via: null,
     target: '',
-    message: 'No printer connected to this device. In Settings → Printers tap "Connect USB Printer" (plug the thermal printer into this PC or phone) or pair the Bluetooth printer.'
+    message: directCapable
+      ? 'No printer connected to this device. In Settings → Printers tap "Connect USB Printer" (plug the thermal printer into this PC or phone) or pair the Bluetooth printer.'
+      : 'This browser cannot connect a thermal printer directly - Web Serial / WebUSB / Web Bluetooth need Chrome or Edge over HTTPS. Open this app in Chrome/Edge and connect the printer, or use a normal printer with the browser print dialog.'
   };
 }
 
