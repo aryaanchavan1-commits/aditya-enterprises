@@ -22,7 +22,7 @@ export default function Settings() {
 
   useEffect(() => {
     const checkBridge = () => {
-      fetch(`${API}/print/bridge/status`).then(r => r.json()).then(d => {
+        fetch(`${API}/devices/print/bridge/status`).then(r => r.json()).then(d => {
         if (d.success) setBridgeStatus(d.data);
       }).catch(() => {});
     };
@@ -37,7 +37,7 @@ export default function Settings() {
       await printViaBridge('test', { companyName: settings.company_name || 'Aditya Enterprises' });
       showToast('Print job sent to USB printer');
       setTimeout(() => {
-        fetch(`${API}/print/bridge/status`).then(r => r.json()).then(d => {
+      fetch(`${API}/devices/print/bridge/status`).then(r => r.json()).then(d => {
           if (d.success && d.data.lastJob?.status === 'failed') showToast('USB print failed: ' + (d.data.lastJob.error || 'unknown'), 'error');
         }).catch(() => {});
       }, 5000);

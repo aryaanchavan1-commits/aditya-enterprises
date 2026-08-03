@@ -19,6 +19,8 @@ export default function Products() {
   const [cameFromScan, setCameFromScan] = useState(false);
   const scanBarcodeRef = useRef(null);
   const scanNameRef = useRef(null);
+  const [newCatMode, setNewCatMode] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
 
   const emptyProduct = {
     name: '', image: '', quantity: 0, description: '', hsn_code: '',
@@ -59,12 +61,16 @@ export default function Products() {
     setForm(emptyProduct);
     setSubcategories([]);
     setCameFromScan(false);
+    setNewCatMode(false);
+    setNewCatName('');
     setShowModal(true);
   };
 
   const openEdit = (p) => {
     setEditProduct(p);
     setCameFromScan(false);
+    setNewCatMode(false);
+    setNewCatName('');
     setForm({ ...p, category_id: p.category_id || '', subcategory_id: p.subcategory_id || '' });
     if (p.category_id) {
       const cat = categories.find(c => c.id == p.category_id);
@@ -74,6 +80,13 @@ export default function Products() {
   };
 
   const handleCategoryChange = (catId) => {
+    if (catId === '__new__') {
+      setNewCatMode(true);
+      setForm({ ...form, category_id: '', subcategory_id: '' });
+      setSubcategories([]);
+      return;
+    }
+    setNewCatMode(false);
     setForm({ ...form, category_id: catId, subcategory_id: '' });
     if (catId) {
       const cat = categories.find(c => c.id == catId);
@@ -131,8 +144,17 @@ export default function Products() {
 
   const handleSave = async () => {
     if (!form.name) return showToast('Product name is required', 'error');
-    const payload = { ...form };
+    let payload = { ...form };
     if (payload.barcode) payload.barcode = payload.barcode.replace(/[^A-Za-z0-9\-]/g, '').slice(0, 20);
+    // Create the new category first if the user typed one in the form.
+    if (newCatMode && newCatName.trim()) {
+      const cat = await api('/categories', { method: 'POST', body: { name: newCatName.trim() } });
+      if (!cat.success) return showToast(cat.error || 'Category creation failed', 'error');
+      payload = { ...payload, category_id: cat.data.id, subcategory_id: '' };
+      setNewCatMode(false);
+      setNewCatName('');
+      loadCategories();
+    }
     const path = editProduct ? `/products/${editProduct.id}` : '/products';
     const d = await api(path, { method: editProduct ? 'PUT' : 'POST', body: payload });
     if (d.success) {
@@ -450,10 +472,14 @@ export default function Products() {
             <div className="form-row">
               <div className="form-group">
                 <label>Category</label>
-                <select value={form.category_id} onChange={e => handleCategoryChange(e.target.value)}>
+                <select value={newCatMode ? '__new__' : form.category_id} onChange={e => handleCategoryChange(e.target.value)}>
                   <option value="">-- Select Category --</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="__new__">+ New category...</option>
                 </select>
+                {newCatMode && (
+                  <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Type new category name, e.g. Hardware" style={{marginTop:6}} autoFocus />
+                )}
               </div>
               <div className="form-group">
                 <label>Subcategory</label>

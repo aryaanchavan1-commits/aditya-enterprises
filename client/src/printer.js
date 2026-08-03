@@ -273,7 +273,7 @@ export async function sendBytes(bytes) {
 // The bridge app on the shop PC picks it up and prints it raw (ESC/POS)
 // to the USB printer - no browser print dialog, no driver needed.
 export async function printViaBridge(type, payload) {
-  const r = await fetch('/api/print/job', {
+  const r = await fetch('/api/devices/print/job', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type, payload })
@@ -288,7 +288,7 @@ export async function getBridgeStatus() {
   try {
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const t = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
-    const r = await fetch('/api/print/bridge/status', ctrl ? { signal: ctrl.signal } : {});
+    const r = await fetch('/api/devices/print/bridge/status', ctrl ? { signal: ctrl.signal } : {});
     const d = await r.json();
     if (t) clearTimeout(t);
     return { online: !!(d.success && d.data && d.data.bridgeOnline), lastJob: d.data?.lastJob || null };

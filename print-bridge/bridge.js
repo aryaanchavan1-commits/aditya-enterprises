@@ -366,17 +366,17 @@ async function handleJob(job) {
     result = doPrint(buildReceiptBytes(receipt), fallback);
   }
 
-  await apiRequest('POST', `/api/print/job/${job.id}/status`, { status: result.ok ? 'done' : 'failed', error: result.error || '' });
+  await apiRequest('POST', `/api/devices/print/job/${job.id}/status`, { status: result.ok ? 'done' : 'failed', error: result.error || '' });
   log(result.ok ? `Job #${job.id} (${job.type}) printed` : `Job #${job.id} (${job.type}) FAILED: ${result.error}`);
 }
 
 async function tick() {
-  const res = await apiRequest('GET', '/api/print/job/next');
+  const res = await apiRequest('GET', '/api/devices/print/job/next');
   if (!res.success || !res.data) return;
   try { await handleJob(res.data); }
   catch (e) {
     log('Job error: ' + e.message);
-    await apiRequest('POST', `/api/print/job/${res.data.id}/status`, { status: 'failed', error: e.message.slice(0, 300) });
+    await apiRequest('POST', `/api/devices/print/job/${res.data.id}/status`, { status: 'failed', error: e.message.slice(0, 300) });
   }
 }
 
