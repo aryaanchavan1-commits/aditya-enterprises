@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { bluetoothSupported, pairPrinter, reconnectPrinter, sendBytes, buildEscPosTest, getSavedPrinter, clearSavedPrinter, disconnectActive, isConnected, printViaBridge, serialSupported, connectSerialPrinter, disconnectSerial, serialConnected, usbSupported, connectUsbPrinter, disconnectUsb, usbConnected, getDirectPrinter, printViaSerial, printViaUsb } from '../printer';
+import { qzSupported, connectQz, disconnectQz, qzConnected, listQzPrinters, printQzRaw, printQzHtml, getQzThermal, saveQzThermal, getQzNormal, saveQzNormal, buildQzTestHtml } from '../qz';
 
 const API = '/api';
 
@@ -20,6 +21,7 @@ export default function Settings() {
   const [bridgeBusy, setBridgeBusy] = useState(false);
   const [fixBusy, setFixBusy] = useState(false);
   const [fixMsg, setFixMsg] = useState('');
+  const [qzState, setQzState] = useState({ supported: false, connected: false, printers: [], thermal: '', normal: '', busy: false, msg: '' });
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -120,6 +122,85 @@ export default function Settings() {
   useEffect(() => {
     getDirectPrinter().then(p => { if (p) setDirectPrinter(p); }).catch(() => {});
   }, []);
+
+  // QZ Tray state: available? connected? auto-restore the last choice.
+  useEffect(() => {
+    const supported = qzSupported();
+    setQzState(s => ({ ...s, supported, thermal: getQzThermal(), normal: getQzNormal() }));
+    if (supported) {
+      connectQz().then(() => {
+        setQzState(s => ({ ...s, connected: true }));
+        refreshQzPrinters();
+      }).catch(e => setQzState(s => ({ ...s, connected: false, msg: e.message })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refreshQzPrinters = async () => {
+    setQzState(s => ({ ...s, busy: true, msg: '' }));
+    try {
+      const printers = await listQzPrinters();
+      setQzState(s => ({ ...s, busy: false, printers, connected: true, msg: `${printers.length} printer(s) found by QZ Tray` }));
+    } catch (e) {
+      setQzState(s => ({ ...s, busy: false, msg: e.message || 'Could not list printers' }));
+    }
+  };
+
+  const connectQzTray = async () => {
+    setQzState(s => ({ ...s, busy: true, msg: '' }));
+    try {
+      await connectQz();
+      const printers = await listQzPrinters();
+      setQzState(s => ({ ...s, busy: false, connected: true, printers, thermal: getQzThermal(), normal: getQzNormal(), msg: `${printers.length} printer(s) found - pick the thermal and normal printer below` }));
+      showToast('QZ Tray connected!');
+    } catch (e) {
+      setQzState(s => ({ ...s, busy: false, connected: false, msg: e.message || 'Could not connect' }));
+      showToast('QZ Tray: ' + (e.message || 'not reachable'), 'error');
+    }
+  };
+
+  const disconnectQzTray = async () => {
+    try { await disconnectQz(); } catch (e) {}
+    setQzState(s => ({ ...s, connected: false, msg: 'Disconnected from QZ Tray' }));
+  };
+
+  const pickQzThermal = (name) => {
+    saveQzThermal(name);
+    setQzState(s => ({ ...s, thermal: name }));
+    showToast(name ? `Thermal printer set: ${name}` : 'Thermal printer cleared');
+  };
+
+  const pickQzNormal = (name) => {
+    saveQzNormal(name);
+    setQzState(s => ({ ...s, normal: name }));
+    showToast(name ? `Normal printer set: ${name}` : 'Normal printer cleared');
+  };
+
+  const testQzThermal = async () => {
+    if (!qzState.thermal) return showToast('Pick a thermal printer first', 'error');
+    setQzState(s => ({ ...s, busy: true }));
+    try {
+      await printQzRaw(qzState.thermal, buildEscPosTest({ companyName: settings.company_name || 'Aditya Enterprises' }));
+      showToast(`Test sent to ${qzState.thermal}`);
+    } catch (e) {
+      showToast('QZ thermal print failed: ' + (e.message || 'unknown'), 'error');
+    } finally {
+      setQzState(s => ({ ...s, busy: false }));
+    }
+  };
+
+  const testQzNormal = async () => {
+    if (!qzState.normal) return showToast('Pick a normal printer first', 'error');
+    setQzState(s => ({ ...s, busy: true }));
+    try {
+      await printQzHtml(qzState.normal, buildQzTestHtml(settings.company_name || 'Aditya Enterprises'));
+      showToast(`Test sent to ${qzState.normal}`);
+    } catch (e) {
+      showToast('QZ normal print failed: ' + (e.message || 'unknown'), 'error');
+    } finally {
+      setQzState(s => ({ ...s, busy: false }));
+    }
+  };
 
   const connectDirectUsb = async () => {
     setDirectBusy(true);
@@ -416,6 +497,63 @@ export default function Settings() {
 
           <h4 style={{fontSize:14, marginTop:20, marginBottom:8}}>Printers</h4>
 
+          <div style={{marginBottom:12, padding:10, background:'#eef4ff', borderRadius:8, border:'1px solid #b3c8f0'}}>
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap'}}>
+              <span style={{fontSize:13, fontWeight:600}}>QZ Tray (thermal + normal printers - recommended)</span>
+              <span className={`badge ${qzState.connected ? 'badge-success' : 'badge-danger'}`} style={{fontSize:10}}>
+                {qzState.connected ? 'QZ Tray Connected' : 'Not connected'}
+              </span>
+            </div>
+            <div style={{fontSize:11, color:'#555', marginBottom:6}}>
+              <strong>One-time setup:</strong> download &amp; install the free <a href="https://qz.io/download" target="_blank" rel="noreferrer" style={{color:'#2c6bdd'}}>QZ Tray</a> app on this PC (Windows/Mac/Linux), run it (it sits near the clock), then press Connect below. Works in any browser, over HTTPS, and prints to BOTH:
+              <ul style={{margin:'4px 0 0 18px', padding:0}}>
+                <li><strong>Thermal printers</strong> - raw ESC/POS, works even for cheap 58mm/80mm printers <em>without any Windows driver</em> (QZ shows them as "usb:VID_xxxx"). Fixes the "no printer attached" problem.</li>
+                <li><strong>Normal paper printers</strong> (HP/Canon/Brother inkjet &amp; laser) - receipts, bills and barcode labels print automatically with no dialog.</li>
+              </ul>
+            </div>
+            {qzState.msg && <div style={{fontSize:11, color:'#7f8c8d', marginBottom:6}}>{qzState.msg}</div>}
+            <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:6}}>
+              {!qzState.connected ? (
+                <button className="btn btn-sm btn-primary" onClick={connectQzTray} disabled={qzState.busy || !qzState.supported}>
+                  {qzState.busy ? 'Connecting...' : 'Connect QZ Tray'}
+                </button>
+              ) : (
+                <>
+                  <button className="btn btn-sm btn-info" onClick={refreshQzPrinters} disabled={qzState.busy}>Find Printers</button>
+                  <button className="btn btn-sm btn-outline" onClick={disconnectQzTray}>Disconnect</button>
+                </>
+              )}
+              {!qzState.supported && <span style={{fontSize:11, color:'#e74c3c'}}>QZ Tray script not loaded - refresh the page (Ctrl+F5) with QZ Tray running.</span>}
+            </div>
+            {qzState.connected && qzState.printers.length > 0 && (
+              <div style={{display:'flex', gap:12, flexWrap:'wrap', marginBottom:6}}>
+                <div style={{fontSize:11}}>
+                  <label style={{display:'block', fontWeight:600, marginBottom:2}}>Thermal printer (receipts &amp; labels)</label>
+                  <select value={qzState.thermal} onChange={e => pickQzThermal(e.target.value)} style={{fontSize:12, padding:'4px 6px', minWidth:180}}>
+                    <option value="">-- none --</option>
+                    {qzState.printers.map(p => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                  {qzState.thermal && <button className="btn btn-sm btn-success" onClick={testQzThermal} disabled={qzState.busy} style={{marginLeft:6}}>Test</button>}
+                </div>
+                <div style={{fontSize:11}}>
+                  <label style={{display:'block', fontWeight:600, marginBottom:2}}>Normal printer (inkjet/laser)</label>
+                  <select value={qzState.normal} onChange={e => pickQzNormal(e.target.value)} style={{fontSize:12, padding:'4px 6px', minWidth:180}}>
+                    <option value="">-- none --</option>
+                    {qzState.printers.map(p => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                  {qzState.normal && <button className="btn btn-sm btn-success" onClick={testQzNormal} disabled={qzState.busy} style={{marginLeft:6}}>Test</button>}
+                </div>
+              </div>
+            )}
+            <div style={{fontSize:11, color:'#888'}}>
+              Pick at least one. Labels &amp; receipts use the thermal printer (fast), and when no thermal is set they fall back to the normal printer automatically.
+            </div>
+          </div>
+
           <div style={{marginBottom:12, padding:10, background:'#eafaf1', borderRadius:8, border:'1px solid #a9dfbf'}}>
             <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
               <span style={{fontSize:13, fontWeight:600}}>Direct USB Printing - no install needed</span>
@@ -476,7 +614,9 @@ export default function Settings() {
 
           <div style={{marginBottom:12, padding:10, background:'#fffbe6', borderRadius:8, border:'1px solid #f1c40f'}}>
             <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Detected printer</div>
-            {directPrinter ? (
+            {qzState.connected && (qzState.thermal || qzState.normal) ? (
+              <div style={{fontSize:12}}>🖨️ <strong>QZ Tray</strong>: thermal = {qzState.thermal || 'none'}, normal = {qzState.normal || 'none'} — automatic label, receipt &amp; bill printing uses it</div>
+            ) : directPrinter ? (
               <div style={{fontSize:12}}>🖨️ <strong>{directPrinter.name}</strong> (direct USB via browser) — automatic label &amp; receipt printing uses it</div>
             ) : bridgeStatus.bridgeOnline ? (
               bridgeStatus.bridgePrinter ? (

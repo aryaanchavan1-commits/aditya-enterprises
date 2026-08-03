@@ -2,6 +2,9 @@
 // Browsers cannot talk to USB printers directly, but Chrome/Edge can pair
 // with BLE thermal receipt printers (58mm/80mm) and send raw ESC/POS bytes.
 
+import { qzSupported, qzConnected, connectQz, printQzRaw, printQzHtml, getQzThermal, getQzNormal, buildQzReceiptHtml, buildQzLabelHtml } from './qz';
+
+
 const SAVED_KEY = 'ae_bt_printer';
 
 // Common BLE service UUIDs used by thermal receipt printers (16-bit ones
@@ -517,18 +520,46 @@ export async function getBridgeStatus() {
 }
 
 // Print through whichever printer is available - direct browser printing first
-// (Web Serial / WebUSB - no install needed), then the USB bridge on the shop
-// PC, then Bluetooth. Returns { via, target, message } so callers can tell the
-// user which printer actually printed.
+// (Web Serial / WebUSB - no install needed), then QZ Tray (driver-free USB
+// thermal + any inkjet/laser), then the USB bridge on the shop PC, then
+// Bluetooth. Returns { via, target, message } so callers can tell the user
+// which printer actually printed.
 async function printViaBest(type, bytes, payload) {
   let firstError = null;
+
+  // 1. QZ Tray - desktop app on this PC. Handles BOTH thermal printers (raw
+  // ESC/POS, no driver needed - fixes "no printer attached") and normal paper
+  // inkjet printers (rendered HTML). Needs a one-time connect in Settings.
+  try {
+    const qzThermal = getQzThermal();
+    const qzNormal = getQzNormal();
+    if (qzSupported() && (qzConnected() || (qzThermal || qzNormal))) {
+      await connectQz();
+      if (type === 'label' || type === 'receipt' || type === 'test') {
+        if (qzThermal) {
+          await printQzRaw(qzThermal, bytes);
+          return { via: 'qz', target: qzThermal };
+        }
+      }
+      if (qzNormal) {
+        const html = type === 'label' ? buildQzLabelHtml(payload)
+          : type === 'test' ? `<div style="font-family:Arial;padding:8px"><h2>${payload?.companyName || 'Printer Test'}</h2><p>QZ Tray test print - inkjet/normal printer.</p></div>`
+          : buildQzReceiptHtml(payload);
+        await printQzHtml(qzNormal, html);
+        return { via: 'qz', target: qzNormal };
+      }
+    }
+  } catch (e) {
+    firstError = 'QZ Tray print failed: ' + (e.message || 'printer unreachable');
+  }
+
   try {
     if (serialConnected() || (serialSupported() && await restoreSerialPrinter())) {
       await writeSerial(bytes);
       return { via: 'usb', target: serialLabel(serialPort) };
     }
   } catch (e) {
-    firstError = 'USB print failed: ' + (e.message || 'printer unreachable');
+    if (!firstError) firstError = 'USB print failed: ' + (e.message || 'printer unreachable');
   }
   try {
     if (usbConnected() || (usbSupported() && await restoreUsbPrinter())) {
@@ -560,12 +591,12 @@ async function printViaBest(type, bytes, payload) {
   return {
     via: null,
     target: '',
-    needsChooser: !!(serialSupported() || usbSupported()),
+    needsChooser: !!(serialSupported() || usbSupported()) && !qzConnected(),
     message: firstError
       ? firstError + '. Tried automatic backup printers too - fix the USB connection (Settings → Printers) or switch the printer on.'
       : (directCapable
-          ? 'No printer connected to this device. In Settings → Printers tap "Connect USB Printer" (plug the thermal printer into this PC or phone) or pair the Bluetooth printer.'
-          : 'This browser cannot connect a thermal printer directly - Web Serial / WebUSB / Web Bluetooth need Chrome or Edge over HTTPS. Open this app in Chrome/Edge and connect the printer, or use a normal printer with the browser print dialog.')
+          ? 'No printer connected to this device. In Settings → Printers install and connect QZ Tray (works for both thermal and normal printers), connect the USB printer (plug into this PC or phone), or pair a Bluetooth printer.'
+          : 'This browser cannot connect a printer directly - Web Serial / WebUSB / Web Bluetooth need Chrome or Edge over HTTPS. Install QZ Tray (Settings → Printers) which works in any browser, or use a normal printer with the browser print dialog.')
   };
 }
 
@@ -591,6 +622,7 @@ async function smartPrint(type, bytes, payload) {
       if (r.via === 'usb') r.connected = true;
     } catch (e) { /* user cancelled - original message stands */ }
   }
+  if (r.via === 'qz') r.message = `Printed on ${r.target}`;
   return r;
 }
 

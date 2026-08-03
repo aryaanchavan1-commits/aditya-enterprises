@@ -177,6 +177,7 @@ export default function Products() {
         }).then(r => {
           if (r.via === 'usb') showToast('Barcode label sent to USB printer');
           else if (r.via === 'bluetooth') showToast(`Barcode label printed via Bluetooth (${r.target})`);
+          else if (r.via === 'qz') showToast(`Barcode label printed via QZ Tray (${r.target})`);
           else showToast(r.message || 'No printer connected - connect one in Settings → Printers to print labels automatically', 'error');
         }).catch(err => showToast('Label print failed: ' + err.message, 'error'));
       }
@@ -221,6 +222,7 @@ export default function Products() {
       });
       if (r.via === 'usb') showToast(`${labelQty} label(s) sent to USB printer`);
       else if (r.via === 'bluetooth') showToast(`${labelQty} label(s) printed via Bluetooth (${r.target})`);
+      else if (r.via === 'qz') showToast(`${labelQty} label(s) printed via QZ Tray (${r.target})`);
       else {
         showToast('No direct USB printer connected - opening the Windows print dialog instead (printer must be installed on this PC)', 'error');
         setTimeout(() => handlePrintLabel(), 600);

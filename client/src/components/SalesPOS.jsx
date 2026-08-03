@@ -59,6 +59,7 @@ export default function SalesPOS() {
       });
       if (r.via === 'usb') showToast('Receipt sent to printer');
       else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
+      else if (r.via === 'qz') showToast(`Receipt printed via QZ Tray (${r.target})`);
       else {
         showToast(r.message || 'No printer connected - opening the system print dialog instead', 'error');
         setTimeout(() => handlePrint(), 600);
@@ -245,6 +246,7 @@ export default function SalesPOS() {
       });
       if (r.via === 'usb') showToast('Receipt sent to USB printer');
       else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
+      else if (r.via === 'qz') showToast(`Receipt printed via QZ Tray (${r.target})`);
       else showToast('No printer connected - use the "Print Receipt" button below', 'error');
     } catch (e) { /* keep the sale toast - printing can be retried below */ }
   };
