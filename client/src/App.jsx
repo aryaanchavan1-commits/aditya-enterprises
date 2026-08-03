@@ -87,29 +87,6 @@ function App() {
     }
   };
 
-  if (authState === 'loading' || authState === 'locked') {
-    return (
-      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f0f2f5', padding:16 }}>
-        {authState === 'locked' ? (
-          <form onSubmit={unlock} style={{ background:'#fff', padding:36, borderRadius:12, boxShadow:'0 4px 12px rgba(0,0,0,.08)', width:320, textAlign:'center' }}>
-            <h2 style={{ marginBottom:4 }}>Aditya Enterprises</h2>
-            <p style={{ fontSize:13, color:'#7f8c8d', marginBottom:20 }}>Enter the admin password to open the app</p>
-            <input
-              type="password" value={pwInput}
-              onChange={e => setPwInput(e.target.value)}
-              placeholder="Password" autoFocus
-              style={{ width:'100%', padding:'10px 12px', borderRadius:6, border:'1px solid #ddd', fontSize:14, boxSizing:'border-box' }}
-            />
-            {loginError && <p style={{ color:'#e74c3c', fontSize:12, marginTop:8 }}>{loginError}</p>}
-            <button type="submit" className="btn btn-primary" style={{ width:'100%', marginTop:12 }}>Open App</button>
-          </form>
-        ) : (
-          <p style={{ color:'#7f8c8d' }}>Loading...</p>
-        )}
-      </div>
-    );
-  }
-
   React.useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 768);
     check();
@@ -141,6 +118,30 @@ function App() {
 
   const pageTitle = TAB_ITEMS.concat(MORE_ITEMS).find(i => i.path === location.pathname)?.label || 'Aditya ERP';
   const isTabPath = (path) => location.pathname === path;
+
+  // All hooks above - now safe to gate the UI on auth state.
+  if (authState === 'loading' || authState === 'locked') {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f0f2f5', padding:16 }}>
+        {authState === 'locked' ? (
+          <form onSubmit={unlock} style={{ background:'#fff', padding:36, borderRadius:12, boxShadow:'0 4px 12px rgba(0,0,0,.08)', width:320, textAlign:'center' }}>
+            <h2 style={{ marginBottom:4 }}>Aditya Enterprises</h2>
+            <p style={{ fontSize:13, color:'#7f8c8d', marginBottom:20 }}>Enter the admin password to open the app</p>
+            <input
+              type="password" value={pwInput}
+              onChange={e => setPwInput(e.target.value)}
+              placeholder="Password" autoFocus
+              style={{ width:'100%', padding:'10px 12px', borderRadius:6, border:'1px solid #ddd', fontSize:14, boxSizing:'border-box' }}
+            />
+            {loginError && <p style={{ color:'#e74c3c', fontSize:12, marginTop:8 }}>{loginError}</p>}
+            <button type="submit" className="btn btn-primary" style={{ width:'100%', marginTop:12 }}>Open App</button>
+          </form>
+        ) : (
+          <p style={{ color:'#7f8c8d' }}>Loading...</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
