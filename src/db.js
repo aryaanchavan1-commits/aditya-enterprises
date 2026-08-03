@@ -62,7 +62,7 @@ async function initSchema() {
   }
   const allCols = [
     { table: 'products', cols: ['name', 'image', 'quantity', 'unit', 'description', 'hsn_code', 'sell_price', 'inward_price', 'serial_number', 'discount_percent', 'barcode', 'barcode_image', 'category_id', 'subcategory_id', 'gst_rate', 'supplier_id', 'low_stock_threshold', 'created_at', 'updated_at'] },
-    { table: 'sales', cols: ['invoice_number', 'sale_date', 'customer_id', 'customer_name', 'customer_phone', 'customer_gstin', 'customer_address', 'items', 'subtotal', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'grand_total', 'payment_mode', 'is_barcode_scan', 'is_gst', 'notes', 'created_at'] },
+    { table: 'sales', cols: ['invoice_number', 'sale_date', 'customer_id', 'customer_name', 'customer_phone', 'customer_gstin', 'customer_address', 'items', 'subtotal', 'discount_total', 'cgst_total', 'sgst_total', 'igst_total', 'cess_total', 'grand_total', 'payment_mode', 'is_barcode_scan', 'is_gst', 'gst_rate', 'notes', 'created_at'] },
     { table: 'purchases', cols: ['invoice_number', 'purchase_date', 'supplier_id', 'supplier_name', 'items', 'subtotal', 'gst_total', 'grand_total', 'payment_status', 'notes', 'created_at'] },
     { table: 'parties', cols: ['name', 'party_type', 'phone', 'email', 'gstin', 'address', 'city', 'state', 'pincode', 'opening_balance', 'is_active', 'created_at'] },
     { table: 'stock_movements', cols: ['product_id', 'type', 'quantity_change', 'reference', 'notes', 'created_at'] },

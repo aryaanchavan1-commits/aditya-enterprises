@@ -360,7 +360,7 @@ function pad(str, n, dir) {
   return dir === 'right' ? str.padStart(n) : dir === 'center' ? str.padStart(Math.floor((n + str.length) / 2)).padEnd(n) : str.padEnd(n);
 }
 
-export function buildEscPos({ companyName = '', address = '', invoiceNumber = '', date = '', customer = '', items = [], subtotal = 0, gstAmount = 0, grandTotal = 0, width = 32, isGst = true, gstin = '', customerGstin = '' }) {
+export function buildEscPos({ companyName = '', address = '', invoiceNumber = '', date = '', customer = '', items = [], subtotal = 0, gstAmount = 0, grandTotal = 0, width = 32, isGst = true, gstin = '', customerGstin = '', gstRate = 18 }) {
   const b = [];
   const init = () => b.push(ESC, 0x40);
   const align = n => b.push(ESC, 0x61, n);
@@ -400,7 +400,7 @@ export function buildEscPos({ companyName = '', address = '', invoiceNumber = ''
 
   divider();
   line(pad('Subtotal', width - 14, 'left') + pad('Rs.' + Number(subtotal).toFixed(2), 14, 'right'));
-  if (isGst) line(pad('GST @18%', width - 14, 'left') + pad('Rs.' + Number(gstAmount).toFixed(2), 14, 'right'));
+  if (isGst) line(pad(`GST @${gstRate || 18}%`, width - 14, 'left') + pad('Rs.' + Number(gstAmount).toFixed(2), 14, 'right'));
   bold(true);
   line(pad('TOTAL', width - 14, 'left') + pad('Rs.' + Number(grandTotal).toFixed(2), 14, 'right'));
   bold(false);

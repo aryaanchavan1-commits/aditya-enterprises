@@ -56,6 +56,7 @@ router.post('/', async (req, res) => {
     const settings = {};
     const allSettings = await all('SELECT * FROM settings');
     allSettings.forEach(s => settings[s.key] = s.value);
+    let gstRate = 0;
 
     for (const item of items) {
       const product = await get('SELECT * FROM products WHERE id = ?', [item.product_id]);
@@ -67,6 +68,7 @@ router.post('/', async (req, res) => {
       subtotal += lineTotal; discountTotal += lineDiscount;
       if (data.is_gst !== false) {
         const rate = parseInt(data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27' ? (settings['igst_rate'] || 18) : (settings['gst_rate'] || 18));
+        gstRate = rate;
         const isInterState = data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27';
         const halfRate = rate / 2;
         const cgst = isInterState ? 0 : afterDiscount * (halfRate / 100);
@@ -86,8 +88,8 @@ router.post('/', async (req, res) => {
       enrichedItems.push({ ...item, product_name: p?.name || '', hsn_code: p?.hsn_code || '' });
     }
 
-    await run(`INSERT INTO sales (invoice_number, sale_date, customer_name, customer_phone, customer_gstin, customer_address, items, subtotal, discount_total, cgst_total, sgst_total, igst_total, cess_total, grand_total, payment_mode, is_barcode_scan, is_gst) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [invoiceNum, saleDate, data.customer_name || 'Walk-in Customer', data.customer_phone || '', data.customer_gstin || '', data.customer_address || '', JSON.stringify(enrichedItems), subtotal, discountTotal, cgstTotal, sgstTotal, igstTotal, cessTotal, grandTotal, data.payment_mode || 'cash', data.is_barcode_scan || 0, data.is_gst !== false ? 1 : 0]);
+    await run(`INSERT INTO sales (invoice_number, sale_date, customer_name, customer_phone, customer_gstin, customer_address, items, subtotal, discount_total, cgst_total, sgst_total, igst_total, cess_total, grand_total, payment_mode, is_barcode_scan, is_gst, gst_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [invoiceNum, saleDate, data.customer_name || 'Walk-in Customer', data.customer_phone || '', data.customer_gstin || '', data.customer_address || '', JSON.stringify(enrichedItems), subtotal, discountTotal, cgstTotal, sgstTotal, igstTotal, cessTotal, grandTotal, data.payment_mode || 'cash', data.is_barcode_scan || 0, data.is_gst !== false ? 1 : 0, gstRate]);
 
     for (const item of items) {
       await run('UPDATE products SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [item.quantity, item.product_id]);

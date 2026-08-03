@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { bluetoothSupported, pairPrinter, reconnectPrinter, sendBytes, buildEscPosTest, getSavedPrinter, clearSavedPrinter, disconnectActive, isConnected, printViaBridge } from '../printer';
 
 const API = '/api';
 
 export default function Settings() {
   const [settings, setSettings] = useState({});
+  const saveTimer = useRef(null);
   const [toast, setToast] = useState(null);
   const [printerStatus, setPrinterStatus] = useState('');
   const [scannerStatus, setScannerStatus] = useState('');
@@ -72,13 +73,16 @@ export default function Settings() {
 
   const updateSetting = async (key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
-    try {
-      await fetch(`${API}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [key]: String(value) })
-      });
-    } catch (err) { showToast('Failed to save', 'error'); }
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await fetch(`${API}/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [key]: value })
+        });
+      } catch (err) { showToast('Failed to save', 'error'); }
+    }, 800);
   };
 
   const detectPrinters = async () => {

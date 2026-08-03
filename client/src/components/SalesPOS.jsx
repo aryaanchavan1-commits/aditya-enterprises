@@ -119,7 +119,8 @@ export default function SalesPOS() {
       grandTotal: Number(invoice.grand_total || 0),
       isGst: invoice.is_gst !== 0 && invoice.is_gst !== false,
       gstin: companyGstin,
-      customerGstin: invoice.customer_gstin || ''
+      customerGstin: invoice.customer_gstin || '',
+      gstRate: invoice.gst_rate || 18
     });
     await sendBytes(bytes);
   };
@@ -229,7 +230,8 @@ export default function SalesPOS() {
         grandTotal: Number(invoice.grand_total || 0),
         isGst: invoice.is_gst !== 0 && invoice.is_gst !== false,
         gstin: companyGstin,
-        customerGstin: invoice.customer_gstin || ''
+        customerGstin: invoice.customer_gstin || '',
+        gstRate: invoice.gst_rate || 18
       });
       if (r.via === 'usb') showToast('Receipt sent to USB printer');
       else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
@@ -385,7 +387,7 @@ export default function SalesPOS() {
             <div className="tr-divider"></div>
             <div className="tr-row"><span>Subtotal</span><span>Rs. {Number(lastInvoice.subtotal).toFixed(2)}</span></div>
             {lastInvoice.is_gst !== 0 && lastInvoice.is_gst !== false && (
-              <div className="tr-row"><span>GST @18%</span><span>Rs. {Number((lastInvoice.cgst_total||0)+(lastInvoice.sgst_total||0)+(lastInvoice.igst_total||0)).toFixed(2)}</span></div>
+              <div className="tr-row"><span>GST @{lastInvoice.gst_rate || 18}%</span><span>Rs. {Number((lastInvoice.cgst_total||0)+(lastInvoice.sgst_total||0)+(lastInvoice.igst_total||0)).toFixed(2)}</span></div>
             )}
             <div className="tr-total">Total: Rs. {Number(lastInvoice.grand_total).toFixed(2)}</div>
             <div className="tr-divider"></div>
