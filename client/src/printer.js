@@ -521,13 +521,14 @@ export async function getBridgeStatus() {
 // PC, then Bluetooth. Returns { via, target, message } so callers can tell the
 // user which printer actually printed.
 async function printViaBest(type, bytes, payload) {
+  let firstError = null;
   try {
     if (serialConnected() || (serialSupported() && await restoreSerialPrinter())) {
       await writeSerial(bytes);
       return { via: 'usb', target: serialLabel(serialPort) };
     }
   } catch (e) {
-    return { via: null, target: '', message: 'USB print failed: ' + (e.message || 'printer unreachable') };
+    firstError = 'USB print failed: ' + (e.message || 'printer unreachable');
   }
   try {
     if (usbConnected() || (usbSupported() && await restoreUsbPrinter())) {
@@ -535,7 +536,7 @@ async function printViaBest(type, bytes, payload) {
       return { via: 'usb', target: usbLabel(usbDevice) };
     }
   } catch (e) {
-    return { via: null, target: '', message: 'USB print failed: ' + (e.message || 'printer unreachable') };
+    if (!firstError) firstError = 'USB print failed: ' + (e.message || 'printer unreachable');
   }
   const st = await getBridgeStatus();
   if (st.online && st.bridgePrinter) {
@@ -559,9 +560,11 @@ async function printViaBest(type, bytes, payload) {
   return {
     via: null,
     target: '',
-    message: directCapable
-      ? 'No printer connected to this device. In Settings → Printers tap "Connect USB Printer" (plug the thermal printer into this PC or phone) or pair the Bluetooth printer.'
-      : 'This browser cannot connect a thermal printer directly - Web Serial / WebUSB / Web Bluetooth need Chrome or Edge over HTTPS. Open this app in Chrome/Edge and connect the printer, or use a normal printer with the browser print dialog.'
+    message: firstError
+      ? firstError + '. Tried automatic backup printers too - fix the USB connection (Settings → Printers) or switch the printer on.'
+      : (directCapable
+          ? 'No printer connected to this device. In Settings → Printers tap "Connect USB Printer" (plug the thermal printer into this PC or phone) or pair the Bluetooth printer.'
+          : 'This browser cannot connect a thermal printer directly - Web Serial / WebUSB / Web Bluetooth need Chrome or Edge over HTTPS. Open this app in Chrome/Edge and connect the printer, or use a normal printer with the browser print dialog.')
   };
 }
 
