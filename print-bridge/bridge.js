@@ -64,6 +64,25 @@ function log(msg) {
 
 // ---------------- HTTP helpers ----------------
 
+function downloadFile(url, dest) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.get(url, { timeout: 60000 }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return downloadFile(res.headers.location, dest).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error('Download failed (HTTP ' + res.statusCode + ')')); }
+      const out = fs.createWriteStream(dest);
+      res.pipe(out);
+      out.on('finish', () => out.close(() => resolve()));
+      out.on('error', reject);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('Download timed out')));
+  });
+}
+
 function apiRequest(method, pathUrl, body) {
   return new Promise(resolve => {
     const lib = API.startsWith('https') ? https : http;
@@ -130,6 +149,7 @@ function pickPrinter(printers) {
 // Re-detect when no printer was found, so plugging in / installing the
 // printer later gets picked up automatically without restarting the bridge.
 let noPrinterTicks = 0;
+let bridgeTickCounter = 0;
 
 function maybeRedetect() {
   if (config.printerName) return;
@@ -658,6 +678,101 @@ function labelTextFallback(p) {
   return `\n${String(p.name || '').slice(0, 32)}\nRs. ${Number(p.price || 0)}\nBARCODE: ${p.barcode || ''}\n${String(p.sku || '')}\n\n`.repeat(copies);
 }
 
+// ---------------- One-click CH340/CH341 driver fix ----------------
+// Thermal printers use a CH340/CH341 USB-serial chip. Windows won't show the
+// port until its driver is installed - which is exactly what non-technical
+// users can't do. So this downloads the official WCH driver and installs it
+// with one Windows "Allow" click (UAC). Works for Web Serial direct printing
+// AND for the bridge itself.
+
+const CHSER_ZIP_URL = 'https://github.com/WCH-IC/download/releases/latest/download/CH341SER.ZIP';
+
+function findChipDevices() {
+  try {
+    const out = execFileSync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      "Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -match 'CH340|CH341|CH342|CH343|CH344|USB-SERIAL' -or $_.HardwareID -match 'VID_1A86' } | Select-Object Name, ConfigManagerErrorCode, HardwareID | ConvertTo-Json -Compress"
+    ], { timeout: 20000, encoding: 'utf8' });
+    const parsed = JSON.parse(out.trim() || 'null');
+    return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+  } catch (e) {
+    return [];
+  }
+}
+
+// A WCH CH34x chip (VID_1A86) is present but broken/missing driver = the
+// printer is plugged in and needs its driver. Anything else = no action.
+function chipNeedsDriver() {
+  return findChipDevices().some(d => String(d.HardwareID || '').includes('VID_1A86') && Number(d.ConfigManagerErrorCode) !== 0);
+}
+
+let lastAutoFixAt = 0;
+
+// Run in the background: if the printer is plugged in but its driver is
+// missing, install it automatically (one Windows "Allow" click).
+async function autoFixWatchdog(force) {
+  if (!chipNeedsDriver()) return;
+  if (!force && Date.now() - lastAutoFixAt < 300000) return; // max once per 5 min
+  lastAutoFixAt = Date.now();
+  log('Printer plugged in but driver missing - installing the CH340 driver automatically...');
+  await apiRequest('POST', '/api/devices/print/bridge/fixreport', { status: 'running', message: '' });
+  const fx = await runFixDriver();
+  await apiRequest('POST', '/api/devices/print/bridge/fixreport', { status: fx.status, message: fx.message });
+  log('Auto driver fix: ' + fx.status + ' - ' + fx.message);
+}
+
+async function runFixDriver() {
+  const logStep = m => log(m);
+  try {
+    const devs = findChipDevices();
+    if (devs.length > 0 && devs.every(d => Number(d.ConfigManagerErrorCode) === 0)) {
+      return { status: 'already', message: 'Printer driver is already working. Unplug the printer, plug it back in, then press Connect Printer.' };
+    }
+    if (devs.length > 0) {
+      logStep('Printer chip found but the driver is not working - reinstalling it...');
+    } else {
+      logStep('Installing the printer driver (takes a minute)...');
+    }
+
+    logStep('Downloading the official driver...');
+    const dir = path.join(os.tmpdir(), 'ae_chip_driver');
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    const zipPath = path.join(dir, 'CH341SER.zip');
+    await downloadFile(CHSER_ZIP_URL, zipPath);
+
+    logStep('Extracting driver...');
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -Force -LiteralPath '${zipPath}' -DestinationPath '${dir}\\ex'`], { timeout: 30000, encoding: 'utf8' });
+    const inf = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `(Get-ChildItem -Path '${dir}\\ex' -Recurse -Filter *.inf | Select-Object -First 1).FullName`], { timeout: 15000, encoding: 'utf8' }).trim();
+    if (!inf) throw new Error('driver package had no install file');
+
+    logStep('Installing driver - a Windows box will ask for permission, click Yes...');
+    const psPath = path.join(dir, 'install.ps1');
+    fs.writeFileSync(psPath, [
+      "$ErrorActionPreference = 'Stop'",
+      'pnputil.exe /add-driver "' + inf + '" /install',
+      'pnputil.exe /scan-devices',
+      'exit 0'
+    ].join('\n'), 'utf8');
+    try {
+      execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+        `Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','${psPath}'; exit 0`
+      ], { timeout: 180000, encoding: 'utf8', stdio: 'pipe' });
+    } catch (e) {
+      return { status: 'cancelled', message: 'Windows asked for permission but it was not given. Press Fix again and this time click Yes when Windows asks.' };
+    }
+
+    const after = findChipDevices();
+    if (after.length === 0) {
+      return { status: 'installed_notseen', message: 'Driver installed. But Windows still does not see a printer - make sure the printer is plugged into the shop PC with its USB cable, then press Connect Printer.' };
+    }
+    return { status: 'installed', message: 'Driver installed! Now unplug the printer, plug it back in, then press Connect Printer - it will show up in the list.' };
+  } catch (e) {
+    log('Fix driver failed: ' + (e && e.message || e));
+    return { status: 'error', message: 'Could not fix the driver automatically (' + String((e && e.message || 'unknown error')).slice(0, 150) + '). Make sure the shop PC is online and try again - or update Windows (Settings > Windows Update > Check for updates).' };
+  }
+}
+
 // ---------------- Job processing ----------------
 
 function buildReceiptLines(p) {
@@ -693,6 +808,15 @@ function buildReceiptLines(p) {
 async function handleJob(job) {
   const p = job.payload || {};
   let result;
+
+  if (job.type === 'fixdriver') {
+    await apiRequest('POST', '/api/devices/print/bridge/fixreport', { status: 'running', message: '' });
+    const fx = await runFixDriver();
+    await apiRequest('POST', '/api/devices/print/bridge/fixreport', { status: fx.status, message: fx.message });
+    await apiRequest('POST', `/api/devices/print/job/${job.id}/status`, { status: 'done', error: '' });
+    log('Fix-driver job done: ' + fx.status);
+    return;
+  }
 
   const isNormal = config.printerMode === 'normal';
 
@@ -732,6 +856,7 @@ async function handleJob(job) {
 
 async function tick() {
   try {
+    if (bridgeTickCounter++ % 10 === 0) autoFixWatchdog(false);
     maybeRedetect();
     await reportStatus(false);
     const res = await apiRequest('GET', '/api/devices/print/job/next');
@@ -752,6 +877,7 @@ log('Aditya ERP USB Print Bridge');
 log('Server: ' + API);
 loadOrDetectConfig();
 reportStatus(true);
+autoFixWatchdog(true); // if the printer is plugged in but driverless, fix it right away
 
 if (!config.printerName) {
   log('No printer found. Reconnect the USB printer and restart this bridge.');

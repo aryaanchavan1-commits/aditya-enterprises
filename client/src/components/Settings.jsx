@@ -18,6 +18,8 @@ export default function Settings() {
   const [btBusy, setBtBusy] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, bridgePrinter: '', bridgeShare: '', bridgePrinterMode: '', bridgeVersion: '', bridgeLastError: '', lastJob: null });
   const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [fixBusy, setFixBusy] = useState(false);
+  const [fixMsg, setFixMsg] = useState('');
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -34,6 +36,32 @@ export default function Settings() {
     const int = setInterval(checkBridge, 8000);
     return () => clearInterval(int);
   }, []);
+
+  const fixDriver = async () => {
+    setFixBusy(true);
+    setFixMsg('');
+    try {
+      const r = await fetch(`${API}/devices/print/job`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'fixdriver', payload: {} }) }).then(r => r.json());
+      if (!r.success) throw new Error(r.error || 'Could not start');
+      setFixMsg('The fix is running on the PC the printer is plugged into. If a Windows box asks for permission there, click Yes.');
+      for (let i = 0; i < 36; i++) {
+        await new Promise(res => setTimeout(res, 2500));
+        const st = await fetch(`${API}/devices/print/bridge/status`).then(r => r.json());
+        const s = st.success && st.data ? st.data : {};
+        if (s.fixStatus && s.fixStatus !== 'running') {
+          setFixMsg(s.fixMessage || 'Done. Try printing now.');
+          setFixBusy(false);
+          showToast(s.fixStatus === 'installed' || s.fixStatus === 'already' ? 'Printer driver is ready!' : (s.fixStatus === 'cancelled' || s.fixStatus === 'error' ? 'Driver fix needs attention' : 'Driver status updated'), s.fixStatus === 'installed' || s.fixStatus === 'already' ? 'success' : 'error');
+          return;
+        }
+      }
+      setFixMsg('Still waiting for the shop PC... check that PC for a Windows permission box.');
+      setFixBusy(false);
+    } catch (e) {
+      setFixMsg('Could not start the fix: ' + e.message);
+      setFixBusy(false);
+    }
+  };
 
   const testBridgePrint = async () => {
     if (bridgeStatus.bridgeOnline && !bridgeStatus.bridgePrinter) {
@@ -420,12 +448,22 @@ export default function Settings() {
             </div>
             {!directPrinter && (
               <details style={{fontSize:11, color:'#7f8c8d'}}>
-                <summary style={{cursor:'pointer'}}>No printer in the list? Check this</summary>
-                <ul style={{margin:'4px 0 0 16px', padding:0, lineHeight:1.6}}>
-                  <li>Open <strong>Device Manager → Ports (COM &amp; LPT)</strong>. If you see "CH340" with a warning icon, right-click → Update driver (online). The port only appears after the driver is installed.</li>
-                  <li>Close any printer software that may have claimed the port, then replug the printer.</li>
-                  <li>If the printer installs with its own Windows driver and <strong>never shows a COM port</strong>, browsers can't reach it directly - see "Other printing options" below.</li>
-                </ul>
+                <summary style={{cursor:'pointer'}}>Printer not showing up? Fix it in one click</summary>
+                {bridgeStatus.bridgeOnline ? (
+                  <div style={{marginTop:6}}>
+                    <button className="btn btn-sm btn-warning" onClick={fixDriver} disabled={fixBusy}>
+                      {fixBusy ? 'Fixing...' : 'Fix my printer driver'}
+                    </button>
+                    <div style={{marginTop:4}}>
+                      It installs the printer's driver for you - just click "Fix my printer driver". If Windows asks for permission, click Yes. Then unplug the printer, plug it back in, and press Connect Printer.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{marginTop:6}}>
+                    The easiest fix: in Windows open <strong>Settings → Windows Update → Check for updates</strong>, let it finish, then restart the PC. The printer's driver installs by itself. If a Windows box asks for permission, click Yes.
+                  </div>
+                )}
+                {fixMsg && <div style={{marginTop:6, color:'#555'}}>{fixMsg}</div>}
               </details>
             )}
             <div style={{fontSize:11, color:'#888'}}>
@@ -463,7 +501,7 @@ export default function Settings() {
                 {bridgeStatus.bridgeOnline ? 'Bridge Online' : 'Bridge Offline'}
               </span>
             </div>
-            <div style={{fontSize:11, color:'#777', marginBottom:6}}>For when the printer stays plugged into a <strong>different</strong> PC than the device you're using. Setup: plug in the printer, copy the <strong>print-bridge</strong> folder there, run <strong>install-bridge.bat</strong> once (starts with Windows).</div>
+            <div style={{fontSize:11, color:'#777', marginBottom:6}}>For when the printer stays plugged into a <strong>different</strong> PC than the device you're using. One-time setup on that PC: copy the <strong>print-bridge</strong> folder there and double-click <strong>install-bridge.bat</strong> - it installs everything itself, including the printer driver, and sets the bridge to start with Windows.</div>
             <div style={{display:'flex', gap:6, flexWrap:'wrap', marginBottom:6}}>
               <button className="btn btn-sm btn-success" onClick={testBridgePrint} disabled={bridgeBusy}>
                 {bridgeBusy ? 'Sending...' : 'Test Print via USB'}

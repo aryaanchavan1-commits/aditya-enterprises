@@ -81,7 +81,7 @@ router.post('/print-test', (req, res) => {
 router.post('/print/job', async (req, res) => {
   try {
     const { type, payload } = req.body || {};
-    if (!['receipt', 'label', 'test'].includes(type)) { res.json({ success: false, error: 'Invalid print job type' }); return; }
+    if (!['receipt', 'label', 'test', 'fixdriver'].includes(type)) { res.json({ success: false, error: 'Invalid print job type' }); return; }
     const r = await run('INSERT INTO print_jobs (type, payload) VALUES (?, ?)', [type, JSON.stringify(payload || {})]);
     res.json({ success: true, data: { id: r.id || r.lastID, type } });
   } catch (err) { res.json({ success: false, error: err.message }); }
@@ -134,7 +134,20 @@ router.post('/print/bridge/report', async (req, res) => {
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
-// Status for the Settings page: is the bridge running?
+// Called by the bridge to report the driver-fix progress/result.
+router.post('/print/bridge/fixreport', async (req, res) => {
+  try {
+    const { status, message } = req.body || {};
+    const vals = {
+      bridge_fix_status: String(status || '').slice(0, 40),
+      bridge_fix_message: String(message || '').slice(0, 400),
+    };
+    for (const [k, v] of Object.entries(vals)) {
+      await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [k, v]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
 router.get('/print/bridge/status', async (req, res) => {
   try {
     const seen = await get("SELECT value FROM settings WHERE key = 'bridge_last_seen'");
@@ -143,6 +156,8 @@ router.get('/print/bridge/status', async (req, res) => {
     const mode = await get("SELECT value FROM settings WHERE key = 'bridge_printer_mode'");
     const version = await get("SELECT value FROM settings WHERE key = 'bridge_version'");
     const lastError = await get("SELECT value FROM settings WHERE key = 'bridge_last_error'");
+    const fixStatus = await get("SELECT value FROM settings WHERE key = 'bridge_fix_status'");
+    const fixMessage = await get("SELECT value FROM settings WHERE key = 'bridge_fix_message'");
     const lastJob = await get("SELECT type, status, error, created_at, done_at FROM print_jobs ORDER BY id DESC LIMIT 1");
     let ts = seen?.value ? new Date(seen.value) : null;
     if (ts && isNaN(ts.getTime())) ts = new Date(seen.value.replace(' ', 'T') + 'Z');
@@ -157,6 +172,8 @@ router.get('/print/bridge/status', async (req, res) => {
         bridgePrinterMode: mode?.value || '',
         bridgeVersion: version?.value || '',
         bridgeLastError: lastError?.value || '',
+        fixStatus: fixStatus?.value || '',
+        fixMessage: fixMessage?.value || '',
         lastJob
       }
     });
