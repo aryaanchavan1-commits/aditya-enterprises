@@ -184,7 +184,10 @@ async function query(sql, params = []) {
 async function run(sql, params = []) {
   const db = await getDb();
   const result = await db.execute({ sql, args: params });
-  return { id: Number(result.lastInsertRowid) };
+  return {
+    id: Number(result.lastInsertRowid || 0),
+    changes: Number(result.rowsWritten || 0) || (Number(result.lastInsertRowid || 0) > 0 ? 1 : 0)
+  };
 }
 
 async function get(sql, params = []) {

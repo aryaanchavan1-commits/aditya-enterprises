@@ -158,12 +158,12 @@ export default function GSTInvoices() {
               <div className="card-header"><h3>GST Report</h3></div>
               <div className="stats-grid">
                 <div className="stat-card accent">
-                  <span className="stat-value">{gstReport.totalSales}</span>
+                  <span className="stat-value">{gstReport.totalInvoices}</span>
                   <span className="stat-label">Total Invoices</span>
                 </div>
                 <div className="stat-card success">
-                  <span className="stat-value">Rs.{Number(gstReport.totalRevenue).toLocaleString('en-IN')}</span>
-                  <span className="stat-label">Total Revenue</span>
+                  <span className="stat-value">Rs.{Number(gstReport.taxableValue).toLocaleString('en-IN')}</span>
+                  <span className="stat-label">Taxable Value</span>
                 </div>
                 <div className="stat-card warning">
                   <span className="stat-value">Rs.{Number(gstReport.totalCgst).toLocaleString('en-IN')}</span>

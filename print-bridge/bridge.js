@@ -267,9 +267,11 @@ try {
 function printRaw(shareName, bytes) {
   const tmp = path.join(os.tmpdir(), `ae_print_${Date.now()}.bin`);
   fs.writeFileSync(tmp, bytes);
-  const unc = `\\\\localhost\\${shareName}`;
+  // Sanitize - share names only allow a subset, and this ends up in shell commands.
+  const shareSafe = String(shareName).replace(/[^\w \-]/g, '');
+  const unc = `\\\\localhost\\${shareSafe}`;
   // net use once (ignores errors - local shares usually need none)
-  try { execSync(`net use ${unc} /persistent:no`, { stdio: 'pipe', timeout: 15000 }); } catch (e) {}
+  try { execSync(`net use "${unc}" /persistent:no`, { stdio: 'pipe', timeout: 15000 }); } catch (e) {}
   try {
     fs.copyFileSync(tmp, unc);
     fs.unlinkSync(tmp);
@@ -422,7 +424,8 @@ if ($script:bmp -ne $null) { $script:bmp.Dispose() }
   }
 }
 
-// Print a receipt through the Windows driver as text lines.
+// Print a receipt through the Windows driver as text lines. Normal paper
+// printers get a full A4 page so it looks like a proper bill.
 function printReceiptViaGdi(printerName, lines) {
   const script = `
 $ErrorActionPreference = 'Stop'
@@ -431,22 +434,22 @@ $script:lines = @(${lines.map(psQuote).join(', ')})
 $script:page = 0
 $doc = New-Object System.Drawing.Printing.PrintDocument
 $doc.PrinterSettings.PrinterName = ${psQuote(printerName)}
-$doc.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('receipt', 400, 1100)
-$font = New-Object System.Drawing.Font('Consolas', 11)
+$doc.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('receipt', 827, 1169)
+$font = New-Object System.Drawing.Font('Consolas', 12)
 $doc.add_PrintPage({ param($s, $e)
   $g = $e.Graphics
-  $perPage = 48
+  $perPage = 42
   $start = $script:page * $perPage
   $y = 40
   for ($i = $start; $i -lt [Math]::Min($start + $perPage, $script:lines.Count); $i++) {
     $ln = $script:lines[$i]
-    if ($ln -eq '') { $y += 12; continue }
+    if ($ln -eq '') { $y += 14; continue }
     if ($ln -like '===*') {
-      $g.DrawLine([System.Drawing.Pens]::Black, 20, $y + 8, 380, $y + 8)
+      $g.DrawLine([System.Drawing.Pens]::Black, 30, $y + 8, 797, $y + 8)
     } else {
-      $g.DrawString($ln, $font, [System.Drawing.Brushes]::Black, 20, $y)
+      $g.DrawString($ln, $font, [System.Drawing.Brushes]::Black, 30, $y)
     }
-    $y += 20
+    $y += 22
   }
   $script:page++
   $e.HasMorePages = ($start + $perPage) -lt $script:lines.Count
@@ -763,12 +766,14 @@ async function runFixDriver() {
     }
 
     const after = findChipDevices();
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {} // free temp memory/disk
     if (after.length === 0) {
       return { status: 'installed_notseen', message: 'Driver installed. But Windows still does not see a printer - make sure the printer is plugged into the shop PC with its USB cable, then press Connect Printer.' };
     }
     return { status: 'installed', message: 'Driver installed! Now unplug the printer, plug it back in, then press Connect Printer - it will show up in the list.' };
   } catch (e) {
     log('Fix driver failed: ' + (e && e.message || e));
+    try { fs.rmSync(path.join(os.tmpdir(), 'ae_chip_driver'), { recursive: true, force: true }); } catch (e2) {}
     return { status: 'error', message: 'Could not fix the driver automatically (' + String((e && e.message || 'unknown error')).slice(0, 150) + '). Make sure the shop PC is online and try again - or update Windows (Settings > Windows Update > Check for updates).' };
   }
 }

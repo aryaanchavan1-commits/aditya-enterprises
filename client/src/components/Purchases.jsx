@@ -77,26 +77,33 @@ export default function Purchases() {
     setCart(cart.filter(c => c.product_id !== productId && !(c.isNew && c.product_name === productId)));
   };
 
+  const [submittingPurchase, setSubmittingPurchase] = useState(false);
+
   const submitPurchase = async () => {
+    if (submittingPurchase) return; // guard against double-clicks
     if (cart.length === 0) { showToast('Add at least one product', 'error'); return; }
+    setSubmittingPurchase(true);
+    try {
+      const items = cart.map(c => ({
+        product_id: c.product_id, product_name: c.product_name, quantity: c.quantity,
+        inward_price: c.inward_price, gst_rate: c.gst_rate || 18, unit: c.unit || 'pcs',
+        isNew: c.isNew || false
+      }));
 
-    const items = cart.map(c => ({
-      product_id: c.product_id, product_name: c.product_name, quantity: c.quantity,
-      inward_price: c.inward_price, gst_rate: c.gst_rate || 18, unit: c.unit || 'pcs',
-      isNew: c.isNew || false
-    }));
-
-    const r = await fetch(`${API}/purchases`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ supplier_name: supplierName || 'Unknown Supplier', payment_status: paymentStatus, notes, items, purchase_date: new Date().toISOString().split('T')[0] })
-    });
-    const d = await r.json();
-    if (d.success) {
-      showToast('Purchase recorded! Stock updated.');
-      setCart([]); setSupplierName(''); setNotes(''); setShowForm(false);
-      fetchPurchases();
-      fetch(`${API}/products`).then(r => r.json()).then(d2 => { if (d2.success) setProducts(d2.data); });
-    } else { showToast(d.error, 'error'); }
+      const r = await fetch(`${API}/purchases`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplier_name: supplierName || 'Unknown Supplier', payment_status: paymentStatus, notes, items, purchase_date: new Date().toISOString().split('T')[0] })
+      });
+      const d = await r.json();
+      if (d.success) {
+        showToast('Purchase recorded! Stock updated.');
+        setCart([]); setSupplierName(''); setNotes(''); setShowForm(false);
+        fetchPurchases();
+        fetch(`${API}/products`).then(r => r.json()).then(d2 => { if (d2.success) setProducts(d2.data); });
+      } else { showToast(d.error, 'error'); }
+    } finally {
+      setSubmittingPurchase(false);
+    }
   };
 
   const filteredProducts = products.filter(p =>
@@ -273,8 +280,8 @@ export default function Purchases() {
                 <label>Notes</label>
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows="2" />
               </div>
-              <button className="btn btn-success btn-lg" style={{width:'100%'}} onClick={submitPurchase} disabled={cart.length === 0}>
-                Save Purchase Order - Rs.{(total + gstTotal).toFixed(2)}
+              <button className="btn btn-success btn-lg" style={{width:'100%'}} onClick={submitPurchase} disabled={cart.length === 0 || submittingPurchase}>
+                {submittingPurchase ? 'Saving...' : `Save Purchase Order - Rs.${(total + gstTotal).toFixed(2)}`}
               </button>
             </div>
           )}

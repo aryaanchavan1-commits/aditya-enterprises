@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { getDb } = require('../src/db');
+const crypto = require('crypto');
+const { get, all, run, getDb } = require('../src/db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,6 +30,73 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ---------------- Auth ----------------
+// The whole API is protected by a password (hash). Source: env AE_PASSWORD,
+// else the admin_password setting (set from Settings → Admin Password).
+// The local print bridge polls its job queue without credentials, so the
+// device endpoints are exempt. Everything else (data, settings, PDFs,
+// reports, uploads) requires the password once one is configured.
+
+const sha = s => crypto.createHash('sha256').update(String(s || '')).digest('hex');
+const shaEquals = (a, b) => {
+  try {
+    const ba = Buffer.from(String(a)); const bb = Buffer.from(String(b));
+    if (ba.length !== bb.length) return false;
+    let d = 0;
+    for (let i = 0; i < ba.length; i++) d |= ba[i] ^ bb[i];
+    return d === 0;
+  } catch (e) { return false; }
+};
+
+async function getAuthPassword() {
+  if (process.env.AE_PASSWORD) return { hash: sha(process.env.AE_PASSWORD), fromEnv: true };
+  try {
+    const row = await get("SELECT value FROM settings WHERE key = 'admin_password'");
+    if (row && row.value) return { hash: row.value, fromEnv: false };
+  } catch (e) {}
+  return null;
+}
+
+const PUBLIC_API = ['/health', '/auth/status', '/auth/login', '/auth/password'];
+
+app.use('/api', async (req, res, next) => {
+  try {
+    if (PUBLIC_API.includes(req.path)) return next();
+    if (req.path.startsWith('/devices/print/')) return next(); // local bridge - no credentials
+    const auth = await getAuthPassword();
+    if (!auth) return next(); // no password configured yet - data is open
+    const provided = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (shaEquals(sha(provided), auth.hash)) return next();
+    res.status(401).json({ success: false, error: 'Unauthorized - enter the admin password to continue.' });
+  } catch (e) {
+    next();
+  }
+});
+
+app.get('/api/auth/status', async (req, res) => {
+  const auth = await getAuthPassword();
+  res.json({ success: true, data: { protected: !!auth } });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const auth = await getAuthPassword();
+  if (!auth) return res.json({ success: true, data: { ok: true } }); // open - nothing to check
+  if (shaEquals(sha(req.body?.password), auth.hash)) return res.json({ success: true, data: { ok: true } });
+  res.status(401).json({ success: false, error: 'Wrong password' });
+});
+
+app.post('/api/auth/password', async (req, res) => {
+  const pw = String(req.body?.password || '');
+  if (pw.length < 4) return res.json({ success: false, error: 'Password must be at least 4 characters' });
+  const auth = await getAuthPassword();
+  if (auth) { // already protected - changing requires the current password
+    const given = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!shaEquals(sha(given), auth.hash)) return res.status(401).json({ success: false, error: 'Enter the current password first' });
+  }
+  await run("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_password', ?)", [sha(pw)]);
+  res.json({ success: true, message: 'Password saved - data is now protected' });
+});
 
 if (typeof BigInt !== 'undefined' && !BigInt.prototype.toJSON) {
   BigInt.prototype.toJSON = function() { return Number(this); };
@@ -65,6 +133,29 @@ try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) {}
 try { fs.mkdirSync(barcodesDir, { recursive: true }); } catch (e) {}
 try { fs.mkdirSync(invoicesDir, { recursive: true }); } catch (e) {}
 try { fs.mkdirSync(aiUploadsDir, { recursive: true }); } catch (e) {}
+
+// Memory/disk hygiene: Render's filesystem is ephemeral and limited - prune
+// generated files (barcodes regenerate on demand) and stale uploads daily.
+function pruneDir(dir, maxAgeMs) {
+  try {
+    if (!fs.existsSync(dir)) return;
+    const now = Date.now();
+    for (const f of fs.readdirSync(dir)) {
+      const p = path.join(dir, f);
+      try {
+        if (fs.statSync(p).isFile() && now - fs.statSync(p).mtimeMs > maxAgeMs) fs.unlinkSync(p);
+      } catch (e) {}
+    }
+  } catch (e) {}
+}
+function pruneTmpData() {
+  pruneDir(barcodesDir, 7 * 24 * 3600 * 1000);
+  pruneDir(uploadsDir, 30 * 24 * 3600 * 1000);
+  pruneDir(invoicesDir, 30 * 24 * 3600 * 1000);
+  pruneDir(aiUploadsDir, 30 * 24 * 3600 * 1000);
+}
+setInterval(pruneTmpData, 24 * 3600 * 1000);
+setTimeout(pruneTmpData, 10 * 60 * 1000);
 
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Aditya Enterprises ERP</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f0f2f5;color:#2c3e50;text-align:center}.card{background:#fff;padding:40px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08)}.btn{display:inline-block;margin-top:16px;padding:10px 24px;background:#3498db;color:#fff;border-radius:6px;text-decoration:none}a{color:#3498db}</style></head><body><div class="card"><h2>Aditya Enterprises ERP</h2><p style="color:#7f8c8d">API Server is running</p><p style="font-size:13px">&#8226; <a href="/api/health">Health Check</a><br>&#8226; <a href="https://aditya-enterprises-erp.vercel.app">Open App (Vercel)</a></p></div></body></html>`);
@@ -118,8 +209,6 @@ app.use('/api/crm', require('../src/routes/crm'));
 app.use('/api/services', require('../src/routes/services'));
 app.use('/api/accounting', require('../src/routes/accounting'));
 app.use('/api/brands', require('../src/routes/brands'));
-
-const { get, all, run } = require('../src/db');
 
 function ok(res, data) { res.json(data !== undefined ? { success: true, data } : { success: true }); }
 function fail(res, error) { res.json({ success: false, error }); }

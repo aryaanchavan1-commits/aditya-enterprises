@@ -425,7 +425,10 @@ export default function Settings() {
               <div style={{fontSize:12, color:'#27ae60', marginBottom:6}}>Connected: <strong>{directPrinter.name}</strong> — labels, receipts &amp; bills print to it automatically</div>
             ) : (
               <div style={{fontSize:11, color:'#555', marginBottom:6}}>
-                Plug the printer (USB) into <strong>this</strong> PC or phone and press Connect. The app picks the right way automatically (USB on PC, USB-OTG on Android) - no software, no bridge. From then on, printing is fully automatic: sales, labels, receipts and GST/non-GST bills print on their own.
+                For <strong>thermal printers</strong> (receipt/label): plug the printer (USB) into this PC/phone and press Connect — the app picks the right way automatically (USB on PC, USB-OTG on Android), no software or bridge. After that, printing is fully automatic: sales, labels, receipts and GST/non-GST bills.
+                <div style={{marginTop:4}}>
+                  <strong>Normal paper printers</strong> (HP/Canon/Brother...) can't connect this way — they print automatically through their Windows driver using the <strong>USB Bridge</strong> below or the <strong>on-screen Print dialog</strong>.
+                </div>
               </div>
             )}
             <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:6}}>

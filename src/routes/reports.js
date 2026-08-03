@@ -166,9 +166,10 @@ router.get('/csv', async (req, res) => {
     const { start_date, end_date } = req.query; let where = '1=1'; const params = [];
     if (start_date) { where += ' AND sale_date >= ?'; params.push(start_date); }
     if (end_date) { where += ' AND sale_date <= ?'; params.push(end_date); }
-    const sales = await all(`SELECT * FROM sales WHERE ${where} ORDER BY sale_date`, params);
+    const sales = await all(`SELECT * FROM sales WHERE ${where} ORDER BY sale_date LIMIT 5000`, params);
+    const csvEsc = v => { const s = String(v ?? ''); return (/[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s); };
     let csv = 'Invoice No,Date,Customer,Phone,GSTIN,Items,Subtotal,Discount,CGST,SGST,IGST,Grand Total,Payment Mode\n';
-    sales.forEach(sale => { const items = JSON.parse(sale.items || '[]'); const itemDesc = items.map(i => `${i.product_name} x${i.quantity}`).join('; '); csv += `${sale.invoice_number},${sale.sale_date},"${sale.customer_name}","${sale.customer_phone}","${sale.customer_gstin}","${itemDesc}",${sale.subtotal},${sale.discount_total},${sale.cgst_total},${sale.sgst_total},${sale.igst_total},${sale.grand_total},${sale.payment_mode}\n`; });
+    sales.forEach(sale => { const items = JSON.parse(sale.items || '[]'); const itemDesc = items.map(i => `${i.product_name} x${i.quantity}`).join('; '); csv += [sale.invoice_number, sale.sale_date, sale.customer_name, sale.customer_phone, sale.customer_gstin, itemDesc, sale.subtotal, sale.discount_total, sale.cgst_total, sale.sgst_total, sale.igst_total, sale.grand_total, sale.payment_mode].map(csvEsc).join(',') + '\n'; });
     res.setHeader('Content-Type', 'text/csv'); res.setHeader('Content-Disposition', `attachment; filename="Sales_Report_${start_date || 'all'}_${end_date || 'all'}.csv"`); res.send(csv);
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
@@ -203,7 +204,8 @@ router.get('/balance-sheet', async (req, res) => {
     const totalInvoices = parsedSales.length;
     const totalQuantity = parsedSales.reduce((sum, s) => sum + s.items.reduce((q, i) => q + (i.quantity || 0), 0), 0);
     const netGstPayable = totalCgst + totalSgst - purchaseGst;
-    const netProfit = totalRevenue - totalPurchases - totalDiscount;
+    // grand_total already has discounts deducted, so subtracting them again would double-count.
+    const netProfit = totalRevenue - totalPurchases;
     const monthlyBreakdown = {};
     for (let i = 1; i <= 12; i++) {
       const ms = `${y}-${String(i).padStart(2, '0')}`;

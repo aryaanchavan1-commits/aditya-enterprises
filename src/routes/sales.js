@@ -56,7 +56,13 @@ router.post('/', async (req, res) => {
     const settings = {};
     const allSettings = await all('SELECT * FROM settings');
     allSettings.forEach(s => settings[s.key] = s.value);
-    let gstRate = 0;
+
+    const isInterState = data.customer_gstin && String(data.customer_gstin).substring(0, 2) !== '27';
+    const override = parseInt(data.gst_rate);
+    const gstRate = data.is_gst !== false
+      ? (override > 0 ? override : parseInt(isInterState ? (settings['igst_rate'] || 18) : (settings['gst_rate'] || 18)))
+      : 0;
+    const halfRate = gstRate / 2;
 
     for (const item of items) {
       const product = await get('SELECT * FROM products WHERE id = ?', [item.product_id]);
@@ -67,14 +73,9 @@ router.post('/', async (req, res) => {
       const afterDiscount = lineTotal - lineDiscount;
       subtotal += lineTotal; discountTotal += lineDiscount;
       if (data.is_gst !== false) {
-        const override = parseInt(data.gst_rate);
-        const rate = override > 0 ? override : parseInt(data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27' ? (settings['igst_rate'] || 18) : (settings['gst_rate'] || 18));
-        gstRate = rate;
-        const isInterState = data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27';
-        const halfRate = rate / 2;
         const cgst = isInterState ? 0 : afterDiscount * (halfRate / 100);
         const sgst = isInterState ? 0 : afterDiscount * (halfRate / 100);
-        const igst = isInterState ? afterDiscount * (rate / 100) : 0;
+        const igst = isInterState ? afterDiscount * (gstRate / 100) : 0;
         cgstTotal += cgst; sgstTotal += sgst; igstTotal += igst;
         grandTotal += afterDiscount + cgst + sgst + igst;
       } else {
@@ -82,25 +83,43 @@ router.post('/', async (req, res) => {
       }
     }
     grandTotal = Math.round(grandTotal * 100) / 100;
+    cgstTotal = Math.round(cgstTotal * 100) / 100;
+    sgstTotal = Math.round(sgstTotal * 100) / 100;
+    igstTotal = Math.round(igstTotal * 100) / 100;
+    discountTotal = Math.round(discountTotal * 100) / 100;
+    subtotal = Math.round(subtotal * 100) / 100;
 
     const enrichedItems = [];
     for (const item of items) {
       const p = await get('SELECT name, hsn_code FROM products WHERE id = ?', [item.product_id]);
-      enrichedItems.push({ ...item, product_name: p?.name || '', hsn_code: p?.hsn_code || '' });
+      if (!p) { res.json({ success: false, error: `Product not found (id ${item.product_id})` }); return; }
+      enrichedItems.push({ ...item, product_name: p.name, hsn_code: p.hsn_code || '' });
     }
 
     await run(`INSERT INTO sales (invoice_number, sale_date, customer_name, customer_phone, customer_gstin, customer_address, items, subtotal, discount_total, cgst_total, sgst_total, igst_total, cess_total, grand_total, payment_mode, is_barcode_scan, is_gst, gst_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [invoiceNum, saleDate, data.customer_name || 'Walk-in Customer', data.customer_phone || '', data.customer_gstin || '', data.customer_address || '', JSON.stringify(enrichedItems), subtotal, discountTotal, cgstTotal, sgstTotal, igstTotal, cessTotal, grandTotal, data.payment_mode || 'cash', data.is_barcode_scan || 0, data.is_gst !== false ? 1 : 0, gstRate]);
 
     for (const item of items) {
-      await run('UPDATE products SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [item.quantity, item.product_id]);
+      const r = await run('UPDATE products SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND quantity >= ?', [item.quantity, item.product_id, item.quantity]);
+      const affected = r.changes !== undefined ? r.changes : (r.lastID ? 1 : (typeof r === 'number' ? r : 1));
       await run('INSERT INTO stock_movements (product_id, type, quantity_change, reference) VALUES (?, ?, ?, ?)', [item.product_id, 'sale', -item.quantity, invoiceNum]);
+      if (affected === 0) {
+        // Lost the stock race - roll this sale back, restore what we already deducted.
+        for (const prev of items.slice(0, items.indexOf(item))) {
+          await run('UPDATE products SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [prev.quantity, prev.product_id]);
+        }
+        await run('DELETE FROM stock_movements WHERE reference = ?', [invoiceNum]);
+        await run('DELETE FROM sales WHERE invoice_number = ?', [invoiceNum]);
+        res.json({ success: false, error: 'Stock changed while selling - please try again.' });
+        return;
+      }
     }
 
     const sale = await get('SELECT * FROM sales WHERE invoice_number = ?', [invoiceNum]);
+    if (!sale) { res.json({ success: false, error: 'Sale could not be saved' }); return; }
     sale.items = JSON.parse(sale.items || '[]');
     res.json({ success: true, data: sale, message: 'Sale completed' });
-  } catch (err) { res.json({ success: false, error: err.message }); }
+  } catch (err) { console.error('Sale error:', err.message); res.json({ success: false, error: 'Could not complete the sale. Please try again.' }); }
 });
 
 router.get('/:id/receipt', async (req, res) => {

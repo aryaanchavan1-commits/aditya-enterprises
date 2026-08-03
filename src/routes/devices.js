@@ -93,6 +93,8 @@ router.get('/print/job/next', async (req, res) => {
     // Recover jobs the bridge claimed but never finished (it crashed mid-print).
     await run("UPDATE print_jobs SET status = 'pending', claimed_at = NULL WHERE status = 'claimed' AND claimed_at < datetime('now', '-5 minutes')");
     await run("DELETE FROM print_jobs WHERE status IN ('done','failed') AND created_at < datetime('now', '-1 hour')");
+    // Heartbeat on every poll - a busy queue must not make the bridge look offline.
+    await run("INSERT INTO settings (key, value) VALUES ('bridge_last_seen', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     const job = await get("SELECT * FROM print_jobs WHERE status = 'pending' ORDER BY id LIMIT 1");
     if (job) {
       await run("UPDATE print_jobs SET status = 'claimed', claimed_at = datetime('now') WHERE id = ?", [job.id]);
@@ -101,7 +103,6 @@ router.get('/print/job/next', async (req, res) => {
       res.json({ success: true, data: { id: job.id, type: job.type, payload } });
       return;
     }
-    await run("INSERT INTO settings (key, value) VALUES ('bridge_last_seen', datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     res.json({ success: true, data: null });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });

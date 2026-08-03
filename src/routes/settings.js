@@ -7,8 +7,10 @@ router.get('/', async (req, res) => {
     const settings = await all('SELECT * FROM settings');
     const result = {};
     settings.forEach(s => { result[s.key] = s.value; });
+    delete result['groq_api_key'];   // never send API keys to the browser
+    delete result['admin_password']; // never send the auth hash
     res.json({ success: true, data: result });
-  } catch (err) { res.json({ success: false, error: err.message }); }
+  } catch (err) { res.json({ success: false, error: 'Could not load settings' }); }
 });
 
 router.get('/:key', async (req, res) => {

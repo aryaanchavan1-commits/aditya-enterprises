@@ -193,8 +193,12 @@ export default function SalesPOS() {
   const gst = billType === 'gst' ? subtotal * (gstRate / 100) : 0;
   const grandTotal = subtotal + gst;
 
+  const [checkingOut, setCheckingOut] = useState(false);
+
   const handleCheckout = async () => {
+    if (checkingOut) return; // guard against double-clicks creating duplicate sales
     if (cart.length === 0) return showToast('Cart is empty', 'error');
+    setCheckingOut(true);
     try {
       const r = await fetch(`${API}/sales`, {
         method: 'POST',
@@ -217,6 +221,7 @@ export default function SalesPOS() {
         autoPrintReceipt(d.data);
       } else showToast(d.error, 'error');
     } catch (err) { showToast('Checkout failed', 'error'); }
+    finally { setCheckingOut(false); }
   };
 
   // Print the receipt automatically right after the sale (USB bridge first,
@@ -344,7 +349,7 @@ export default function SalesPOS() {
               <div className="pos-grand-total"><span>Total</span><span>Rs.{grandTotal.toFixed(2)}</span></div>
             </div>
 
-            <button className="btn btn-success btn-lg pos-checkout-btn" onClick={handleCheckout} disabled={cart.length === 0} style={{width:'100%',padding:14,fontSize:16}}>
+            <button className="btn btn-success btn-lg pos-checkout-btn" onClick={handleCheckout} disabled={cart.length === 0 || checkingOut} style={{width:'100%',padding:14,fontSize:16}}>{checkingOut ? 'Saving...' : 'Checkout'}
               Complete Sale - Rs.{grandTotal.toFixed(2)}
             </button>
           </div>

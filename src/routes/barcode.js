@@ -23,15 +23,19 @@ router.post('/scan-sale', async (req, res) => {
     const invoiceNum = `AE/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
     const saleDate = new Date().toISOString().split('T')[0];
     const lineTotal = product.sell_price * qty;
-    const discountAmt = lineTotal * (product.discount_percent / 100);
+    const discountAmt = lineTotal * ((product.discount_percent || 0) / 100);
     const afterDiscount = lineTotal - discountAmt;
-    const cgst = afterDiscount * (9 / 100);
-    const sgst = afterDiscount * (9 / 100);
+    const settings = {};
+    (await all('SELECT * FROM settings')).forEach(s => settings[s.key] = s.value);
+    const gstRate = Number(settings['gst_rate']) || 18;
+    const halfRate = gstRate / 2;
+    const cgst = afterDiscount * (halfRate / 100);
+    const sgst = afterDiscount * (halfRate / 100);
     const grandTotal = afterDiscount + cgst + sgst;
     const items = [{ product_id: product.id, product_name: product.name, hsn_code: product.hsn_code, quantity: qty, sell_price: product.sell_price, discount_percent: product.discount_percent }];
 
-    await run(`INSERT INTO sales (invoice_number, sale_date, customer_name, items, subtotal, discount_total, cgst_total, sgst_total, grand_total, payment_mode, is_barcode_scan) VALUES (?, ?, 'Walk-in Customer', ?, ?, ?, ?, ?, ?, 'cash', 1)`,
-      [invoiceNum, saleDate, JSON.stringify(items), lineTotal, discountAmt, cgst, sgst, grandTotal]);
+    await run(`INSERT INTO sales (invoice_number, sale_date, customer_name, items, subtotal, discount_total, cgst_total, sgst_total, grand_total, payment_mode, is_barcode_scan, is_gst, gst_rate) VALUES (?, ?, 'Walk-in Customer', ?, ?, ?, ?, ?, ?, 'cash', 1, 1, ?)`,
+      [invoiceNum, saleDate, JSON.stringify(items), lineTotal, discountAmt, cgst, sgst, grandTotal, gstRate]);
     await run('UPDATE products SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [qty, product.id]);
     await run('INSERT INTO stock_movements (product_id, type, quantity_change, reference) VALUES (?, ?, ?, ?)', [product.id, 'barcode_sale', -qty, invoiceNum]);
 

@@ -89,6 +89,7 @@ router.delete('/:id', async (req, res) => {
     for (const item of purchase.items) {
       await run('UPDATE products SET quantity = quantity - ? WHERE id = ?', [item.quantity, item.product_id]);
     }
+    await run('DELETE FROM stock_movements WHERE reference = ?', [purchase.invoice_number]);
     await run('DELETE FROM purchases WHERE id = ?', [req.params.id]);
     res.json({ success: true, message: 'Purchase deleted' });
   } catch (err) { res.json({ success: false, error: err.message }); }
