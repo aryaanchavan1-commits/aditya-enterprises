@@ -45,6 +45,15 @@ export default function Products() {
   useEffect(() => { loadProducts(); loadCategories(); }, []);
   useEffect(() => { loadProducts(); }, [search, categoryFilter]);
 
+  // Any keyboard-wedge scanner (USB / RF / Bluetooth-HID) scanning anywhere
+  // on this page gets caught by the global listener and handled like a
+  // camera scan: known code -> open label modal, unknown -> prefill add form.
+  useEffect(() => {
+    const onScan = (e) => handleProductScan(e.detail);
+    window.addEventListener('ae-barcode-scan', onScan);
+    return () => window.removeEventListener('ae-barcode-scan', onScan);
+  }, []);
+
   const openAdd = () => {
     setEditProduct(null);
     setForm(emptyProduct);

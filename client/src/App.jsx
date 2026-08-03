@@ -1,5 +1,6 @@
 import React, { useState, Component } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { startBarcodeScanner } from './scanner';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import Categories from './components/Categories';
@@ -60,6 +61,10 @@ function App() {
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  // Global keyboard-wedge barcode scanner listener (USB / RF / Bluetooth-HID).
+  // Fires 'ae-barcode-scan' events that the Products / POS pages act on.
+  React.useEffect(() => startBarcodeScanner(), []);
 
   React.useEffect(() => {
     if (isMobile) setSidebarOpen(false);

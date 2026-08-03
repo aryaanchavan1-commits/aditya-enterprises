@@ -150,6 +150,19 @@ export default function SalesPOS() {
     setShowCamera(false);
   };
 
+  // Keyboard-wedge scanners (USB / RF / Bluetooth-HID) anywhere on this page
+  // are caught by the global listener and added straight to the cart.
+  useEffect(() => {
+    const onWedgeScan = (e) => {
+      const code = e.detail;
+      const match = products.find(p => p.barcode === code || p.name.toLowerCase() === code.toLowerCase());
+      if (match) { addToCart(match); showToast(`Scanned: ${match.name}`); }
+      else showToast(`No product found for: ${code}`, 'error');
+    };
+    window.addEventListener('ae-barcode-scan', onWedgeScan);
+    return () => window.removeEventListener('ae-barcode-scan', onWedgeScan);
+  }, [products]);
+
   const updateQty = (id, val) => {
     if (val < 1) return;
     setCart(cart.map(item => item.id === id ? { ...item, qty: val } : item));

@@ -90,6 +90,8 @@ router.post('/print/job', async (req, res) => {
 // Polled by the bridge. Claims one pending job and reports heartbeat.
 router.get('/print/job/next', async (req, res) => {
   try {
+    // Recover jobs the bridge claimed but never finished (it crashed mid-print).
+    await run("UPDATE print_jobs SET status = 'pending', claimed_at = NULL WHERE status = 'claimed' AND claimed_at < datetime('now', '-5 minutes')");
     await run("DELETE FROM print_jobs WHERE status IN ('done','failed') AND created_at < datetime('now', '-1 hour')");
     const job = await get("SELECT * FROM print_jobs WHERE status = 'pending' ORDER BY id LIMIT 1");
     if (job) {

@@ -316,7 +316,7 @@ export default function Settings() {
             ))
           ) : (
             <p style={{fontSize:11, color:'#777', marginBottom:12}}>
-              No dedicated scanners detected. USB barcode scanners (keyboard wedge type) work automatically on any screen - just scan a barcode into any focused input field. This is the most common scanner type.
+              No dedicated scanners detected. USB / RF / Bluetooth-HID barcode scanners (keyboard wedge type) work automatically on any screen - just scan a barcode and the app catches it, even without clicking a field. On the Sales page a scan adds the item to the cart; on Products it opens the label/add flow. This is the most common scanner type.
             </p>
           )}
 
