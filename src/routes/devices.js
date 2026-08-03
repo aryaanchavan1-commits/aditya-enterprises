@@ -119,10 +119,11 @@ router.post('/print/job/:id/status', async (req, res) => {
 // Called by the bridge to report which printer it detected on the shop PC.
 router.post('/print/bridge/report', async (req, res) => {
   try {
-    const { printerName, printerShare, version, lastError } = req.body || {};
+    const { printerName, printerShare, printerMode, version, lastError } = req.body || {};
     const vals = {
       bridge_printer: String(printerName || '').slice(0, 200),
       bridge_share: String(printerShare || '').slice(0, 100),
+      bridge_printer_mode: String(printerMode || '').slice(0, 20),
       bridge_version: String(version || '').slice(0, 50),
       bridge_last_error: String(lastError || '').slice(0, 300),
     };
@@ -139,6 +140,7 @@ router.get('/print/bridge/status', async (req, res) => {
     const seen = await get("SELECT value FROM settings WHERE key = 'bridge_last_seen'");
     const printer = await get("SELECT value FROM settings WHERE key = 'bridge_printer'");
     const share = await get("SELECT value FROM settings WHERE key = 'bridge_share'");
+    const mode = await get("SELECT value FROM settings WHERE key = 'bridge_printer_mode'");
     const version = await get("SELECT value FROM settings WHERE key = 'bridge_version'");
     const lastError = await get("SELECT value FROM settings WHERE key = 'bridge_last_error'");
     const lastJob = await get("SELECT type, status, error, created_at, done_at FROM print_jobs ORDER BY id DESC LIMIT 1");
@@ -152,6 +154,7 @@ router.get('/print/bridge/status', async (req, res) => {
         lastSeen: ts ? ts.toISOString() : null,
         bridgePrinter: printer?.value || '',
         bridgeShare: share?.value || '',
+        bridgePrinterMode: mode?.value || '',
         bridgeVersion: version?.value || '',
         bridgeLastError: lastError?.value || '',
         lastJob

@@ -197,8 +197,30 @@ export default function SalesPOS() {
         setCart([]);
         fetch(`${API}/products`).then(r2 => r2.json()).then(d2 => { if (d2.success) setProducts(d2.data); });
         searchRef.current?.focus();
+        autoPrintReceipt(d.data);
       } else showToast(d.error, 'error');
     } catch (err) { showToast('Checkout failed', 'error'); }
+  };
+
+  // Print the receipt automatically right after the sale (USB bridge first,
+  // Bluetooth fallback, no dialog). Falls back to the on-screen receipt if
+  // no printer is reachable - the buttons below can print it later.
+  const autoPrintReceipt = async (invoice) => {
+    try {
+      const r = await printSmartReceipt({
+        companyName,
+        invoiceNumber: invoice.invoice_number,
+        date: invoice.sale_date,
+        customer: invoice.customer_name,
+        items: invoice.items || [],
+        subtotal: Number(invoice.subtotal || 0),
+        gstAmount: Number((invoice.cgst_total || 0) + (invoice.sgst_total || 0) + (invoice.igst_total || 0)),
+        grandTotal: Number(invoice.grand_total || 0)
+      });
+      if (r.via === 'usb') showToast('Receipt sent to USB printer');
+      else if (r.via === 'bluetooth') showToast(`Receipt printed via Bluetooth (${r.target})`);
+      else showToast('No printer connected - use "Print Receipt" or "Smart Print" below', 'error');
+    } catch (e) { /* keep the sale toast - printing can be retried below */ }
   };
 
   const handlePrint = useReactToPrint({

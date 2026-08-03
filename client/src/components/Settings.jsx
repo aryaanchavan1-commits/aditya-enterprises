@@ -12,7 +12,7 @@ export default function Settings() {
   const [detectedScanners, setDetectedScanners] = useState([]);
   const [btPrinter, setBtPrinter] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
-  const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, bridgePrinter: '', bridgeShare: '', bridgeVersion: '', bridgeLastError: '', lastJob: null });
+  const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, bridgePrinter: '', bridgeShare: '', bridgePrinterMode: '', bridgeVersion: '', bridgeLastError: '', lastJob: null });
   const [bridgeBusy, setBridgeBusy] = useState(false);
 
   const showToast = (msg, type = 'success') => {
@@ -335,7 +335,7 @@ export default function Settings() {
             <div style={{fontSize:13, fontWeight:600, marginBottom:4}}>Detected printer</div>
             {bridgeStatus.bridgeOnline ? (
               bridgeStatus.bridgePrinter ? (
-                <div style={{fontSize:12}}>🖨️ <strong>{bridgeStatus.bridgePrinter}</strong>{bridgeStatus.bridgeShare ? ` (share: ${bridgeStatus.bridgeShare})` : ''} — detected by the USB bridge on the shop PC; automatic label &amp; receipt printing will use USB</div>
+                <div style={{fontSize:12}}>🖨️ <strong>{bridgeStatus.bridgePrinter}</strong>{bridgeStatus.bridgeShare ? ` (share: ${bridgeStatus.bridgeShare})` : ''} — {bridgeStatus.bridgePrinterMode === 'thermal' ? 'thermal printer, prints fast via ESC/POS' : 'normal printer (HP/Canon/Brother...), prints via the Windows driver'} — automatic label &amp; receipt printing uses it</div>
               ) : (
                 <div style={{fontSize:12, color:'#e67e22'}}>USB bridge is online, but it found <strong>no printer</strong> on that PC. Plug the printer in (USB) and install its Windows driver - the bridge auto-detects it within 30 seconds.</div>
               )
@@ -365,7 +365,7 @@ export default function Settings() {
               <div style={{fontSize:11, color:'#e67e22', marginBottom:4}}>Bridge running, but it reported no printer found on the shop PC.</div>
             )}
             <div style={{fontSize:11, color:'#777', lineHeight:1.5}}>
-              Prints directly to the USB printer (ESC/POS) - no dialog, no driver issues. One-time setup on the Windows PC where the printer is plugged in:
+              Prints automatically to ANY printer on that PC - thermal printers (Posiflow etc.) get fast ESC/POS codes, normal printers (HP/Canon/Brother) get a proper rendered print via the Windows driver. No dialog needed. One-time setup on the Windows PC where the printer is plugged in:
               <ol style={{margin:'4px 0 0 16px', padding:0}}>
                 <li>Plug in the Posiflow (USB) and install its Windows driver if Windows asks.</li>
                 <li>Copy the <strong>print-bridge</strong> folder onto that PC and run <strong>install-bridge.bat</strong> once. It installs everything and sets the bridge to start automatically with Windows.</li>

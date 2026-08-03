@@ -33,7 +33,8 @@ async function reportStatus(force) {
   await apiRequest('POST', '/api/devices/print/bridge/report', {
     printerName: config.printerName || '',
     printerShare: config.printerShare || '',
-    version: 'bridge-2.0',
+    printerMode: config.printerMode || '',
+    version: 'bridge-3.0',
     lastError: config.lastError || ''
   });
 }
@@ -72,6 +73,14 @@ function apiRequest(method, pathUrl, body) {
 // Real hardware printers only - ignore virtual ones (OneNote, PDF, Fax...)
 const VIRTUAL_PRINTERS = ['onenote', 'print to pdf', 'microsoft print to pdf', 'fax', 'xps', 'pdf24', 'adobe', 'microsoft software printer', 'one drive', 'save as'];
 
+// Thermal receipt/label printers understand raw ESC/POS. Everything else
+// (HP inkjet/laser, Brother, Canon...) prints via the Windows driver (GDI).
+const THERMAL_RE = /pos|thermal|receipt|58mm|58\s*mm|80mm|80\s*mm|esc\/pos|tsp|tevo|bixolon|zjiang|gs-|tm-|plus p80|p80|rpp|spp/i;
+
+function isThermalName(name) {
+  return THERMAL_RE.test(String(name));
+}
+
 function detectPrinters() {
   try {
     const out = execFileSync('powershell.exe', [
@@ -80,10 +89,24 @@ function detectPrinters() {
     ], { timeout: 15000, encoding: 'utf8' });
     let list = JSON.parse(out.trim() || 'null');
     if (!Array.isArray(list)) list = list ? [list] : [];
-    return list.filter(p => p && p.Name && !VIRTUAL_PRINTERS.some(v => String(p.Name).toLowerCase().includes(v)));
+    return list
+      .filter(p => p && p.Name && !VIRTUAL_PRINTERS.some(v => String(p.Name).toLowerCase().includes(v)))
+      .map(p => ({ ...p, thermal: isThermalName(p.Name) }));
   } catch (e) {
     return [];
   }
+}
+
+function pickPrinter(printers) {
+  const thermal = printers.find(p => p.thermal);
+  const shared = printers.find(p => p.ShareName && p.thermal === !!thermal) || printers.find(p => p.ShareName);
+  const chosen = thermal || printers[0];
+  if (!chosen) return null;
+  return {
+    printerName: chosen.Name,
+    printerShare: shared ? shared.ShareName : '',
+    printerMode: chosen.thermal ? 'thermal' : 'normal'
+  };
 }
 
 // Re-detect when no printer was found, so plugging in / installing the
@@ -91,19 +114,16 @@ function detectPrinters() {
 let noPrinterTicks = 0;
 
 function maybeRedetect() {
-  if (config.printerName || config.printerShare) return;
+  if (config.printerName) return;
   noPrinterTicks++;
   if (noPrinterTicks < 10) return; // every ~30s
   noPrinterTicks = 0;
   log('No printer yet - re-scanning for USB printers...');
-  const printers = detectPrinters();
-  if (printers.length) {
-    const shared = printers.find(p => p.ShareName);
-    config.printerName = printers[0].Name;
-    config.printerShare = shared ? shared.ShareName : '';
+  const picked = pickPrinter(detectPrinters());
+  if (picked) {
+    Object.assign(config, picked);
     try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch (e) {}
-    if (config.printerShare) log(`Auto-detected printer "${config.printerName}" (share: ${config.printerShare})`);
-    else log(`FOUND printer "${config.printerName}" but it is not shared - using text fallback.`);
+    log(`Auto-detected printer "${config.printerName}" (${config.printerMode})`);
   }
 }
 
@@ -111,31 +131,22 @@ function loadOrDetectConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       config = { ...config, ...JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) };
-      if (config.printerShare) {
-        log(`Using printer: "${config.printerName}" (share: ${config.printerShare})`);
+      if (config.printerName) {
+        log(`Using printer: "${config.printerName}" (${config.printerMode || 'unknown'})`);
         return;
       }
     }
   } catch (e) { log('Could not read config.json: ' + e.message); }
 
-  const printers = detectPrinters();
-  if (!printers.length) {
+  const picked = pickPrinter(detectPrinters());
+  if (!picked) {
     log('WARNING: No printers found on this PC. Connect the USB printer first.');
     return;
   }
-  const shared = printers.find(p => p.ShareName);
-  const any = printers.find(p => p.Name);
-  config.printerName = any.Name;
-  config.printerShare = (shared ? shared.ShareName : '');
+  Object.assign(config, picked);
   try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch (e) {}
 
-  if (config.printerShare) {
-    log(`Auto-detected printer "${config.printerName}" (share: ${config.printerShare})`);
-  } else {
-    log('FOUND PRINTERS, but none are shared: ' + printers.map(p => p.Name).join(', '));
-    log('Fix: right-click the printer -> Printer properties -> Sharing -> tick "Share this printer".');
-    log(`Trying text print to "${config.printerName}" as fallback.`);
-  }
+  log(`Auto-detected printer "${config.printerName}" (${config.printerMode})`);
 }
 
 // ---------------- Printing to Windows ----------------
@@ -172,6 +183,171 @@ function printTextFallback(printerName, text) {
     return { ok: true };
   } catch (e) {
     return { ok: false, error: `Text print failed: ${e.message.slice(0, 120)}` };
+  }
+}
+
+// ---------------- Windows-driver (GDI) printing for normal printers ----------------
+// HP / Canon / Brother etc. cannot understand raw ESC/POS. For those we render
+// the label/receipt with the Windows driver (System.Drawing) - barcode included.
+
+// 1-bit BMP of the Code128 pattern (bars = black). BMP is trivial to write and
+// GDI reads it natively.
+function buildBarcodeBmp(pattern, heightPx) {
+  const quiet = 12;
+  const totalModules = quiet * 2 + pattern.length;
+  const module = 3;
+  const widthPx = totalModules * module;
+  const rowBytes = Math.ceil(widthPx / 8);
+  const rowPad = (4 - (rowBytes % 4)) % 4;
+  const stride = rowBytes + rowPad;
+  const pixelData = Buffer.alloc(stride * heightPx, 0);
+  let x = quiet * module;
+  let isBar = true;
+  for (const m of pattern) {
+    if (isBar) {
+      for (let col = x; col < x + m * module; col++) {
+        if (col >= widthPx) break;
+        for (let row = 0; row < heightPx; row++) {
+          const rowStart = (heightPx - 1 - row) * stride; // bottom-up
+          pixelData[rowStart + (col >> 3)] |= (1 << (7 - (col & 7)));
+        }
+      }
+    }
+    x += m * module;
+    isBar = !isBar;
+  }
+  const fileSize = 14 + 40 + 8 + pixelData.length;
+  const buf = Buffer.alloc(fileSize);
+  buf.write('BM', 0);
+  buf.writeUInt32LE(fileSize, 2);
+  buf.writeUInt32LE(62, 10); // pixel data offset
+  buf.writeUInt32LE(40, 14); // info header size
+  buf.writeInt32LE(widthPx, 18);
+  buf.writeInt32LE(heightPx, 22);
+  buf.writeUInt16LE(1, 26); // planes
+  buf.writeUInt16LE(1, 28); // bits per pixel
+  buf.writeUInt32LE(pixelData.length, 34);
+  buf[54] = 0xFF; buf[55] = 0xFF; buf[56] = 0xFF; buf[57] = 0; // palette[0] = white
+  buf[58] = 0x00; buf[59] = 0x00; buf[60] = 0x00; buf[61] = 0; // palette[1] = black
+  pixelData.copy(buf, 62);
+  return { bmp: buf, widthPx, heightPx };
+}
+
+function psQuote(str) {
+  return "'" + String(str).replace(/'/g, "''") + "'";
+}
+
+function wrapLines(text, maxLen) {
+  const out = [];
+  for (const raw of String(text).split('\n')) {
+    let line = raw;
+    while (line.length > maxLen) {
+      out.push(line.slice(0, maxLen));
+      line = line.slice(maxLen);
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+// Print a label through the Windows driver: text via GDI fonts + barcode bitmap.
+function printLabelViaGdi(printerName, { name = '', price = 0, barcode = '', sku = '', copies = 1 }) {
+  const pattern = barcode ? encodeCode128(barcode) : null;
+  let bmpPath = null;
+  if (pattern) {
+    const built = buildBarcodeBmp(pattern, 60);
+    bmpPath = path.join(os.tmpdir(), `ae_barcode_${Date.now()}.bmp`);
+    fs.writeFileSync(bmpPath, built.bmp);
+  }
+  return printLabelViaGdiAt(printerName, bmpPath, { name, price, barcode, sku, copies });
+}
+
+function printLabelViaGdiAt(printerName, bmpPath, { name = '', price = 0, barcode = '', sku = '', copies = 1 }) {
+  const script = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = ${psQuote(printerName)}
+$doc.PrinterSettings.Copies = ${Math.max(1, Number(copies) || 1)}
+$doc.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('label', 300, 200)
+${bmpPath ? `$script:bmp = [System.Drawing.Bitmap]::FromFile(${psQuote(bmpPath)})
+$script:barcode = ${psQuote(barcode || '')}` : `$script:bmp = $null
+$script:barcode = ''`}
+$script:title = ${psQuote(String(name).slice(0, 30))}
+$script:priceText = ${psQuote('Rs. ' + (Number(price) || 0))}
+$script:skuText = ${psQuote(String(sku).slice(0, 40))}
+$doc.add_PrintPage({ param($s, $e)
+  $g = $e.Graphics
+  $y = 55
+  $f1 = New-Object System.Drawing.Font('Arial', 22, [System.Drawing.FontStyle]::Bold)
+  $f2 = New-Object System.Drawing.Font('Arial', 16)
+  $f3 = New-Object System.Drawing.Font('Consolas', 10)
+  $g.DrawString($script:title, $f1, [System.Drawing.Brushes]::Black, 25, $y); $y += 45
+  $g.DrawString($script:priceText, $f2, [System.Drawing.Brushes]::Black, 25, $y); $y += 38
+  if ($script:bmp -ne $null) {
+    $bw = [Math]::Min(250, $e.MarginBounds.Width - 50)
+    $g.DrawImage($script:bmp, 25, $y, $bw, 60); $y += 70
+  } elseif ($script:barcode -ne '') {
+    $g.DrawString('BARCODE: ' + $script:barcode, $f3, [System.Drawing.Brushes]::Black, 25, $y); $y += 25
+  }
+  if ($script:skuText -ne '') {
+    $g.DrawString($script:skuText, $f3, [System.Drawing.Brushes]::Black, 25, $y)
+  }
+})
+$doc.Print()
+if ($script:bmp -ne $null) { $script:bmp.Dispose() }
+`;
+  const psPath = path.join(os.tmpdir(), `ae_label_${Date.now()}.ps1`);
+  fs.writeFileSync(psPath, script);
+  try {
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', psPath], { timeout: 120000, stdio: 'pipe' });
+    if (bmpPath) { try { fs.unlinkSync(bmpPath); } catch (e) {} }
+    fs.unlinkSync(psPath);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: `Windows driver print failed: ${e.message.slice(0, 140)}` };
+  }
+}
+
+// Print a receipt through the Windows driver as text lines.
+function printReceiptViaGdi(printerName, lines) {
+  const script = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
+$script:lines = @(${lines.map(psQuote).join(', ')})
+$script:page = 0
+$doc = New-Object System.Drawing.Printing.PrintDocument
+$doc.PrinterSettings.PrinterName = ${psQuote(printerName)}
+$doc.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('receipt', 400, 1100)
+$font = New-Object System.Drawing.Font('Consolas', 11)
+$doc.add_PrintPage({ param($s, $e)
+  $g = $e.Graphics
+  $perPage = 48
+  $start = $script:page * $perPage
+  $y = 40
+  for ($i = $start; $i -lt [Math]::Min($start + $perPage, $script:lines.Count); $i++) {
+    $ln = $script:lines[$i]
+    if ($ln -eq '') { $y += 12; continue }
+    if ($ln -like '===*') {
+      $g.DrawLine([System.Drawing.Pens]::Black, 20, $y + 8, 380, $y + 8)
+    } else {
+      $g.DrawString($ln, $font, [System.Drawing.Brushes]::Black, 20, $y)
+    }
+    $y += 20
+  }
+  $script:page++
+  $e.HasMorePages = ($start + $perPage) -lt $script:lines.Count
+})
+$doc.Print()
+`;
+  const psPath = path.join(os.tmpdir(), `ae_receipt_${Date.now()}.ps1`);
+  fs.writeFileSync(psPath, script);
+  try {
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', psPath], { timeout: 120000, stdio: 'pipe' });
+    fs.unlinkSync(psPath);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: `Windows driver print failed: ${e.message.slice(0, 140)}` };
   }
 }
 
@@ -380,14 +556,45 @@ function labelTextFallback(p) {
 
 // ---------------- Job processing ----------------
 
+function buildReceiptLines(p) {
+  const W = 52;
+  const lines = [];
+  const add = (t, bold) => lines.push(t);
+  add(p.companyName || 'Aditya Enterprises');
+  add('====================================================');
+  add(`Invoice: ${p.invoiceNumber || ''}`);
+  add(`Date: ${p.date || ''}`);
+  add(`Customer: ${p.customer || 'Walk-in Customer'}`);
+  add('====================================================');
+  add('Item                    Qty       Amount');
+  add('====================================================');
+  (p.items || []).forEach(item => {
+    const qty = Number(item.quantity) || 1;
+    const price = Number(item.sell_price || item.price || 0);
+    lines.push(...wrapLines(String(item.product_name || item.name || ''), W));
+    lines.push(''.padEnd(36) + String(qty).padStart(6) + ('Rs.' + (qty * price).toFixed(0)).padStart(12));
+  });
+  add('====================================================');
+  add('Subtotal' + 'Rs.' + Number(p.subtotal || 0).toFixed(2).padStart(W - 8));
+  add('GST @18%' + 'Rs.' + Number(p.gstAmount || 0).toFixed(2).padStart(W - 7));
+  add('TOTAL' + 'Rs.' + Number(p.grandTotal || 0).toFixed(2).padStart(W - 5));
+  add('====================================================');
+  add('Thank you! Visit again.');
+  return lines;
+}
+
 async function handleJob(job) {
   const p = job.payload || {};
   let result;
-  let fallback = '';
+
+  const isNormal = config.printerMode === 'normal';
 
   if (job.type === 'label') {
-    fallback = labelTextFallback(p);
-    result = doPrint(buildLabelBytes(p), fallback);
+    if (isNormal) {
+      result = printLabelViaGdi(config.printerName, p);
+    } else {
+      result = doPrint(buildLabelBytes(p), labelTextFallback(p));
+    }
   } else {
     // receipt or test
     const receipt = {
@@ -395,18 +602,21 @@ async function handleJob(job) {
       invoiceNumber: p.invoiceNumber || (job.type === 'test' ? 'TEST-001' : ''),
       date: p.date || new Date().toLocaleString('en-IN'),
       customer: p.customer || (job.type === 'test' ? 'Test Print' : 'Walk-in Customer'),
-      items: job.type === 'test' ? [{ product_name: 'Thermal Printer Test', quantity: 1, sell_price: 1 }] : (p.items || []),
+      items: job.type === 'test' ? [{ product_name: 'Printer Test', quantity: 1, sell_price: 1 }] : (p.items || []),
       subtotal: job.type === 'test' ? 1 : Number(p.subtotal || 0),
       gstAmount: job.type === 'test' ? 0 : Number(p.gstAmount || 0),
       grandTotal: job.type === 'test' ? 1 : Number(p.grandTotal || 0)
     };
-    fallback = receiptTextFallback(receipt);
-    result = doPrint(buildReceiptBytes(receipt), fallback);
+    if (isNormal) {
+      result = printReceiptViaGdi(config.printerName, buildReceiptLines(receipt));
+    } else {
+      result = doPrint(buildReceiptBytes(receipt), receiptTextFallback(receipt));
+    }
   }
 
   await apiRequest('POST', `/api/devices/print/job/${job.id}/status`, { status: result.ok ? 'done' : 'failed', error: result.error || '' });
   config.lastError = result.ok ? '' : result.error;
-  log(result.ok ? `Job #${job.id} (${job.type}) printed` : `Job #${job.id} (${job.type}) FAILED: ${result.error}`);
+  log(result.ok ? `Job #${job.id} (${job.type}) printed via ${config.printerMode}` : `Job #${job.id} (${job.type}) FAILED: ${result.error}`);
 }
 
 async function tick() {
