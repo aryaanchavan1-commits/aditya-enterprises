@@ -102,6 +102,7 @@ export default function Settings() {
       showToast(`USB printer connected: ${info.name}`);
     } catch (err) {
       if (err.name !== 'NotFoundError') showToast(err.message || 'Connection cancelled', 'error');
+      else showToast('No port selected. If the list was empty: install the CH340/CH341 driver, replug the printer, then click Connect again (see the notes above).', 'error');
     } finally {
       setDirectBusy(false);
     }
@@ -412,7 +413,7 @@ export default function Settings() {
               </div>
             )}
             <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:6}}>
-              <button className="btn btn-sm btn-success" onClick={connectDirectUsb} disabled={directBusy || !!directPrinter} title="Opens the browser printer chooser - pick the USB printer's port">
+              <button className="btn btn-sm btn-success" onClick={connectDirectUsb} disabled={directBusy || !!directPrinter} title="Opens the browser's device list - pick your printer's USB port">
                 {directBusy ? 'Connecting...' : 'Connect USB Printer (PC)'}
               </button>
               <button className="btn btn-sm btn-info" onClick={connectAndroidUsb} disabled={directBusy || !!directPrinter} title="Android phone/tablet with a USB-OTG cable, or a PC with WebUSB">
@@ -430,8 +431,13 @@ export default function Settings() {
                 </>
               )}
             </div>
-            <div style={{fontSize:11, color:'#888'}}>
-              After connecting once, the app reconnects automatically on this device - no chooser popup again. On a phone, use a USB-OTG cable and a driver-free thermal printer.
+            <div style={{fontSize:11, lineHeight:1.5, color:'#7f8c8d', borderTop:'1px dashed #b8d4c9', paddingTop:6}}>
+              <strong>No port shows up in the list?</strong> Most 58mm/80mm printers use a CH340/CH341 USB-serial chip - the COM port only appears after its driver is installed (Windows usually installs it automatically). Check &amp; fix:
+              <ul style={{margin:'4px 0 0 16px', padding:0}}>
+                <li>Open Device Manager → <strong>Ports (COM &amp; LPT)</strong> / <strong>Universal Serial Bus devices</strong>. If you see "CH340" with a warning icon, right-click → Update driver (online).</li>
+                <li>Unplug the printer, <strong>close any printer software</strong> that may have claimed the port, plug it back in, then press Connect again.</li>
+                <li>If the printer installs as a <strong>Windows printer with its own driver</strong> (no COM port appears - some POS-58 models), the browser cannot reach it directly - use the USB Bridge below or the <strong>Print dialog</strong> for that one.</li>
+              </ul>
             </div>
           </div>
 
