@@ -67,7 +67,8 @@ router.post('/', async (req, res) => {
       const afterDiscount = lineTotal - lineDiscount;
       subtotal += lineTotal; discountTotal += lineDiscount;
       if (data.is_gst !== false) {
-        const rate = parseInt(data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27' ? (settings['igst_rate'] || 18) : (settings['gst_rate'] || 18));
+        const override = parseInt(data.gst_rate);
+        const rate = override > 0 ? override : parseInt(data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27' ? (settings['igst_rate'] || 18) : (settings['gst_rate'] || 18));
         gstRate = rate;
         const isInterState = data.customer_gstin && data.customer_gstin.substring(0, 2) !== '27';
         const halfRate = rate / 2;

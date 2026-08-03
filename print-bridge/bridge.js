@@ -19,11 +19,24 @@ const os = require('os');
 const { execFileSync, execSync } = require('child_process');
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
+const LOG_PATH = path.join(__dirname, 'bridge.log');
 const API = (process.env.AE_API || 'https://aditya-enterprises-erp.vercel.app').replace(/\/+$/, '');
 const POLL_MS = 3000;
 
 let config = { printerName: '', printerShare: '' };
 let lastReportAt = 0;
+
+// Never die silently. Log every crash to bridge.log so problems can be
+// diagnosed, and keep the process alive across recoverable errors.
+process.on('uncaughtException', err => {
+  log('FATAL uncaughtException: ' + (err && err.stack ? err.stack : String(err)));
+  try { fs.appendFileSync(LOG_PATH, '\n[' + new Date().toISOString() + '] FATAL: ' + (err && err.stack || String(err)) + '\n'); } catch (e) { }
+  setTimeout(() => { try { process.exit(1); } catch (e) { } }, 500);
+});
+process.on('unhandledRejection', (reason) => {
+  log('unhandledRejection: ' + (reason && reason.stack ? reason.stack : String(reason)));
+  try { fs.appendFileSync(LOG_PATH, '\n[' + new Date().toISOString() + '] REJECTION: ' + (reason && reason.stack || String(reason)) + '\n'); } catch (e) { }
+});
 
 // Tell the ERP server which printer this bridge detected, so the Settings
 // page can show it even though the API runs in the cloud.
@@ -40,7 +53,13 @@ async function reportStatus(force) {
 }
 
 function log(msg) {
-  console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
+  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  console.log(line);
+  try {
+    fs.appendFileSync(LOG_PATH, line + '\n');
+    const size = fs.statSync(LOG_PATH).size;
+    if (size > 500000) fs.writeFileSync(LOG_PATH, '');
+  } catch (e) { }
 }
 
 // ---------------- HTTP helpers ----------------
@@ -98,10 +117,9 @@ function detectPrinters() {
 }
 
 function pickPrinter(printers) {
-  const thermal = printers.find(p => p.thermal);
-  const shared = printers.find(p => p.ShareName && p.thermal === !!thermal) || printers.find(p => p.ShareName);
-  const chosen = thermal || printers[0];
+  const chosen = printers.find(p => p.thermal) || printers[0];
   if (!chosen) return null;
+  const shared = printers.find(p => p.thermal === chosen.thermal && p.ShareName);
   return {
     printerName: chosen.Name,
     printerShare: shared ? shared.ShareName : '',
@@ -150,6 +168,81 @@ function loadOrDetectConfig() {
 }
 
 // ---------------- Printing to Windows ----------------
+
+// RAW printing via the WinSpool API (OpenPrinter -> WritePrinter). This is
+// the officially supported way to send raw ESC/POS data to a locally
+// installed printer - no printer sharing, no net use, no copy-to-share.
+// (Microsoft hardened the spooler after PrintNightmare, so copying bytes to
+// a \\PC\printer share no longer works reliably on Windows 10 22H2+.)
+const WINSPOOL_C = `
+using System;
+using System.Runtime.InteropServices;
+public static class AERawPrint {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  public struct DOC_INFO_1 {
+    public string pDocName;
+    public string pOutputFile;
+    public string pDatatype;
+  }
+  [DllImport("winspool.drv", EntryPoint = "OpenPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]
+  public static extern bool OpenPrinter(string printerName, out IntPtr hPrinter, IntPtr pDefault);
+  [DllImport("winspool.drv", EntryPoint = "ClosePrinter", SetLastError = true)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", EntryPoint = "StartDocPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, int level, ref DOC_INFO_1 docInfo);
+  [DllImport("winspool.drv", EntryPoint = "StartPagePrinter", SetLastError = true)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", EntryPoint = "WritePrinter", SetLastError = true)]
+  public static extern bool WritePrinter(IntPtr hPrinter, byte[] data, int count, out int written);
+  [DllImport("winspool.drv", EntryPoint = "EndPagePrinter", SetLastError = true)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+  [DllImport("winspool.drv", EntryPoint = "EndDocPrinter", SetLastError = true)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+  public static string Win32Error() {
+    int code = Marshal.GetLastWin32Error();
+    return code + ": " + new System.ComponentModel.Win32Exception(code).Message;
+  }
+}`;
+
+function printRawWinSpool(printerName, bytes) {
+  const tmp = path.join(os.tmpdir(), `ae_print_${Date.now()}.bin`);
+  fs.writeFileSync(tmp, bytes);
+  const script = `
+$ErrorActionPreference = 'Stop'
+$script:src = ${psQuote(WINSPOOL_C)}
+Add-Type -TypeDefinition $script:src -Language CSharp
+$docName = 'AE-' + [DateTime]::Now.ToString('HHmmss')
+$bytes = [System.IO.File]::ReadAllBytes(${psQuote(tmp)})
+$h = [IntPtr]::Zero
+if (-not [AERawPrint]::OpenPrinter(${psQuote(printerName)}, [ref]$h, [IntPtr]::Zero)) { throw 'OpenPrinter failed - ' + [AERawPrint]::Win32Error() }
+try {
+  $di = New-Object AERawPrint+DOC_INFO_1
+  $di.pDocName = $docName
+  $di.pDatatype = 'RAW'
+  if (-not [AERawPrint]::StartDocPrinter($h, 1, [ref]$di)) { throw 'StartDocPrinter failed - ' + [AERawPrint]::Win32Error() }
+  try {
+    if (-not [AERawPrint]::StartPagePrinter($h)) { throw 'StartPagePrinter failed - ' + [AERawPrint]::Win32Error() }
+    $written = 0
+    if (-not [AERawPrint]::WritePrinter($h, $bytes, $bytes.Length, [ref]$written)) { throw 'WritePrinter failed - ' + [AERawPrint]::Win32Error() }
+    [void][AERawPrint]::EndPagePrinter($h)
+  } finally {
+    [void][AERawPrint]::EndDocPrinter($h)
+  }
+} finally {
+  [void][AERawPrint]::ClosePrinter($h)
+}`;
+  const psPath = path.join(os.tmpdir(), `ae_raw_${Date.now()}.ps1`);
+  fs.writeFileSync(psPath, script);
+  try {
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', psPath], { timeout: 90000, stdio: 'pipe' });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: `Raw print failed (${printerName}): ${e.message.slice(0, 120)}` };
+  } finally {
+    try { fs.unlinkSync(psPath); } catch (e) { }
+    try { fs.unlinkSync(tmp); } catch (e) { }
+  }
+}
 
 function printRaw(shareName, bytes) {
   const tmp = path.join(os.tmpdir(), `ae_print_${Date.now()}.bin`);
@@ -352,10 +445,15 @@ $doc.Print()
 }
 
 function doPrint(bytes, textFallback) {
-  if (config.printerShare) {
-    const r = printRaw(config.printerShare, bytes);
+  if (config.printerName) {
+    const r = printRawWinSpool(config.printerName, bytes);
     if (r.ok) return r;
     log('Raw print failed, trying text fallback: ' + r.error);
+    if (config.printerShare) {
+      const r2 = printRaw(config.printerShare, bytes);
+      if (r2.ok) return r2;
+      log('Share print also failed: ' + r2.error);
+    }
   }
   return printTextFallback(config.printerName, textFallback);
 }
@@ -633,14 +731,18 @@ async function handleJob(job) {
 }
 
 async function tick() {
-  maybeRedetect();
-  await reportStatus(false);
-  const res = await apiRequest('GET', '/api/devices/print/job/next');
-  if (!res.success || !res.data) return;
-  try { await handleJob(res.data); }
-  catch (e) {
-    log('Job error: ' + e.message);
-    await apiRequest('POST', `/api/devices/print/job/${res.data.id}/status`, { status: 'failed', error: e.message.slice(0, 300) });
+  try {
+    maybeRedetect();
+    await reportStatus(false);
+    const res = await apiRequest('GET', '/api/devices/print/job/next');
+    if (!res.success || !res.data) return;
+    try { await handleJob(res.data); }
+    catch (e) {
+      log('Job error: ' + e.message);
+      await apiRequest('POST', `/api/devices/print/job/${res.data.id}/status`, { status: 'failed', error: e.message.slice(0, 300) });
+    }
+  } catch (e) {
+    log('Poll error (will retry): ' + e.message);
   }
 }
 

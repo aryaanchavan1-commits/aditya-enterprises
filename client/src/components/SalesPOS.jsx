@@ -16,6 +16,7 @@ export default function SalesPOS() {
   const [companyName, setCompanyName] = useState('Aditya Enterprises');
   const [companyGstin, setCompanyGstin] = useState('');
   const [billType, setBillType] = useState('gst');
+  const [gstRate, setGstRate] = useState(18);
   const [showCamera, setShowCamera] = useState(false);
   const [btPrinter, setBtPrinter] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
@@ -33,6 +34,7 @@ export default function SalesPOS() {
       if (d.success) {
         setCompanyName(d.data.company_name || 'Aditya Enterprises');
         setCompanyGstin(d.data.company_gstin || '');
+        setGstRate(Number(d.data.gst_rate) || 18);
       }
     });
     setBtPrinter(getSavedPrinter());
@@ -185,7 +187,7 @@ export default function SalesPOS() {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  const gst = subtotal * 0.18;
+  const gst = billType === 'gst' ? subtotal * (gstRate / 100) : 0;
   const grandTotal = subtotal + gst;
 
   const handleCheckout = async () => {
@@ -199,7 +201,7 @@ export default function SalesPOS() {
             product_id: item.id, product_name: item.name,
             quantity: item.qty, sell_price: item.price, discount_percent: 0
           })),
-          customer_name: customerName, payment_mode: paymentMode, is_gst: billType === 'gst'
+          customer_name: customerName, payment_mode: paymentMode, is_gst: billType === 'gst', gst_rate: gstRate
         })
       });
       const d = await r.json();
@@ -322,7 +324,20 @@ export default function SalesPOS() {
 
             <div className="pos-totals">
               <div className="pos-total-row"><span>Subtotal</span><span>Rs.{subtotal.toFixed(2)}</span></div>
-              <div className="pos-total-row"><span>GST @18%</span><span>Rs.{gst.toFixed(2)}</span></div>
+              {billType === 'gst' ? (
+                <div className="pos-total-row">
+                  <span style={{display:'flex',alignItems:'center',gap:4}}>
+                    GST @
+                    <input type="number" min="0" max="40" step="0.1" value={gstRate}
+                      onChange={e => setGstRate(Math.max(0, Number(e.target.value) || 0))}
+                      style={{width:52,padding:'2px 4px',textAlign:'center'}} title="Change GST rate for this bill" />
+                    %
+                  </span>
+                  <span>Rs.{gst.toFixed(2)}</span>
+                </div>
+              ) : (
+                <div className="pos-total-row"><span style={{color:'#777'}}>GST (not applied)</span><span style={{color:'#777'}}>Rs.0.00</span></div>
+              )}
               <div className="pos-grand-total"><span>Total</span><span>Rs.{grandTotal.toFixed(2)}</span></div>
             </div>
 
