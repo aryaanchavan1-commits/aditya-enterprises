@@ -58,6 +58,42 @@ export default function AIChat() {
     setShowSettings(false);
   };
 
+  // Shared chat call with retry + backoff. Vercel serverless functions queue
+  // requests ("request queue is full" 503) and Groq rate-limits free keys, so
+  // transient failures retry automatically instead of erroring to the user.
+  const callChat = async (body, onOk) => {
+    let lastErr = null;
+    for (let attempt = 0; attempt <= 3; attempt++) {
+      if (attempt > 0) {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'AI server busy - retrying...' }]);
+        await new Promise(res => setTimeout(res, 1500 * attempt));
+      }
+      try {
+        const r = await fetch(`${API}/ai/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!r.ok) {
+          if ((r.status === 503 || r.status === 429) && attempt < 3) { lastErr = r.status; continue; }
+          let text = '';
+          try { text = (await r.json()).error || ''; } catch (e) {}
+          throw new Error(text || `Server error (${r.status})`);
+        }
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error || 'API key not configured. Set your Groq API key in settings (gear icon).');
+        onOk(d);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (attempt >= 3 || !/Server error|Failed to fetch|NetworkError|queue|503|429/.test(String(err.message))) {
+          throw err;
+        }
+      }
+    }
+    throw lastErr;
+  };
+
   const sendMessage = async () => {
     if (!input.trim()) return;
     const userMsg = { role: 'user', content: input };
@@ -66,24 +102,13 @@ export default function AIChat() {
     setLoading(true);
 
     try {
-      const r = await fetch(`${API}/ai/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg.content, model: selectedModel, mode })
-      });
-      const d = await r.json();
-      if (d.success) {
+      await callChat({ message: userMsg.content, model: selectedModel, mode }, (d) => {
         const reply = d.data.content;
         setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
-        // Check if agent is asking for confirmation
-        if (mode === 'agent' && reply.includes('[CONFIRM]')) {
-          setPendingAction(reply);
-        }
-      } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: 'Error: ' + (d.error || 'API key not configured. Set your Groq API key in settings (gear icon).') }]);
-      }
+        if (mode === 'agent' && reply.includes('[CONFIRM]')) setPendingAction(reply);
+      });
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Connection error. Make sure the server is running.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'AI is busy right now (server queue is full). Wait a moment and try again - or ask again in a few seconds.' }]);
     }
     setLoading(false);
   };
@@ -94,12 +119,11 @@ export default function AIChat() {
       const userMsg = { role: 'user', content: text };
       setMessages(prev => [...prev, userMsg]);
       setInput(''); setLoading(true);
-      fetch(`${API}/ai/chat`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, model: selectedModel, mode })
-      }).then(r => r.json()).then(d => {
-        if (d.success) setMessages(prev => [...prev, { role: 'assistant', content: d.data.content }]);
-      }).catch(() => {}).finally(() => setLoading(false));
+      callChat({ message: text, model: selectedModel, mode }, (d) => {
+        setMessages(prev => [...prev, { role: 'assistant', content: d.data.content }]);
+      }).catch(() => {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'AI is busy right now (server queue is full). Wait a moment and try again - or ask again in a few seconds.' }]);
+      }).finally(() => setLoading(false));
     }, 50);
   };
 

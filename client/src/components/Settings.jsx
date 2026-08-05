@@ -17,8 +17,9 @@ export default function Settings() {
   const [serialBaud, setSerialBaud] = useState(9600);
   const [btPrinter, setBtPrinter] = useState(null);
   const [btBusy, setBtBusy] = useState(false);
-  const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, bridgePrinter: '', bridgeShare: '', bridgePrinterMode: '', bridgeVersion: '', bridgeLastError: '', lastJob: null });
+  const [bridgeStatus, setBridgeStatus] = useState({ bridgeOnline: false, bridgePrinter: '', bridgeShare: '', bridgePrinterMode: '', bridgeVersion: '', bridgeLastError: '', lastJob: null, bridgeDetectedPrinters: [], bridgePreferredPrinter: '', bridgePreferredMode: '' });
   const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [bridgePick, setBridgePick] = useState('');
   const [fixBusy, setFixBusy] = useState(false);
   const [fixMsg, setFixMsg] = useState('');
   const [qzState, setQzState] = useState({ supported: false, connected: false, printers: [], thermal: '', normal: '', busy: false, msg: '' });
@@ -88,6 +89,30 @@ export default function Settings() {
     } finally {
       setBridgeBusy(false);
     }
+  };
+
+  const connectBridgePrinter = async (printerName, printerMode) => {
+    setBridgeBusy(true);
+    try {
+      const r = await fetch(`${API}/devices/print/bridge/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printerName, printerMode })
+      }).then(r => r.json());
+      if (!r.success) throw new Error(r.error || 'Failed to set printer');
+      showToast(printerName ? `Printer set on shop PC: ${printerName}` : 'Auto-detection enabled - the bridge will pick the connected printer');
+      setTimeout(checkBridgeNow, 6000);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setBridgeBusy(false);
+    }
+  };
+
+  const checkBridgeNow = () => {
+    fetch(`${API}/devices/print/bridge/status`).then(r => r.json()).then(d => {
+      if (d.success) setBridgeStatus(d.data);
+    }).catch(() => {});
   };
 
   useEffect(() => {
@@ -650,6 +675,31 @@ export default function Settings() {
                 {bridgeBusy ? 'Sending...' : 'Test Print via USB'}
               </button>
             </div>
+            {bridgeStatus.bridgeOnline && bridgeStatus.bridgeDetectedPrinters.length > 0 && (
+              <div style={{marginBottom:8, padding:'8px 10px', background:'#fff', borderRadius:6, border:'1px solid #eee'}}>
+                <div style={{fontSize:11, fontWeight:600, marginBottom:4}}>Printers on the shop PC ({bridgeStatus.bridgeDetectedPrinters.length} found)</div>
+                <div style={{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center'}}>
+                  <select value={bridgePick} onChange={e => setBridgePick(e.target.value)} style={{fontSize:12, padding:'4px 6px', maxWidth:220}}>
+                    <option value="">Auto-detect (recommended)</option>
+                    {bridgeStatus.bridgeDetectedPrinters.map(p => (
+                      <option key={p.name} value={p.name}>{p.name} {p.thermal ? '(thermal)' : ''}</option>
+                    ))}
+                  </select>
+                  <button className="btn btn-sm btn-primary" onClick={() => {
+                    const picked = bridgeStatus.bridgeDetectedPrinters.find(p => p.name === bridgePick);
+                    connectBridgePrinter(bridgePick, picked?.thermal ? 'thermal' : 'normal');
+                  }} disabled={bridgeBusy}>Connect Printer</button>
+                  {bridgeStatus.bridgePreferredPrinter && (
+                    <button className="btn btn-sm btn-outline" onClick={() => connectBridgePrinter('', '')} disabled={bridgeBusy}>Clear Choice</button>
+                  )}
+                </div>
+                {bridgeStatus.bridgePreferredPrinter && (
+                  <div style={{fontSize:11, color:'#7f8c8d', marginTop:4}}>
+                    Currently set: <strong>{bridgeStatus.bridgePreferredPrinter}</strong> ({bridgeStatus.bridgePreferredMode || 'auto'} mode) — {bridgeStatus.bridgePrinter === bridgeStatus.bridgePreferredPrinter ? 'in use' : 'applying...'}
+                  </div>
+                )}
+              </div>
+            )}
             {bridgeStatus.lastJob?.error && (
               <div style={{fontSize:11, color:'#e74c3c', marginBottom:4}}>Last job failed: {bridgeStatus.lastJob.error}</div>
             )}

@@ -43,13 +43,48 @@ process.on('unhandledRejection', (reason) => {
 async function reportStatus(force) {
   if (!force && Date.now() - lastReportAt < 15000) return;
   lastReportAt = Date.now();
+  const detected = detectPrinters();
   await apiRequest('POST', '/api/devices/print/bridge/report', {
     printerName: config.printerName || '',
     printerShare: config.printerShare || '',
     printerMode: config.printerMode || '',
-    version: 'bridge-3.0',
-    lastError: config.lastError || ''
+    version: 'bridge-3.1',
+    lastError: config.lastError || '',
+    printers: detected.map(p => ({ name: p.Name, thermal: !!p.thermal }))
   });
+}
+
+// The Settings page can pin a preferred printer name/mode. Fetch it on the
+// heartbeat and apply it when it differs from what this bridge is using.
+// An empty choice means "auto-detect" - fall back to picking the best real
+// printer so a ghost/stale printer is never kept just because it was saved.
+async function applyServerPreference() {
+  try {
+    const res = await apiRequest('GET', '/api/devices/print/bridge/config');
+    if (!res.success || !res.data) return;
+    const prefName = res.data.printerName || '';
+    const prefMode = res.data.printerMode || '';
+    if (!prefName) {
+      // User cleared the choice - restore auto-detection so the connected
+      // real printer (thermal first) wins over any saved ghost/stale one.
+      const best = pickPrinter(detectPrinters());
+      if (best && best.printerName !== config.printerName) {
+        Object.assign(config, best);
+        try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch (e) {}
+        log(`Auto-detection restored - using "${config.printerName}" (${config.printerMode})`);
+      }
+      return;
+    }
+    if (prefName === config.printerName && (!prefMode || prefMode === config.printerMode)) return;
+    const printers = detectPrinters();
+    const target = printers.find(p => p.Name === prefName);
+    if (!target) { log(`Preferred printer "${prefName}" not connected right now - keeping "${config.printerName || 'none'}"`); return; }
+    config.printerName = target.Name;
+    config.printerShare = target.ShareName || '';
+    config.printerMode = prefMode || (target.thermal ? 'thermal' : 'normal');
+    try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2)); } catch (e) {}
+    log(`Using preferred printer from Settings: "${config.printerName}" (${config.printerMode})`);
+  } catch (e) { /* non-fatal */ }
 }
 
 function log(msg) {
@@ -146,17 +181,38 @@ function pickPrinter(printers) {
   };
 }
 
-// Re-detect when no printer was found, so plugging in / installing the
+// Does a printer with this exact name exist on the system right now?
+function printerExists(name) {
+  if (!name) return false;
+  try {
+    const out = execFileSync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      "Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"
+    ], { timeout: 10000, encoding: 'utf8' });
+    const names = JSON.parse(out.trim() || '[]');
+    const list = Array.isArray(names) ? names : [names];
+    return list.some(n => String(n) === name);
+  } catch (e) { return false; }
+}
+
+// Re-detect when the configured printer is stale (e.g. an old COM port with
+// no device behind it) or missing, so plugging in / installing the real
 // printer later gets picked up automatically without restarting the bridge.
 let noPrinterTicks = 0;
 let bridgeTickCounter = 0;
 
 function maybeRedetect() {
-  if (config.printerName) return;
   noPrinterTicks++;
   if (noPrinterTicks < 10) return; // every ~30s
   noPrinterTicks = 0;
-  log('No printer yet - re-scanning for USB printers...');
+  if (config.printerName && !printerExists(config.printerName)) {
+    log(`Configured printer "${config.printerName}" is no longer connected - re-scanning...`);
+    config.printerName = '';
+    config.printerShare = '';
+    config.printerMode = '';
+  }
+  if (config.printerName) return;
+  log('Re-scanning for USB printers...');
   const picked = pickPrinter(detectPrinters());
   if (picked) {
     Object.assign(config, picked);
@@ -169,9 +225,15 @@ function loadOrDetectConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       config = { ...config, ...JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) };
-      if (config.printerName) {
+      if (config.printerName && printerExists(config.printerName)) {
         log(`Using printer: "${config.printerName}" (${config.printerMode || 'unknown'})`);
         return;
+      }
+      if (config.printerName) {
+        log(`Stored printer "${config.printerName}" is not connected - will re-detect.`);
+        config.printerName = '';
+        config.printerShare = '';
+        config.printerMode = '';
       }
     }
   } catch (e) { log('Could not read config.json: ' + e.message); }
@@ -873,7 +935,8 @@ async function handleJob(job) {
 
 async function tick() {
   try {
-    if (bridgeTickCounter++ % 10 === 0) autoFixWatchdog(false);
+    if (bridgeTickCounter++ % 5 === 0) applyServerPreference();
+    if (bridgeTickCounter % 10 === 0) autoFixWatchdog(false);
     maybeRedetect();
     await reportStatus(false);
     const res = await apiRequest('GET', '/api/devices/print/job/next');

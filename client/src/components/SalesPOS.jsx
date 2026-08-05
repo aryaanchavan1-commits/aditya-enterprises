@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import CameraScanner from './CameraScanner';
+import { api } from '../api';
 import { bluetoothSupported, pairPrinter, getSavedPrinter, sendBytes, buildEscPos, printSmartReceipt } from '../printer';
 
 const API = '/api';
@@ -151,18 +152,45 @@ export default function SalesPOS() {
     searchRef.current?.focus();
   };
 
-  const handleSearchKeyDown = (e) => {
+  const handleSearchKeyDown = async (e) => {
     if (e.key === 'Enter' && search.trim()) {
-      const match = products.find(p =>
-        p.barcode === search.trim() ||
-        p.name.toLowerCase() === search.trim().toLowerCase()
-      );
+      // A scan always carries a barcode/serial; typed text may be a product
+      // name, so keep the name fallback for manual search.
+      const term = search.trim();
+      const byName = products.find(p => p.name.toLowerCase() === term.toLowerCase());
+      const match = byName || await resolveCode(term);
       if (match) addToCart(match);
+      else showToast(`No product found for: ${term}`, 'error');
     }
   };
 
-  const handleCameraScan = (code) => {
-    const match = products.find(p => p.barcode === code || p.name.toLowerCase() === code.toLowerCase());
+  // Resolve a scanned/typed code to a product. Tries the local list first
+  // (fast, offline-friendly) with case-insensitive matching, then falls back
+  // to the server lookup which also matches serial numbers and survives
+  // case/whitespace differences. Returns the product or null.
+  const resolveCode = async (rawCode) => {
+    const code = String(rawCode || '').trim();
+    if (!code) return null;
+    const local = products.find(p =>
+      (p.barcode && p.barcode.trim().toLowerCase() === code.toLowerCase()) ||
+      (p.serial_number && p.serial_number.trim().toLowerCase() === code.toLowerCase())
+    );
+    if (local) return local;
+    try {
+      const d = await api(`/barcode/scan/${encodeURIComponent(code)}`);
+      if (d.success && d.data?.id) {
+        setProducts(prev => {
+          const has = prev.find(p => p.id === d.data.id);
+          return has ? prev : [...prev, d.data];
+        });
+        return d.data;
+      }
+    } catch (e) {}
+    return null;
+  };
+
+  const handleCameraScan = async (code) => {
+    const match = await resolveCode(code);
     if (match) { addToCart(match); showToast(`Scanned: ${match.name}`); }
     else showToast(`No product found for: ${code}`, 'error');
     setShowCamera(false);
@@ -172,10 +200,11 @@ export default function SalesPOS() {
   // are caught by the global listener and added straight to the cart.
   useEffect(() => {
     const onWedgeScan = (e) => {
-      const code = e.detail;
-      const match = products.find(p => p.barcode === code || p.name.toLowerCase() === code.toLowerCase());
-      if (match) { addToCart(match); showToast(`Scanned: ${match.name}`); }
-      else showToast(`No product found for: ${code}`, 'error');
+      const code = String(e.detail || '').trim();
+      resolveCode(code).then(match => {
+        if (match) { addToCart(match); showToast(`Scanned: ${match.name}`); }
+        else showToast(`No product found for: ${code}`, 'error');
+      });
     };
     window.addEventListener('ae-barcode-scan', onWedgeScan);
     return () => window.removeEventListener('ae-barcode-scan', onWedgeScan);
@@ -374,6 +403,9 @@ export default function SalesPOS() {
               <button className="btn btn-primary" onClick={handleUsbPrint} disabled={btBusy} title="Auto-detects your printer (USB/Bluetooth) - prints without a dialog">
                 Print Receipt
               </button>
+              <button className="btn btn-outline" onClick={() => window.open(`${API}/gst/bill/${lastInvoice.id}`, '_blank')} title="Open the full A4 bill (GST or plain) as a PDF">
+                {lastInvoice.is_gst === 0 || lastInvoice.is_gst === false ? 'Download Bill' : 'Download GST Bill'}
+              </button>
             </div>
           </div>
         </div>
@@ -387,9 +419,7 @@ export default function SalesPOS() {
               <div className="tr-row" style={{justifyContent:'center'}}><span>GSTIN: {companyGstin}</span></div>
             )}
             <div className="tr-divider"></div>
-            {lastInvoice.is_gst !== 0 && lastInvoice.is_gst !== false && (
-              <div className="tr-row"><span>Invoice:</span><span>{lastInvoice.invoice_number}</span></div>
-            )}
+            <div className="tr-row"><span>Invoice:</span><span>{lastInvoice.invoice_number}</span></div>
             <div className="tr-row"><span>Date:</span><span>{lastInvoice.sale_date}</span></div>
             <div className="tr-row"><span>Customer:</span><span>{lastInvoice.customer_name}</span></div>
             {lastInvoice.is_gst !== 0 && lastInvoice.is_gst !== false && lastInvoice.customer_gstin && (

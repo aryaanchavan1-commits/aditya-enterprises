@@ -5,11 +5,50 @@ const bwipjs = require('bwip-js');
 const path = require('path');
 const fs = require('fs');
 
+// Normalize a scanned/typed code so it matches what we stored:
+// trim whitespace, strip AIM identifiers (e.g. "]C1" GS1 prefix) and any
+// characters that scanners may decorate the code with.
+function cleanCode(code) {
+  return String(code || '')
+    .trim()
+    .replace(/^\]\w\d/, '')
+    .replace(/[\u0000-\u001f]/g, '')
+    .trim();
+}
+
+// Safe filename version of a barcode (no path separators / traversal).
+function safeCode(code) {
+  return String(code || '').replace(/[^A-Za-z0-9.\-_]/g, '');
+}
+
+// Lookup by barcode OR serial, case-insensitive, whitespace-tolerant.
+async function findProductByCode(code) {
+  const clean = cleanCode(code);
+  if (!clean) return null;
+  return get('SELECT * FROM products WHERE TRIM(barcode) = ? COLLATE NOCASE OR TRIM(serial_number) = ? COLLATE NOCASE', [clean, clean]);
+}
+
 router.get('/scan/:code', async (req, res) => {
   try {
-    const product = await get('SELECT * FROM products WHERE barcode = ? OR serial_number = ?', [req.params.code, req.params.code]);
-    if (!product) { res.json({ success: false, error: 'Product not found for: ' + req.params.code }); return; }
+    const product = await findProductByCode(req.params.code);
+    if (!product) { res.json({ success: false, error: 'Product not found for: ' + cleanCode(req.params.code) }); return; }
     res.json({ success: true, data: product });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
+// Add stock to an existing product found by scanning its barcode/serial.
+// Used by the Products page "Scan & Add": scan -> product found -> add to
+// inventory instead of creating a duplicate.
+router.post('/stock-in', async (req, res) => {
+  try {
+    const { barcode, quantity } = req.body;
+    const qty = Math.max(1, Number(quantity) || 1);
+    const product = await findProductByCode(barcode);
+    if (!product) { res.json({ success: false, error: 'Product not found' }); return; }
+    await run('UPDATE products SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [qty, product.id]);
+    await run('INSERT INTO stock_movements (product_id, type, quantity_change, reference) VALUES (?, ?, ?, ?)', [product.id, 'stock_in', qty, 'SCAN-IN-' + Date.now()]);
+    const updated = await get('SELECT * FROM products WHERE id = ?', [product.id]);
+    res.json({ success: true, data: updated, message: `Added ${qty} to ${product.name}. New stock: ${updated.quantity}` });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
@@ -17,7 +56,7 @@ router.post('/scan-sale', async (req, res) => {
   try {
     const { barcode, quantity } = req.body;
     const qty = quantity || 1;
-    const product = await get('SELECT * FROM products WHERE barcode = ? OR serial_number = ?', [barcode, barcode]);
+    const product = await findProductByCode(barcode);
     if (!product) { res.json({ success: false, error: 'Product not found' }); return; }
     if (product.quantity < qty) { res.json({ success: false, error: `Only ${product.quantity} left in stock` }); return; }
     const invoiceNum = `AE/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
@@ -52,7 +91,10 @@ router.post('/generate/:productId', async (req, res) => {
     }
     const product = await get('SELECT * FROM products WHERE id = ?', [req.params.productId]);
     if (!product) { res.json({ success: false, error: 'Not found' }); return; }
-    const code = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    // If the product has a barcode, use it as-is (never regenerate a
+    // different code - otherwise printed labels won't match the DB).
+    const raw = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const code = safeCode(raw);
     const png = await new Promise((resolve, reject) => {
       bwipjs.toBuffer({ bcid: req.body.type || 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center' }, (err, buf) => err ? reject(err) : resolve(buf));
     });
@@ -72,7 +114,8 @@ router.post('/generate-bulk', async (req, res) => {
     for (const pid of product_ids) {
       const product = await get('SELECT * FROM products WHERE id = ?', [pid]);
       if (!product) continue;
-      const code = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      const raw = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
+      const code = safeCode(raw);
       const png = await new Promise((resolve, reject) => {
         bwipjs.toBuffer({ bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center' }, (e, b) => e ? reject(e) : resolve(b));
       });

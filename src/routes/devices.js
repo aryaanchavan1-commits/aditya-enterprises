@@ -120,13 +120,38 @@ router.post('/print/job/:id/status', async (req, res) => {
 // Called by the bridge to report which printer it detected on the shop PC.
 router.post('/print/bridge/report', async (req, res) => {
   try {
-    const { printerName, printerShare, printerMode, version, lastError } = req.body || {};
+    const { printerName, printerShare, printerMode, version, lastError, printers } = req.body || {};
     const vals = {
       bridge_printer: String(printerName || '').slice(0, 200),
       bridge_share: String(printerShare || '').slice(0, 100),
       bridge_printer_mode: String(printerMode || '').slice(0, 20),
       bridge_version: String(version || '').slice(0, 50),
       bridge_last_error: String(lastError || '').slice(0, 300),
+      bridge_detected_printers: JSON.stringify(Array.isArray(printers) ? printers.slice(0, 30) : []),
+    };
+    for (const [k, v] of Object.entries(vals)) {
+      await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [k, v]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
+// Settings page picks which printer this bridge should use, and the bridge
+// reads it back to apply. Mode can be 'thermal' or 'normal'.
+router.get('/print/bridge/config', async (req, res) => {
+  try {
+    const printer = await get("SELECT value FROM settings WHERE key = 'bridge_preferred_printer'");
+    const mode = await get("SELECT value FROM settings WHERE key = 'bridge_preferred_mode'");
+    res.json({ success: true, data: { printerName: printer?.value || '', printerMode: mode?.value || '' } });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
+router.post('/print/bridge/config', async (req, res) => {
+  try {
+    const { printerName, printerMode } = req.body || {};
+    const vals = {
+      bridge_preferred_printer: String(printerName || '').slice(0, 200),
+      bridge_preferred_mode: ['thermal', 'normal'].includes(printerMode) ? printerMode : '',
     };
     for (const [k, v] of Object.entries(vals)) {
       await run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [k, v]);
@@ -159,10 +184,15 @@ router.get('/print/bridge/status', async (req, res) => {
     const lastError = await get("SELECT value FROM settings WHERE key = 'bridge_last_error'");
     const fixStatus = await get("SELECT value FROM settings WHERE key = 'bridge_fix_status'");
     const fixMessage = await get("SELECT value FROM settings WHERE key = 'bridge_fix_message'");
+    const detectedPrinters = await get("SELECT value FROM settings WHERE key = 'bridge_detected_printers'");
+    const prefPrinter = await get("SELECT value FROM settings WHERE key = 'bridge_preferred_printer'");
+    const prefMode = await get("SELECT value FROM settings WHERE key = 'bridge_preferred_mode'");
     const lastJob = await get("SELECT type, status, error, created_at, done_at FROM print_jobs ORDER BY id DESC LIMIT 1");
     let ts = seen?.value ? new Date(seen.value) : null;
     if (ts && isNaN(ts.getTime())) ts = new Date(seen.value.replace(' ', 'T') + 'Z');
     const online = !!ts && (Date.now() - ts.getTime()) < 25000;
+    let detectedPrintersList = [];
+    try { detectedPrintersList = JSON.parse(detectedPrinters?.value || '[]'); } catch (e) {}
     res.json({
       success: true,
       data: {
@@ -175,6 +205,9 @@ router.get('/print/bridge/status', async (req, res) => {
         bridgeLastError: lastError?.value || '',
         fixStatus: fixStatus?.value || '',
         fixMessage: fixMessage?.value || '',
+        bridgeDetectedPrinters: detectedPrintersList,
+        bridgePreferredPrinter: prefPrinter?.value || '',
+        bridgePreferredMode: prefMode?.value || '',
         lastJob
       }
     });

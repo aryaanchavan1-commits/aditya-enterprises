@@ -5,7 +5,16 @@ const { get, all, run } = require('../db');
 function getGroqClient() {
   const apiKey = process.env.GROQ_API_KEY;
   if (apiKey) {
-    try { const Groq = require('groq-sdk'); return new Groq({ apiKey }); } catch (e) {}
+    try {
+      const Groq = require('groq-sdk');
+      // The SDK appends '/openai/v1/chat/completions' to the base URL. If
+      // GROQ_BASE_URL already contains '/openai/v1' the path doubles and Groq
+      // returns "Unknown request URL". Pin the API root explicitly.
+      const envBase = process.env.GROQ_BASE_URL || '';
+      const baseURL = envBase && !/openai\/v1/.test(envBase) ? envBase
+        : envBase.replace(/\/openai\/v1\/?$/, '');
+      return new Groq({ apiKey, baseURL: baseURL || 'https://api.groq.com' });
+    } catch (e) {}
   }
   return null;
 }
@@ -118,6 +127,32 @@ FORMAT YOUR RESPONSES AS:
 - If executing: "[ACTION] <what you did>"
 - Regular info: just respond normally`;
 
+// Groq API calls with retry/backoff. The function runs on a serverless
+// host (Vercel) with tight concurrency limits, and Groq itself rate-limits
+// free keys - a single transient 429/503/ECONNRESET must never fail the
+// whole chat request.
+async function groqCreate(client, opts, { retries = 3 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 55000); // stay under the function timeout
+      try {
+        // RequestOptions are the 2nd arg (signal, timeout, headers) - never
+        // merge into the JSON body or Groq rejects unknown body props.
+        return await client.chat.completions.create(opts, { signal: ctrl.signal });
+      } finally { clearTimeout(timer); }
+    } catch (err) {
+      lastErr = err;
+      const retryable = err?.status === 429 || err?.status === 500 || err?.status === 503
+        || /ECONNRESET|ETIMEDOUT|socket hang up|abort/i.test(String(err?.message || err));
+      if (!retryable || attempt === retries) throw err;
+      await new Promise(res => setTimeout(res, 800 * (attempt + 1) + Math.random() * 500));
+    }
+  }
+  throw lastErr;
+}
+
 router.get('/models', async (req, res) => {
   try {
     const client = getGroqClient();
@@ -139,17 +174,18 @@ router.post('/chat', async (req, res) => {
     const isAgentMode = mode === 'agent';
 
     await run('INSERT INTO ai_conversations (role, content) VALUES (?, ?)', ['user', message]);
-    const history = await all('SELECT role, content FROM ai_conversations ORDER BY id DESC LIMIT 30');
-
+    const history = await all('SELECT role, content FROM ai_conversations ORDER BY id DESC LIMIT 12');
+    // Cap context size so the request stays small and fast - big histories
+    // hold the serverless function longer and trip the request queue.
     const messages = [
       { role: 'system', content: isAgentMode ? AGENT_SYSTEM : CHAT_SYSTEM },
-      ...history.reverse().map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
+      ...history.reverse().map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.content || '').slice(0, 4000) })),
     ];
 
     const completionOpts = { model: selectedModel, messages, temperature: 0.7, max_tokens: 2000 };
     if (isAgentMode) { completionOpts.tools = agentTools; completionOpts.tool_choice = 'auto'; }
 
-    const completion = await client.chat.completions.create(completionOpts);
+    const completion = await groqCreate(client, completionOpts);
     const responseMsg = completion.choices[0]?.message;
     let replyText = responseMsg?.content || '';
     const toolCalls = responseMsg?.tool_calls || [];
@@ -206,7 +242,7 @@ router.post('/analyze', async (req, res) => {
     }
 
     const model = (await get("SELECT value FROM settings WHERE key='groq_model'"))?.value || 'llama-3.3-70b-versatile';
-    const completion = await client.chat.completions.create({
+    const completion = await groqCreate(client, {
       model, messages: [{ role: 'system', content: 'Business analyst for Aditya Enterprises. Give concise, actionable insights.' }, { role: 'user', content: `Analyze: ${context}` }],
       temperature: 0.7, max_tokens: 1000,
     });

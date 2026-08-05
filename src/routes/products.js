@@ -13,6 +13,16 @@ function generateBarcodeImage(code) {
   });
 }
 
+// Normalize a barcode for storage + filename (no control chars, no path
+// separators - same rules as the barcode route so lookups always line up).
+function cleanBarcode(code) {
+  return String(code || '')
+    .trim()
+    .replace(/[\u0000-\u001f]/g, '')
+    .replace(/[^A-Za-z0-9.\-_]/g, '')
+    .slice(0, 32);
+}
+
 router.get('/', async (req, res) => {
   try {
     const { search, category_id, subcategory_id, low_stock } = req.query;
@@ -39,7 +49,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const data = req.body;
-    const barcode = data.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const barcode = cleanBarcode(data.barcode) || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const serial = data.serial_number || `AE-SN-${Date.now()}`;
     let barcode_image = '';
     try {
@@ -63,7 +73,7 @@ router.put('/:id', async (req, res) => {
     const data = req.body;
     const existing = await get('SELECT * FROM products WHERE id = ?', [req.params.id]);
     if (!existing) { res.json({ success: false, error: 'Not found' }); return; }
-    const barcode = data.barcode || existing.barcode;
+    const barcode = cleanBarcode(data.barcode) || existing.barcode;
     let barcode_image = existing.barcode_image;
     if (data.barcode && data.barcode !== existing.barcode) {
       try {

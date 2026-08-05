@@ -3,6 +3,7 @@ import { api, exportToExcel, readExcelFile } from '../api';
 import { useReactToPrint } from 'react-to-print';
 import { barcodeDataUrl } from '../barcode';
 import { printSmartLabel } from '../printer';
+import { downloadBarcodesPdf } from '../barcodePdf';
 import CameraScanner from './CameraScanner';
 
 export default function Products() {
@@ -118,12 +119,13 @@ export default function Products() {
     const clean = String(code || '').trim();
     if (!clean) return;
     try {
-      const existing = await api('/barcode/' + encodeURIComponent(clean));
+      const existing = await api('/barcode/scan/' + encodeURIComponent(clean));
       if (existing.success && existing.data?.id) {
         const p = existing.data;
-        showToast(`Already exists: ${p.name} (stock: ${p.quantity || 0})`);
-        setLabelProduct(p);
-        setLabelQty(Math.max(1, Math.min(100, Number(p.quantity) || 1)));
+        showToast(`Found: ${p.name} (stock: ${p.quantity || 0})`);
+        setScanProduct(p);
+        setScanQty(1);
+        setShowScanStock(true);
         return;
       }
     } catch (e) {}
@@ -145,7 +147,7 @@ export default function Products() {
   const handleSave = async () => {
     if (!form.name) return showToast('Product name is required', 'error');
     let payload = { ...form };
-    if (payload.barcode) payload.barcode = payload.barcode.replace(/[^A-Za-z0-9\-]/g, '').slice(0, 20);
+    if (payload.barcode) payload.barcode = payload.barcode.trim().replace(/[\u0000-\u001f]/g, '');
     // Create the new category first if the user typed one in the form.
     if (newCatMode && newCatName.trim()) {
       const cat = await api('/categories', { method: 'POST', body: { name: newCatName.trim() } });
@@ -200,14 +202,59 @@ export default function Products() {
 
   const openLabel = (p) => {
     setLabelProduct(p);
-    // One label per unit in stock, so multi-quantity products get a
-    // complete set of identical, perfect labels.
-    setLabelQty(Math.max(1, Math.min(100, Number(p.quantity) || 1)));
+    // One label per unit in stock by default, so multi-quantity products
+    // get a complete set of identical labels. The copies box can change it.
+    setLabelQty(Math.max(1, Math.min(500, Number(p.quantity) || 1)));
   };
 
   const labelBarcode = labelProduct?.barcode ? barcodeDataUrl(labelProduct.barcode, { maxWidthPx: 900, heightPx: 300 }) : '';
 
   const [labelPrinting, setLabelPrinting] = useState(false);
+
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const [scanProduct, setScanProduct] = useState(null);
+  const [scanQty, setScanQty] = useState(1);
+  const [showScanStock, setShowScanStock] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
+
+  const handleScanAddStock = async () => {
+    if (!scanProduct?.barcode || scanBusy) return;
+    setScanBusy(true);
+    try {
+      const d = await api('/barcode/stock-in', {
+        method: 'POST',
+        body: { barcode: scanProduct.barcode, quantity: Math.max(1, scanQty || 1) }
+      });
+      if (!d.success) throw new Error(d.error || 'Failed to add stock');
+      showToast(d.message || `Added ${scanQty} to ${scanProduct.name}`);
+      setShowScanStock(false);
+      setScanProduct(null);
+      loadProducts();
+    } catch (err) {
+      showToast('Stock add failed: ' + err.message, 'error');
+    } finally {
+      setScanBusy(false);
+    }
+  };
+
+  const handleDownloadBarcodesPdf = async () => {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      // generateBarcodesPdf is quantity-wise (loops p.quantity) - push the
+      // copies from the box so the PDF matches the on-screen preview and the
+      // printer, i.e. one label per unit.
+      const count = downloadBarcodesPdf([{ ...labelProduct, quantity: labelQty }]);
+      showToast(`PDF downloaded - ${count} barcode label${count > 1 ? 's' : ''} for "${labelProduct.name}"`);
+      setLabelProduct(null);
+      setLabelQty(1);
+    } catch (err) {
+      showToast('PDF failed: ' + err.message, 'error');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   const handleUsbLabels = async () => {
     if (!labelProduct?.barcode) return;
@@ -341,7 +388,7 @@ export default function Products() {
                     <td>
                       <button className="btn btn-sm btn-info" style={{marginRight:4}} onClick={() => openEdit(p)}>Edit</button>
                       <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Del</button>
-                      {p.barcode ? <button className="btn btn-sm btn-outline" onClick={() => setLabelProduct(p)} style={{marginLeft:4}}>Label</button> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)} style={{marginLeft:4}}>Barcode</button>}
+                      {p.barcode ? <button className="btn btn-sm btn-outline" onClick={() => openLabel(p)} style={{marginLeft:4}}>Label</button> : <button className="btn btn-sm btn-outline" onClick={() => handleGenerateBarcode(p.id)} style={{marginLeft:4}}>Barcode</button>}
                     </td>
                   </tr>
                 ))}
@@ -377,15 +424,41 @@ export default function Products() {
         </div>
       </div>
 
+      {showScanStock && scanProduct && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowScanStock(false)}>
+          <div className="modal" style={{maxWidth: 400}}>
+            <h3>Product found - add stock</h3>
+            <div style={{fontSize:13, lineHeight:1.7, marginBottom:12}}>
+              <div><strong>{scanProduct.name}</strong></div>
+              <div style={{color:'#777'}}>Price: Rs. {Number(scanProduct.sell_price || 0).toLocaleString('en-IN')} · Current stock: {scanProduct.quantity || 0} {scanProduct.unit || 'pcs'}</div>
+              <div style={{fontFamily:'monospace', fontSize:11, color:'#999'}}>Barcode: {scanProduct.barcode}</div>
+            </div>
+            <div style={{display:'flex', gap:8, alignItems:'center', marginBottom:16}}>
+              <label style={{fontSize:13, fontWeight:600}}>Add to stock:</label>
+              <input type="number" min="1" max="1000" value={scanQty}
+                onChange={e => setScanQty(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
+                style={{width:80, textAlign:'center'}} />
+            </div>
+            <div style={{display:'flex', gap:8, justifyContent:'flex-end'}}>
+              <button className="btn btn-outline" onClick={() => { setShowScanStock(false); setScanProduct(null); }}>Close</button>
+              <button className="btn btn-primary" onClick={handleScanAddStock} disabled={scanBusy}>
+                {scanBusy ? 'Adding...' : `Add ${scanQty || 1} to Stock`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {labelProduct && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setLabelProduct(null)}>
           <div className="modal" style={{maxWidth:400}}>
             <h3>Print Label: {labelProduct.name}</h3>
-            <div style={{display:'flex', gap:8, alignItems:'center', marginBottom:12}}>
+            <div style={{display:'flex', gap:8, alignItems:'center', marginBottom:2}}>
               <label style={{fontSize:13, fontWeight:600}}>Copies:</label>
-              <input type="number" min="1" max="100" value={labelQty}
-                onChange={e => setLabelQty(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+              <input type="number" min="1" max="500" value={labelQty}
+                onChange={e => setLabelQty(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
                 style={{width:70, textAlign:'center'}} />
+              <span style={{fontSize:11, color:'#888'}}>defaults to stock ({labelProduct.quantity || 0})</span>
             </div>
             <div ref={labelRef} className="label-print-area">
               {Array.from({ length: labelQty }).map((_, i) => (
@@ -401,8 +474,11 @@ export default function Products() {
                 </div>
               ))}
             </div>
-            <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:16}}>
+            <div style={{display:'flex', gap:8, justifyContent:'flex-start', marginTop:8, flexWrap:'wrap'}}>
               <button className="btn btn-outline" onClick={() => { setLabelProduct(null); setLabelQty(1); }}>Close</button>
+              <button className="btn btn-success" onClick={handleDownloadBarcodesPdf} disabled={pdfBusy} title="Download a PDF with the selected number of barcode labels for this product">
+                {pdfBusy ? 'Generating...' : 'Download Barcode PDF'}
+              </button>
               <button className="btn btn-primary" onClick={handleUsbLabels} disabled={labelPrinting} title="Auto-detects your printer - prints without a dialog, or falls back to the system dialog">
                 {labelPrinting ? 'Printing...' : `Print ${labelQty} Label${labelQty > 1 ? 's' : ''}`}
               </button>

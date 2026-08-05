@@ -11,18 +11,35 @@ export default function CameraScanner({ onScan, onClose }) {
     setError('');
     setScanning(true);
     try {
-      const { Html5Qrcode } = await import('html5-qrcode');
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
       const scanner = new Html5Qrcode('barcode-scanner-preview');
       scannerRef.current = scanner;
 
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 15, qrbox: { width: 250, height: 150 }, aspectRatio: 1.0 },
+        {
+          fps: 15,
+          qrbox: { width: 250, height: 150 },
+          aspectRatio: 1.0,
+          // Scan only the formats this shop uses (Code128 + common retail
+          // codes) instead of every camera-readable format - faster decode.
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.CODE_93,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.QR_CODE,
+          ],
+        },
         (decodedText) => {
-          setLastCode(decodedText);
+          const clean = String(decodedText || '').trim();
+          setLastCode(clean);
           scanner.stop().catch(() => {});
           setScanning(false);
-          if (onScan) onScan(decodedText);
+          if (onScan) onScan(clean);
         },
         () => {}
       );

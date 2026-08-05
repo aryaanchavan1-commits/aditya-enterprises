@@ -57,8 +57,16 @@ export function encodePattern(text) {
 // Render barcode as a data-URL PNG sized to fit `maxWidthPx`, with a
 // "module" of at least 2px (quiet zone = 10 modules each side).
 export function barcodeDataUrl(text, { maxWidthPx = 900, heightPx = 320, showText = true } = {}) {
+  const img = barcodeImageData(text, { maxWidthPx, heightPx, showText });
+  return img ? img.dataUrl : '';
+}
+
+// Like barcodeDataUrl but also returns the real pixel size, so callers
+// (e.g. the PDF generator) can draw it at its true aspect ratio without
+// stretching - critical for scannable barcodes.
+export function barcodeImageData(text, { maxWidthPx = 900, heightPx = 320, showText = true } = {}) {
   const pattern = encodePattern(text);
-  if (!pattern) return '';
+  if (!pattern) return null;
 
   const quiet = 10;
   const totalModules = quiet * 2 + pattern.length;
@@ -91,5 +99,5 @@ export function barcodeDataUrl(text, { maxWidthPx = 900, heightPx = 320, showTex
     ctx.fillText(String(text), canvas.width / 2, heightPx - 4);
   }
 
-  return canvas.toDataURL('image/png');
+  return { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
 }
