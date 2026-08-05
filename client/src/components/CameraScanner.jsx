@@ -12,27 +12,37 @@ export default function CameraScanner({ onScan, onClose }) {
     setScanning(true);
     try {
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
-      const scanner = new Html5Qrcode('barcode-scanner-preview');
+      // Constructor config: formats + native BarcodeDetector go HERE, not in
+      // start() (start() only accepts fps/qrbox/aspectRatio/videoConstraints).
+      // useBarCodeDetectorIfSupported uses the phone's built-in BarcodeDetector
+      // on Android Chrome - instant decode, no jank. Falls back to zxing on iOS.
+      const formats = [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.QR_CODE,
+      ];
+      const scanner = new Html5Qrcode('barcode-scanner-preview', {
+        verbose: false,
+        formatsToSupport: formats,
+        useBarCodeDetectorIfSupported: true,
+      });
       scannerRef.current = scanner;
 
-      await scanner.start(
-        { facingMode: 'environment' },
+      const tryStart = (facing) => scanner.start(
+        { facingMode: facing },
         {
-          fps: 15,
-          qrbox: { width: 250, height: 150 },
-          aspectRatio: 1.0,
-          // Scan only the formats this shop uses (Code128 + common retail
-          // codes) instead of every camera-readable format - faster decode.
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.CODE_93,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.QR_CODE,
-          ],
+          fps: 10, // zxing fallback is slow on phones - 15fps just drops frames
+          // No aspectRatio: it causes black video / failed start on many phones.
+          qrbox: (vw, vh) => ({
+            width: Math.min(280, Math.floor(vw * 0.8)),
+            height: Math.min(170, Math.floor(vh * 0.45)),
+          }),
+          disableFlip: true,
         },
         (decodedText) => {
           const clean = String(decodedText || '').trim();
@@ -43,8 +53,28 @@ export default function CameraScanner({ onScan, onClose }) {
         },
         () => {}
       );
+
+      try {
+        await tryStart('environment');
+      } catch (frontErr) {
+        // Some tablets/phones only expose a front camera - retry with it
+        // before giving up.
+        await tryStart('user');
+      }
     } catch (err) {
-      setError(err.message || 'Camera access denied or not supported');
+      let msg = err.message || 'Camera failed to start';
+      // Browser names the permission error differently per platform - catch
+      // the common ones with an actionable message.
+      if (/NotAllowedError|PermissionDenied|permission/i.test(msg)) {
+        msg = 'Camera permission was denied. Allow camera access for this site (lock icon in the address bar) and try again.';
+      } else if (/NotFoundError|OverconstrainedError|no camera|not found|NotFound/i.test(msg)) {
+        msg = 'No rear camera was found on this device.';
+      } else if (/NotReadableError|in use|busy|NotReadable/i.test(msg)) {
+        msg = 'The camera is being used by another app - close it and try again.';
+      } else if (/insecure|https|NotAllowedError/i.test(msg) || (typeof window !== 'undefined' && window.location && window.location.protocol === 'http:' && window.location.hostname !== 'localhost')) {
+        msg = 'Camera needs a secure (HTTPS) connection - open this app via the https:// address, not http://';
+      }
+      setError(msg);
       setScanning(false);
     }
   };
