@@ -7,7 +7,7 @@ export default function CameraScanner({ onScan, onClose }) {
   const previewRef = useRef(null);
   const scannerRef = useRef(null);
 
-  const startScanning = async () => {
+  const startScanning = async ({ silent = false } = {}) => {
     setError('');
     setScanning(true);
     try {
@@ -62,6 +62,8 @@ export default function CameraScanner({ onScan, onClose }) {
         await tryStart('user');
       }
     } catch (err) {
+      setScanning(false);
+      if (silent) return; // auto-start failed (iOS needs a tap) - no scary error
       let msg = err.message || 'Camera failed to start';
       // Browser names the permission error differently per platform - catch
       // the common ones with an actionable message.
@@ -86,6 +88,21 @@ export default function CameraScanner({ onScan, onClose }) {
     }
     setScanning(false);
   };
+
+  // Auto-start the camera when the modal opens - on Android the permission
+  // prompt appears immediately and the user just points at the barcode. On
+  // iOS the permission needs a tap, so if auto-start fails we just show the
+  // Start button (silent - the user hasn't tapped yet).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!alive) return;
+      try {
+        await startScanning({ silent: true });
+      } catch (e) { /* Start button is the fallback */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     return () => { stopScanning(); };
