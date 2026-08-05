@@ -212,6 +212,7 @@ export default function Products() {
   const [labelPrinting, setLabelPrinting] = useState(false);
 
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfBusyAll, setPdfBusyAll] = useState(false);
 
   const [scanProduct, setScanProduct] = useState(null);
   const [scanQty, setScanQty] = useState(1);
@@ -298,15 +299,25 @@ export default function Products() {
     loadProducts();
   };
 
-  const handleDownloadAllBarcodes = () => {
-    const withBarcode = products.filter(p => p.barcode);
-    if (withBarcode.length === 0) return showToast('No products with barcodes yet - generate them first', 'error');
-    // Quantity-wise (same rule as the single-product Label modal): every product
-    // gets one label per unit of current stock, grouped by category, so the PDF
-    // can be printed and cut straight onto stock.
-    const list = withBarcode.map(p => ({ ...p, quantity: Math.max(1, Math.min(500, Number(p.quantity) || 1)) }));
-    const count = downloadBarcodesPdf(list);
-    showToast(`PDF downloaded - ${count} barcode label${count > 1 ? 's' : ''} for ${withBarcode.length} product${withBarcode.length > 1 ? 's' : ''}, grouped by category`);
+  const handleDownloadAllBarcodes = async () => {
+    setPdfBusyAll(true);
+    try {
+      // Fetch ALL products - the visible list may be filtered by search/category.
+      const d = await api('/products');
+      const allProducts = (d && d.success && d.data) || [];
+      const withBarcode = allProducts.filter(p => p.barcode);
+      if (withBarcode.length === 0) return showToast('No products with barcodes yet - generate them first', 'error');
+      // Quantity-wise (same rule as the single-product Label modal): every product
+      // gets one label per unit of current stock, grouped by category, so the PDF
+      // can be printed and cut straight onto stock.
+      const list = withBarcode.map(p => ({ ...p, quantity: Math.max(1, Math.min(500, Number(p.quantity) || 1)) }));
+      const count = downloadBarcodesPdf(list);
+      showToast(`PDF downloaded - ${count} barcode label${count > 1 ? 's' : ''} for ${withBarcode.length} product${withBarcode.length > 1 ? 's' : ''}, grouped by category`);
+    } catch (err) {
+      showToast('PDF failed: ' + (err.message || 'could not load products'), 'error');
+    } finally {
+      setPdfBusyAll(false);
+    }
   };
 
   const handleExportProducts = () => {
@@ -361,7 +372,7 @@ export default function Products() {
           <button className="btn btn-sm btn-outline hide-mobile" onClick={() => fileRefProducts.current?.click()}>Import</button>
           <input ref={fileRefProducts} type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={handleImportProducts} />
           <button className="btn btn-sm btn-outline hide-mobile" onClick={handleGenerateAllBarcodes} title="Generate barcodes for products without one">Barcode</button>
-          <button className="btn btn-sm btn-outline" onClick={handleDownloadAllBarcodes} title="Download one barcode label per product in a PDF, grouped by category">All Barcodes PDF</button>
+          <button className="btn btn-sm btn-outline" onClick={handleDownloadAllBarcodes} disabled={pdfBusyAll} title="Download one barcode label per unit of stock for every product in a PDF, grouped by category">{pdfBusyAll ? 'Generating...' : 'All Barcodes PDF'}</button>
           <button className="btn btn-sm btn-info" onClick={startScanAdd} title="Scan a barcode with the camera or a Bluetooth scanner to add the product">Scan & Add</button>
           <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ Add Product</button>
         </div>
