@@ -301,9 +301,10 @@ export default function Products() {
   const handleDownloadAllBarcodes = () => {
     const withBarcode = products.filter(p => p.barcode);
     if (withBarcode.length === 0) return showToast('No products with barcodes yet - generate them first', 'error');
-    // One label per product, grouped by category, in the same order the grid
-    // shows. Quantity-wise printing for a single product stays in its Label modal.
-    const list = withBarcode.map(p => ({ ...p, quantity: 1 }));
+    // Quantity-wise (same rule as the single-product Label modal): every product
+    // gets one label per unit of current stock, grouped by category, so the PDF
+    // can be printed and cut straight onto stock.
+    const list = withBarcode.map(p => ({ ...p, quantity: Math.max(1, Math.min(500, Number(p.quantity) || 1)) }));
     const count = downloadBarcodesPdf(list);
     showToast(`PDF downloaded - ${count} barcode label${count > 1 ? 's' : ''} for ${withBarcode.length} product${withBarcode.length > 1 ? 's' : ''}, grouped by category`);
   };
