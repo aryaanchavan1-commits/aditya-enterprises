@@ -298,6 +298,16 @@ export default function Products() {
     loadProducts();
   };
 
+  const handleDownloadAllBarcodes = () => {
+    const withBarcode = products.filter(p => p.barcode);
+    if (withBarcode.length === 0) return showToast('No products with barcodes yet - generate them first', 'error');
+    // One label per product, grouped by category, in the same order the grid
+    // shows. Quantity-wise printing for a single product stays in its Label modal.
+    const list = withBarcode.map(p => ({ ...p, quantity: 1 }));
+    const count = downloadBarcodesPdf(list);
+    showToast(`PDF downloaded - ${count} barcode label${count > 1 ? 's' : ''} for ${withBarcode.length} product${withBarcode.length > 1 ? 's' : ''}, grouped by category`);
+  };
+
   const handleExportProducts = () => {
     const data = products.map(p => ({
       Name: p.name, HSN: p.hsn_code || '', Sell_Price: p.sell_price, Inward_Price: p.inward_price,
@@ -350,6 +360,7 @@ export default function Products() {
           <button className="btn btn-sm btn-outline hide-mobile" onClick={() => fileRefProducts.current?.click()}>Import</button>
           <input ref={fileRefProducts} type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={handleImportProducts} />
           <button className="btn btn-sm btn-outline hide-mobile" onClick={handleGenerateAllBarcodes} title="Generate barcodes for products without one">Barcode</button>
+          <button className="btn btn-sm btn-outline" onClick={handleDownloadAllBarcodes} title="Download one barcode label per product in a PDF, grouped by category">All Barcodes PDF</button>
           <button className="btn btn-sm btn-info" onClick={startScanAdd} title="Scan a barcode with the camera or a Bluetooth scanner to add the product">Scan & Add</button>
           <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ Add Product</button>
         </div>

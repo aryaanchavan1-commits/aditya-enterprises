@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "axios": "^1.7.7",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
