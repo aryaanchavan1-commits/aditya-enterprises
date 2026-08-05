@@ -1,22 +1,30 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-// Mobile barcode scanning via ZXing (https://github.com/zxing-js/browser,
-// Apache-2.0) - the most battle-tested open-source barcode engine. Used when
-// no physical scanner machine is available: point the phone camera at a
-// barcode and it decodes Code128/EAN/UPC/QR reliably on both Android and iOS.
-// Torch + beep + vibration give shop-floor feedback without looking at the
-// screen.
+// Mobile barcode scanning - three independent decode paths, so it works on
+// virtually every phone:
+//   1. Native BarcodeDetector API (instant, built into Android Chrome)
+//   2. ZXing (https://github.com/zxing-js/browser, Apache-2.0) - decodes
+//      Code128/EAN/UPC/QR on iOS Safari and any other browser
+//   3. Photo/gallery fallback - snap the barcode and it is decoded from the
+//      image, for cases where live camera permission is impossible.
+// Camera MUST be started from a tap (iOS Safari blocks getUserMedia outside a
+// user gesture) - the big "Start Camera" button guarantees that.
+
+const FORMATS = ['code_128', 'ean_13', 'ean_8', 'code_39', 'code_93', 'upc_a', 'upc_e', 'qr_code'];
 
 export default function CameraScanner({ onScan, onClose }) {
-  const [scanning, setScanning] = useState(false);
+  const [status, setStatus] = useState('idle'); // idle | starting | running | error
   const [error, setError] = useState('');
   const [lastCode, setLastCode] = useState('');
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const videoRef = useRef(null);
-  const controlsRef = useRef(null);
   const streamRef = useRef(null);
+  const detectorRef = useRef(null);
+  const rafRef = useRef(0);
   const scanningRef = useRef(false);
+  const lastDecodeRef = useRef(0);
+  const fileRef = useRef(null);
 
   const beep = () => {
     try {
@@ -39,84 +47,135 @@ export default function CameraScanner({ onScan, onClose }) {
     try { if (navigator.vibrate) navigator.vibrate(120); } catch (e) {}
     beep();
     setLastCode(clean);
-    setScanning(false);
-    if (controlsRef.current) { try { controlsRef.current.stop(); } catch (e) {} controlsRef.current = null; }
-    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+    setStatus('idle');
+    stopCamera();
     if (onScan) onScan(clean);
   };
 
-  const startScanning = async ({ silent = false } = {}) => {
-    setError('');
-    setScanning(true);
-    setLastCode('');
-    try {
-      // Loaded on demand so the main bundle stays small.
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const { BarcodeFormat, DecodeHintType } = await import('@zxing/library');
+  const stopCamera = () => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setTorchOn(false);
+  };
 
-      const hints = new Map();
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-        BarcodeFormat.CODE_128,
-        BarcodeFormat.CODE_39,
-        BarcodeFormat.CODE_93,
-        BarcodeFormat.EAN_13,
-        BarcodeFormat.EAN_8,
-        BarcodeFormat.UPC_A,
-        BarcodeFormat.UPC_E,
-        BarcodeFormat.QR_CODE,
-      ]);
-      hints.set(DecodeHintType.TRY_HARDER, true);
+  // Decode loop: native BarcodeDetector first, ZXing fallback.
+  const startDecodeLoop = async () => {
+    const video = videoRef.current;
+    if (!video) return;
 
-      const reader = new BrowserMultiFormatReader(hints);
-      const video = videoRef.current;
-      if (!video) throw new Error('Scanner view not ready');
-
-      // Rear camera first; some tablets/phones only expose the front one.
-      const tryStart = async (facing) => {
-        const controls = await reader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: facing,
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-            audio: false,
-          },
-          video,
-          (result) => onDecoded(result?.getText?.() || ''),
-          () => {} // per-frame error, ignore
-        );
-        controlsRef.current = controls;
-        const stream = video.srcObject;
-        streamRef.current = stream;
-        const track = stream?.getVideoTracks?.()[0];
-        try {
-          const caps = track?.getCapabilities?.();
-          if (caps && caps.torch) { setTorchSupported(true); setTorchOn(false); }
-        } catch (e) {}
-        try { await video.play(); } catch (e) {}
-      };
-
+    const BarcodeDetectorCtor = window.BarcodeDetector;
+    if (BarcodeDetectorCtor) {
       try {
-        await tryStart({ ideal: 'environment' });
-      } catch (frontErr) {
-        await tryStart({ ideal: 'user' });
+        detectorRef.current = await new BarcodeDetectorCtor({ formats: FORMATS });
+      } catch (e) {
+        try { detectorRef.current = new BarcodeDetectorCtor(); } catch (e2) { detectorRef.current = null; }
       }
-    } catch (err) {
-      setScanning(false);
-      if (silent) return; // auto-start failed (iOS needs a tap) - no scary error
-      let msg = err.message || 'Camera failed to start';
-      if (/NotAllowedError|PermissionDenied|permission/i.test(msg)) {
-        msg = 'Camera permission was denied. Allow camera access for this site (lock icon in the address bar) and try again.';
-      } else if (/NotFoundError|OverconstrainedError|no camera|not found|NotFound/i.test(msg)) {
-        msg = 'No camera was found on this device.';
-      } else if (/NotReadableError|in use|busy|NotReadable/i.test(msg)) {
-        msg = 'The camera is being used by another app - close it and try again.';
-      } else if (/insecure|https|NotAllowedError/i.test(msg) || (typeof window !== 'undefined' && window.location && window.location.protocol === 'http:' && window.location.hostname !== 'localhost')) {
-        msg = 'Camera needs a secure (HTTPS) connection - open this app via the https:// address, not http://';
-      }
-      setError(msg);
     }
+
+    let zxingReader = null;
+    if (!detectorRef.current) {
+      try {
+        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        zxingReader = new BrowserMultiFormatReader();
+      } catch (e) {
+        zxingReader = null;
+      }
+    }
+
+    const frame = async () => {
+      if (!scanningRef.current) return;
+      try {
+        if (detectorRef.current) {
+          const codes = await detectorRef.current.detect(video);
+          if (codes && codes.length > 0 && codes[0].rawValue) {
+            onDecoded(codes[0].rawValue);
+            return;
+          }
+          rafRef.current = requestAnimationFrame(frame);
+          return;
+        }
+        if (zxingReader) {
+          const now = Date.now();
+          if (now - lastDecodeRef.current >= 180) { // ZXing is slow - throttle
+            lastDecodeRef.current = now;
+            try {
+              const result = await zxingReader.decodeOnceFromVideoElement(video);
+              if (result && result.getText) {
+                onDecoded(result.getText());
+                return;
+              }
+            } catch (e) {} // no barcode in this frame - keep scanning
+          }
+          rafRef.current = requestAnimationFrame(frame);
+          return;
+        }
+        setStatus('error');
+        setError('No barcode decoder available on this browser. Try the "From Photo" option.');
+      } catch (e) {
+        rafRef.current = requestAnimationFrame(frame);
+      }
+    };
+    rafRef.current = requestAnimationFrame(frame);
+  };
+
+  // Start the live camera - MUST be called from a user tap on iOS.
+  const startCamera = async () => {
+    setError('');
+    setStatus('starting');
+    scanningRef.current = true;
+    const video = videoRef.current;
+    if (!video) { setStatus('error'); setError('Scanner view not ready - tap Start again.'); return; }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('error');
+      if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost') {
+        setError('Camera needs HTTPS. Open this app via https:// (not http://) - e.g. https://aditya-enterprises-erp.vercel.app');
+      } else {
+        setError('This browser does not support camera access. Use the "From Photo" option instead.');
+      }
+      scanningRef.current = false;
+      return;
+    }
+
+    const tryFace = async (facing) => {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing },
+        audio: false
+      });
+      return stream;
+    };
+
+    let stream = null;
+    try {
+      stream = await tryFace('environment');
+    } catch (envErr) {
+      try {
+        stream = await tryFace('user'); // some tablets have only a front camera
+      } catch (frontErr) {
+        setStatus('error');
+        setError('Camera could not be opened. Check the lock icon in the address bar -> allow Camera -> reload, then tap Start again. Or use "From Photo".');
+        scanningRef.current = false;
+        return;
+      }
+    }
+
+    streamRef.current = stream;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('autoplay', 'true');
+    video.muted = true; // must be muted + playsinline for iOS
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) {}
+
+    const track = stream.getVideoTracks()[0];
+    try {
+      const caps = track.getCapabilities?.();
+      if (caps && caps.torch) { setTorchSupported(true); setTorchOn(false); }
+    } catch (e) {}
+
+    setStatus('running');
+    await startDecodeLoop();
   };
 
   const toggleTorch = async () => {
@@ -132,27 +191,42 @@ export default function CameraScanner({ onScan, onClose }) {
   };
 
   const stopScanning = () => {
-    if (controlsRef.current) { try { controlsRef.current.stop(); } catch (e) {} controlsRef.current = null; }
-    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     scanningRef.current = false;
-    setScanning(false);
-    setTorchOn(false);
-    if (videoRef.current) videoRef.current.srcObject = null;
+    stopCamera();
   };
 
-  // Auto-start when the modal opens (Android: instant; iOS: needs a tap so it
-  // silently falls back to the Start button).
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (!alive) return;
-      try { await startScanning({ silent: true }); } catch (e) {}
-    })();
-    return () => { alive = false; };
-  }, []);
+  // Decode a photo/gallery image as a fallback.
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError('');
+    setStatus('starting');
+    try {
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const reader = new BrowserMultiFormatReader();
+      const url = URL.createObjectURL(file);
+      try {
+        const result = await reader.decodeFromImageUrl(url);
+        if (result && result.getText) {
+          onDecoded(result.getText());
+          return;
+        }
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      setStatus('error');
+      setError('No barcode could be read from that photo. Retake it in sharp, bright light, filling the frame.');
+    } catch (err) {
+      setStatus('error');
+      setError('No barcode could be read from that photo. Retake it in sharp, bright light, filling the frame.');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   useEffect(() => {
-    return () => { stopScanning(); };
+    return () => { scanningRef.current = false; stopCamera(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -173,42 +247,57 @@ export default function CameraScanner({ onScan, onClose }) {
           autoPlay
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
-        {!scanning && !lastCode && (
-          <div style={{ color: '#fff', fontSize: 14, position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
-            <div style={{ fontSize: 36, marginBottom: 8, fontWeight: 300, opacity: 0.5 }}>Camera</div>
-            Tap "Start Scanner" to begin
-          </div>
+        {status !== 'running' && (
+          <button
+            onClick={startCamera}
+            style={{
+              position: 'absolute', inset: 0, border: 0, cursor: 'pointer',
+              color: '#fff', background: 'rgba(0,0,0,0.75)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, fontFamily: 'inherit'
+            }}
+          >
+            <span style={{ fontSize: 42, marginBottom: 8 }}>📷</span>
+            <strong style={{ fontSize: 18, marginBottom: 4 }}>{status === 'starting' ? 'Starting camera…' : status === 'error' ? 'Camera failed - tap to retry' : 'Tap to Start Camera'}</strong>
+            <span style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>Point at the barcode and hold steady</span>
+          </button>
         )}
-        {scanning && (
+        {status === 'running' && (
           <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', width: 2, background: 'rgba(255,80,80,0.85)', boxShadow: '0 0 8px rgba(255,0,0,.6)' }} />
         )}
       </div>
 
+      {status === 'running' && (
+        <p style={{ fontSize: 12, color: '#2ecc71', margin: '8px 0 0' }}>● Scanning - point the camera at the barcode…</p>
+      )}
       {error && <p style={{ color: '#e74c3c', fontSize: 13, margin: '8px 0' }}>{error}</p>}
 
       <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-        {!scanning ? (
-          <button className="btn btn-primary btn-lg" onClick={startScanning}>Start Scanner</button>
-        ) : (
+        {status === 'running' ? (
           <>
-            <button className="btn btn-danger" onClick={stopScanning}>Stop Scanner</button>
+            <button className="btn btn-danger" onClick={stopScanning}>Stop Camera</button>
             {torchSupported && (
               <button className={`btn ${torchOn ? 'btn-warning' : 'btn-outline'}`} onClick={toggleTorch}>
                 {torchOn ? 'Torch On' : 'Torch'}
               </button>
             )}
           </>
+        ) : (
+          <button className="btn btn-primary btn-lg" onClick={startCamera} disabled={status === 'starting'}>
+            {status === 'starting' ? 'Starting…' : 'Start Scanner'}
+          </button>
         )}
+        <button className="btn btn-outline" onClick={() => fileRef.current?.click()}>📄 From Photo</button>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
         {lastCode && (
           <div style={{ width: '100%', marginTop: 8 }}>
             <p style={{ fontSize: 13, color: '#555' }}>Scanned: <strong style={{ fontFamily: 'monospace', fontSize: 16, color: '#2c3e50' }}>{lastCode}</strong></p>
-            <button className="btn btn-success" onClick={() => { setLastCode(''); scanningRef.current = false; startScanning(); }}>Scan Another</button>
           </div>
         )}
       </div>
 
       <p style={{ fontSize: 11, color: '#999', marginTop: 8 }}>
-        Point camera at a barcode. Works best in good lighting. Powered by ZXing (open-source barcode engine). Supported on Chrome/Edge/Safari mobile.
+        Works on Chrome/Edge/Safari (Android & iPhone) over HTTPS. Powered by the browser's native BarcodeDetector and ZXing (open-source).
       </p>
     </div>
   );
