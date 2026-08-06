@@ -159,7 +159,11 @@ export default function CameraScanner({ onScan, onClose }) {
 
     const tryFace = async (facing) => {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing },
+        video: {
+          facingMode: { ideal: facing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
         audio: false
       });
       return stream;
@@ -172,12 +176,29 @@ export default function CameraScanner({ onScan, onClose }) {
       try {
         stream = await tryFace('user'); // some tablets have only a front camera
       } catch (frontErr) {
-        setStatus('error');
-        setError('Camera could not be opened. Check the lock icon in the address bar -> allow Camera -> reload, then tap Start again. Or use "From Photo".');
-        scanningRef.current = false;
-        return;
+        // Last resort: no facing preference at all (some Android devices
+        // reject facingMode entirely and only accept a bare video: true)
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        } catch (finalErr) {
+          setStatus('error');
+          setError('Camera could not be opened. Check the lock icon in the address bar -> allow Camera -> reload, then tap Start again. Or use "From Photo".');
+          scanningRef.current = false;
+          return;
+        }
       }
     }
+
+    // Android quirk: the stream's actual video track may be dead if the device
+    // resolved facingMode to a camera without live frames. Verify we have a
+    // working track and prefer the one labeled "back" if multiple exist.
+    try {
+      const tracks = stream.getVideoTracks();
+      const back = tracks.find(t => /back|rear/i.test(t.label)) || tracks[0];
+      if (back && back !== tracks[0]) {
+        tracks.forEach(t => { if (t !== back) t.stop(); });
+      }
+    } catch (e) {}
 
     streamRef.current = stream;
     video.setAttribute('playsinline', 'true');
