@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { get, all, run, getDb } = require('../db');
+const { generateInvoiceNumber } = require('./invoiceUtils');
 const PDFDocument = require('pdfkit');
 
 router.get('/', async (req, res) => {
@@ -49,7 +50,7 @@ router.post('/', async (req, res) => {
     const data = req.body;
     const items = data.items || [];
     if (items.length === 0) { res.json({ success: false, error: 'No items' }); return; }
-    const invoiceNum = `AE/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
+    const invoiceNum = await generateInvoiceNumber();
     const saleDate = new Date().toISOString().split('T')[0];
     let subtotal = 0, discountTotal = 0, cgstTotal = 0, sgstTotal = 0, igstTotal = 0, cessTotal = 0, grandTotal = 0;
 

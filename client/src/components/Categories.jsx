@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
+import { confirmAction } from '../confirm';
 
 export default function Categories() {
   const [categories, setCategories] = useState([]);
@@ -44,7 +45,7 @@ export default function Categories() {
   };
 
   const deleteSubcategory = async (catId, subId) => {
-    if (!confirm('Delete this subcategory?')) return;
+    if (!(await confirmAction({ title: 'Delete subcategory?', message: 'This subcategory will be permanently removed.', danger: true, confirmText: 'Delete' }))) return;
     const d = await api('/subcategory?catId=' + catId + '&subId=' + subId, { method: 'DELETE' });
     if (d.success) { showToast('Subcategory deleted'); loadCategories(); }
     else { showToast(d.error || 'Delete failed', 'error'); }
@@ -58,7 +59,7 @@ export default function Categories() {
   };
 
   const deleteCategory = async (id) => {
-    if (!confirm('Delete this category and all its subcategories?')) return;
+    if (!(await confirmAction({ title: 'Delete category?', message: 'This category and ALL its subcategories will be permanently removed.', danger: true, confirmText: 'Delete' }))) return;
     const d = await api('/category?id=' + id, { method: 'DELETE' });
     if (d.success) { showToast('Category deleted'); loadCategories(); }
     else { showToast(d.error || 'Delete failed', 'error'); }

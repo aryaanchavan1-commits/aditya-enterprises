@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { get, all, run } = require('../db');
+const { generateInvoiceNumber } = require('./invoiceUtils');
 const bwipjs = require('bwip-js');
 const path = require('path');
 const fs = require('fs');
@@ -59,7 +60,7 @@ router.post('/scan-sale', async (req, res) => {
     const product = await findProductByCode(barcode);
     if (!product) { res.json({ success: false, error: 'Product not found' }); return; }
     if (product.quantity < qty) { res.json({ success: false, error: `Only ${product.quantity} left in stock` }); return; }
-    const invoiceNum = `AE/${new Date().getFullYear()}/${String(Date.now()).slice(-6)}`;
+    const invoiceNum = await generateInvoiceNumber();
     const saleDate = new Date().toISOString().split('T')[0];
     const lineTotal = product.sell_price * qty;
     const discountAmt = lineTotal * ((product.discount_percent || 0) / 100);

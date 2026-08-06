@@ -309,14 +309,14 @@ router.get('/balance-sheet/csv', async (req, res) => {
 
 router.get('/low-stock', async (req, res) => {
   try {
-    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= 5 ORDER BY quantity ASC');
+    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= COALESCE(low_stock_threshold, 5) ORDER BY quantity ASC');
     res.json({ success: true, data: products });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
 router.get('/low-stock/csv', async (req, res) => {
   try {
-    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= 5 ORDER BY quantity ASC');
+    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= COALESCE(low_stock_threshold, 5) ORDER BY quantity ASC');
     let csv = 'Product Name,Quantity,Sell Price,Cost Price,Barcode\n';
     products.forEach(p => { csv += `"${p.name}",${p.quantity},${p.sell_price},${p.inward_price},${p.barcode || ''}\n`; });
     res.setHeader('Content-Type', 'text/csv');
@@ -327,7 +327,7 @@ router.get('/low-stock/csv', async (req, res) => {
 
 router.get('/low-stock/pdf', async (req, res) => {
   try {
-    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= 5 ORDER BY quantity ASC');
+    const products = await all('SELECT id, name, quantity, sell_price, inward_price, barcode FROM products WHERE quantity <= COALESCE(low_stock_threshold, 5) ORDER BY quantity ASC');
     const settings = {}; (await all('SELECT * FROM settings')).forEach(s => settings[s.key] = s.value);
     const company = { name: settings['company_name'] || 'Aditya Enterprises' };
     const doc = new PDFDocument({ size: 'A4', margin: 30 }); const chunks = [];
@@ -347,3 +347,4 @@ router.get('/low-stock/pdf', async (req, res) => {
 });
 
 module.exports = router;
+

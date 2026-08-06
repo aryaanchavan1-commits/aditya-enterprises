@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
+import { confirmAction } from '../confirm';
 
 const API = '/api';
 const CATEGORIES = ['Office', 'Travel', 'Utilities', 'Salary', 'Maintenance', 'Transport', 'Marketing', 'Other'];
@@ -41,7 +42,7 @@ export default function Accounting() {
   };
 
   const handleDelete = async (type, id) => {
-    if (!confirm('Delete this entry?')) return;
+    if (!(await confirmAction({ title: 'Delete entry?', message: 'This entry will be permanently removed.', danger: true, confirmText: 'Delete' }))) return;
     const route = type === 'cash' ? `/accounting/cash-book/${id}` : type === 'expense' ? `/accounting/expenses/${id}` : `/accounting/incomes/${id}`;
     const d = await api(route, { method: 'DELETE' });
     if (d.success) { showToast('Deleted'); refreshAll(); }

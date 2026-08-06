@@ -17,17 +17,6 @@ export async function api(path, opts = {}) {
   }
 }
 
-export function withCache(key, ttl = 60000) {
-  const cache = {};
-  return async function(path, opts = {}) {
-    const now = Date.now();
-    if (cache[key] && now - cache[key].time < ttl) return cache[key].data;
-    const data = await api(path, opts);
-    if (data.success) { cache[key] = { data, time: now }; }
-    return data;
-  };
-}
-
 async function getXLSX() {
   const mod = await import('xlsx');
   return mod.default || mod;

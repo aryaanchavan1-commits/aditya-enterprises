@@ -1,8 +1,9 @@
 import React, { useState, Component } from 'react';
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { startBarcodeScanner } from './scanner';
 import { auth } from './auth';
 import Dashboard from './components/Dashboard';
+import ConfirmHost from './confirm';
 import Products from './components/Products';
 import Categories from './components/Categories';
 import SalesPOS from './components/SalesPOS';
@@ -54,6 +55,7 @@ function App() {
   const [showMore, setShowMore] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const [serverOnline, setServerOnline] = useState(true);
   const [authState, setAuthState] = useState('loading'); // loading | open | locked
   const [pwInput, setPwInput] = useState('');
@@ -116,6 +118,17 @@ function App() {
 
   const closeSidebar = () => { if (isMobile) setSidebarOpen(false); };
 
+  // Quick-action navigation from the Dashboard: plain pages navigate directly,
+  // "scan" opens the Products page with the camera scanner auto-launched.
+  const handleDashboardNavigate = (target) => {
+    if (target === 'scan') {
+      navigate('/products', { state: { openScan: true } });
+    } else {
+      navigate(target);
+    }
+    closeSidebar();
+  };
+
   const pageTitle = TAB_ITEMS.concat(MORE_ITEMS).find(i => i.path === location.pathname)?.label || 'Aditya ERP';
   const isTabPath = (path) => location.pathname === path;
 
@@ -146,6 +159,7 @@ function App() {
   return (
     <ErrorBoundary>
       <div className="app-layout">
+        <ConfirmHost />
         {!serverOnline && (
           <div className="offline-banner">
             <span>&#9888;</span> Server connection lost. Retrying...
@@ -207,7 +221,7 @@ function App() {
           {/* Page content */}
           <div className="page-content">
             <Routes>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/" element={<Dashboard onNavigate={handleDashboardNavigate} />} />
               <Route path="/products" element={<Products />} />
               <Route path="/categories" element={<Categories />} />
               <Route path="/pos" element={<SalesPOS />} />

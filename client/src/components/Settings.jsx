@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { confirmAction } from '../confirm';
 import { bluetoothSupported, pairPrinter, reconnectPrinter, sendBytes, buildEscPosTest, getSavedPrinter, clearSavedPrinter, disconnectActive, isConnected, printViaBridge, serialSupported, connectSerialPrinter, disconnectSerial, serialConnected, usbSupported, connectUsbPrinter, disconnectUsb, usbConnected, getDirectPrinter, printViaSerial, printViaUsb } from '../printer';
 import { qzSupported, connectQz, disconnectQz, qzConnected, listQzPrinters, printQzRaw, printQzHtml, getQzThermal, saveQzThermal, getQzNormal, saveQzNormal, buildQzTestHtml } from '../qz';
 
@@ -757,8 +758,7 @@ export default function Settings() {
               showToast('Chat history cleared');
             }}>Clear AI History</button>
             <button className="btn btn-sm btn-danger" onClick={async () => {
-              if (!window.confirm('Reset ALL data? This will delete all products, sales, purchases, categories and start fresh. This cannot be undone.')) return;
-              if (!window.confirm('Are you absolutely sure? All your business data will be permanently deleted.')) return;
+              if (!(await confirmAction({ title: 'Reset ALL data?', message: 'This will delete all products, sales, purchases, categories and start fresh.\n\nAre you absolutely sure? This cannot be undone.', danger: true, confirmText: 'Yes, Reset Everything' }))) return;
               try {
                 const r = await fetch(`${API}/settings/reset`, { method: 'POST' });
                 const d = await r.json();

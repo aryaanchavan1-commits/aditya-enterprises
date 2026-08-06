@@ -4,11 +4,12 @@ const { get, all, run } = require('../db');
 
 router.get('/', async (req, res) => {
   try {
-    const { search, start_date, end_date } = req.query;
+    const { search, start_date, end_date, payment_status } = req.query;
     let sql = 'SELECT * FROM purchases WHERE 1=1'; const params = [];
     if (search) { sql += ' AND (invoice_number LIKE ? OR supplier_name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
     if (start_date) { sql += ' AND purchase_date >= ?'; params.push(start_date); }
     if (end_date) { sql += ' AND purchase_date <= ?'; params.push(end_date); }
+    if (payment_status && payment_status !== 'all') { sql += ' AND payment_status = ?'; params.push(payment_status); }
     sql += ' ORDER BY created_at DESC';
     const purchases = await all(sql, params);
     res.json({ success: true, data: purchases.map(p => ({ ...p, items: JSON.parse(p.items || '[]') })) });

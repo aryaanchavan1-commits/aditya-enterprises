@@ -194,6 +194,7 @@ app.use('/data/barcodes', serveBarcode);
 app.use('/barcodes', serveBarcode);
 
 app.use('/api/products', require('../src/routes/products'));
+app.use('/api/dashboard', require('../src/routes/dashboard'));
 app.use('/api/categories', require('../src/routes/categories'));
 app.use('/api/sales', require('../src/routes/sales'));
 app.use('/api/barcode', require('../src/routes/barcode'));

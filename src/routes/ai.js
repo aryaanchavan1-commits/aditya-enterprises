@@ -58,7 +58,7 @@ async function executeToolCall(name, args) {
     case 'get_inventory_status': {
       const total = (await get('SELECT COUNT(*) as c FROM products')).c;
       const totalQty = (await get('SELECT COALESCE(SUM(quantity),0) as c FROM products')).c;
-      const lowStock = await all('SELECT name, quantity, sell_price FROM products WHERE quantity <= 5 ORDER BY quantity ASC');
+      const lowStock = await all('SELECT name, quantity, sell_price FROM products WHERE quantity <= COALESCE(low_stock_threshold, 5) ORDER BY quantity ASC');
       return { totalProducts: total, totalQuantity: totalQty, lowStockCount: lowStock.length, lowStockItems: lowStock };
     }
     case 'create_product': {
@@ -227,8 +227,8 @@ router.post('/analyze', async (req, res) => {
     let context = '';
     if (type === 'inventory') {
       const tp = (await get('SELECT COUNT(*) as c FROM products')).c;
-      const ls = (await get('SELECT COUNT(*) as c FROM products WHERE quantity <= 5')).c;
-      const lsi = await all('SELECT name, quantity FROM products WHERE quantity <= 5 LIMIT 10');
+      const ls = (await get('SELECT COUNT(*) as c FROM products WHERE quantity <= COALESCE(low_stock_threshold, 5)')).c;
+      const lsi = await all('SELECT name, quantity FROM products WHERE quantity <= COALESCE(low_stock_threshold, 5) LIMIT 10');
       context = `Inventory: ${tp} products, ${ls} low stock. Items: ${JSON.stringify(lsi)}`;
     } else if (type === 'sales') {
       const today = new Date().toISOString().split('T')[0];

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { exportToExcel } from '../api';
+import { confirmAction } from '../confirm';
 
 const API = '/api';
 const UNITS = ['pcs', 'kg', 'meter', 'bag', 'box', 'dozen', 'liter', 'pack', 'set', 'roll', 'sheet', 'pair'];
@@ -13,6 +14,7 @@ export default function Purchases() {
   const [paymentStatus, setPaymentStatus] = useState('paid');
   const [notes, setNotes] = useState('');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [toast, setToast] = useState(null);
   const [addNewMode, setAddNewMode] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: '', quantity: 1, inward_price: 0, unit: 'pcs', gst_rate: 18 });
@@ -25,11 +27,13 @@ export default function Purchases() {
   }, []);
 
   const fetchPurchases = () => {
-    fetch(`${API}/purchases`).then(r => r.json()).then(d => { if (d.success) setPurchases(d.data); });
+    fetch(`${API}/purchases?payment_status=${statusFilter}`).then(r => r.json()).then(d => { if (d.success) setPurchases(d.data); });
   };
 
+  useEffect(() => { fetchPurchases(); }, [statusFilter]);
+
   const handleDeletePurchase = async (id) => {
-    if (!confirm('Delete this purchase record?')) return;
+    if (!(await confirmAction({ title: 'Delete purchase?', message: 'This purchase record will be permanently removed.', danger: true, confirmText: 'Delete' }))) return;
     try {
       const r = await fetch(`${API}/purchases/${id}`, { method: 'DELETE' });
       const d = await r.json();
@@ -289,11 +293,18 @@ export default function Purchases() {
       )}
 
       <div className="card">
-        <h3>Purchase History</h3>
-        {purchases.length === 0 ? (
-          <div className="empty-state"><p>No purchases yet</p></div>
-        ) : (
-          <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <h3>Purchase History</h3>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {['all', 'paid', 'pending', 'partial'].map(s => (
+              <button key={s} className={`btn btn-sm ${statusFilter === s ? 'btn-primary' : 'btn-outline'}`} onClick={() => setStatusFilter(s)} style={{ textTransform: 'capitalize' }}>{s === 'all' ? 'All' : s}</button>
+            ))}
+          </div>
+        </div>
+        {statusFilter !== 'all' && purchases.length === 0 && (
+          <div className="empty-state"><p>No {statusFilter} purchases</p></div>
+        )}
+        {purchases.length > 0 && (<>
             <div className="table-container desktop-table">
               <table>
                 <thead><tr><th>Invoice</th><th>Date</th><th>Supplier</th><th>Items</th><th>Total</th><th>Status</th><th></th></tr></thead>

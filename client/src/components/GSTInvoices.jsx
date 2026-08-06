@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { exportToExcel } from '../api';
+import { confirmAction } from '../confirm';
 
 const API = '/api';
 
@@ -17,7 +18,7 @@ export default function GSTInvoices() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this sale? Stock will be restored.')) return;
+    if (!(await confirmAction({ title: 'Delete sale?', message: 'This sale will be permanently deleted and the stock will be restored.', danger: true, confirmText: 'Delete' }))) return;
     const r = await fetch(`${API}/sales/${id}`, { method: 'DELETE' });
     const d = await r.json();
     if (d.success) { showToast('Sale deleted, stock restored'); fetchSales(); }

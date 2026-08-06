@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { confirmAction } from '../confirm';
 const API = '/api';
 const STATUSES = ['pending', 'in_progress', 'awaiting_parts', 'completed', 'delivered', 'cancelled'];
 export default function Servicing() {
@@ -29,7 +30,7 @@ export default function Servicing() {
     } catch (e) { showToast('Save failed', 'error'); }
   };
   const handleDelete = async (id) => {
-    if (!confirm('Delete this service record?')) return;
+    if (!(await confirmAction({ title: 'Delete service record?', message: 'This service record will be permanently removed.', danger: true, confirmText: 'Delete' }))) return;
     try { await fetch(`${API}/services/${id}`, { method: 'DELETE' }); showToast('Deleted'); loadServices(); }
     catch (e) { showToast('Delete failed', 'error'); }
   };

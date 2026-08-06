@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api, exportToExcel, readExcelFile } from '../api';
 import { useReactToPrint } from 'react-to-print';
 import { barcodeDataUrl } from '../barcode';
 import { printSmartLabel } from '../printer';
 import { downloadBarcodesPdf } from '../barcodePdf';
+import { confirmAction } from '../confirm';
 import CameraScanner from './CameraScanner';
 
 export default function Products() {
+  const location = useLocation();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState('');
@@ -47,6 +50,15 @@ export default function Products() {
 
   useEffect(() => { loadProducts(); loadCategories(); }, []);
   useEffect(() => { loadProducts(); }, [search, categoryFilter]);
+
+  // Dashboard "Camera Scan" quick action arrives here with state.openScan.
+  useEffect(() => {
+    if (location.state?.openScan) {
+      setScanOpen(true);
+      window.history.replaceState({}, ''); // clear the flag after use
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   // Any keyboard-wedge scanner (USB / RF / Bluetooth-HID) scanning anywhere
   // on this page gets caught by the global listener and handled like a
@@ -189,7 +201,7 @@ export default function Products() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this product?')) return;
+    if (!(await confirmAction({ title: 'Delete product?', message: 'This product will be permanently removed. Past sales are kept.', danger: true, confirmText: 'Delete' }))) return;
     const d = await api('/products/' + id, { method: 'DELETE' });
     if (d.success) { showToast('Product deleted'); loadProducts(); }
     else showToast(d.error || 'Delete failed', 'error');
@@ -291,7 +303,7 @@ export default function Products() {
   const handleGenerateAllBarcodes = async () => {
     const missing = products.filter(p => !p.barcode);
     if (!missing.length) return showToast('All products already have barcodes');
-    if (!confirm(`Generate barcodes for ${missing.length} products without barcodes?`)) return;
+    if (!(await confirmAction({ title: 'Generate barcodes?', message: `Generate barcodes for ${missing.length} product${missing.length > 1 ? 's' : ''} without one?` }))) return;
     const ids = missing.map(p => p.id);
     const d = await api('/barcode/generate-bulk', { method: 'POST', body: { product_ids: ids } });
     if (d.success) showToast(`Generated ${d.data.length} barcode(s)`);
