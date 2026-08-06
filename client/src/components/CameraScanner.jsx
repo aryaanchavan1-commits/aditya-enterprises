@@ -23,7 +23,7 @@ export default function CameraScanner({ onScan, onClose }) {
   const detectorRef = useRef(null);
   const rafRef = useRef(0);
   const scanningRef = useRef(false);
-  const lastDecodeRef = useRef(0);
+  const zxingControlsRef = useRef(null);
   const fileRef = useRef(null);
 
   const beep = () => {
@@ -55,12 +55,21 @@ export default function CameraScanner({ onScan, onClose }) {
   const stopCamera = () => {
     cancelAnimationFrame(rafRef.current);
     rafRef.current = 0;
+    if (zxingControlsRef.current) {
+      try { zxingControlsRef.current.stop(); } catch (e) {}
+      zxingControlsRef.current = null;
+    }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     if (videoRef.current) videoRef.current.srcObject = null;
     setTorchOn(false);
   };
 
   // Decode loop: native BarcodeDetector first, ZXing fallback.
+  // NOTE: ZXing's decodeFromVideoElement() manages its own internal continuous
+  // decode loop - it MUST be started only once and stopped via its controls.
+  // Calling decodeOnceFromVideoElement() repeatedly stacks unbounded parallel
+  // decode loops that choke the browser. We start it once and let its callback
+  // fire on every scan attempt.
   const startDecodeLoop = async () => {
     const video = videoRef.current;
     if (!video) return;
@@ -84,40 +93,49 @@ export default function CameraScanner({ onScan, onClose }) {
       }
     }
 
-    const frame = async () => {
-      if (!scanningRef.current) return;
-      try {
-        if (detectorRef.current) {
+    if (detectorRef.current) {
+      // Path 1 - native BarcodeDetector: light rAF loop, one detect() per frame.
+      const frame = async () => {
+        if (!scanningRef.current) return;
+        try {
           const codes = await detectorRef.current.detect(video);
           if (codes && codes.length > 0 && codes[0].rawValue) {
             onDecoded(codes[0].rawValue);
             return;
           }
           rafRef.current = requestAnimationFrame(frame);
-          return;
-        }
-        if (zxingReader) {
-          const now = Date.now();
-          if (now - lastDecodeRef.current >= 180) { // ZXing is slow - throttle
-            lastDecodeRef.current = now;
-            try {
-              const result = await zxingReader.decodeOnceFromVideoElement(video);
-              if (result && result.getText) {
-                onDecoded(result.getText());
-                return;
-              }
-            } catch (e) {} // no barcode in this frame - keep scanning
-          }
+        } catch (e) {
           rafRef.current = requestAnimationFrame(frame);
-          return;
         }
-        setStatus('error');
-        setError('No barcode decoder available on this browser. Try the "From Photo" option.');
+      };
+      rafRef.current = requestAnimationFrame(frame);
+      return;
+    }
+
+    if (zxingReader) {
+      // Path 2 - ZXing: one continuous loop, callback fires after every attempt.
+      const cb = (result, err, controls) => {
+        if (!scanningRef.current) { try { controls.stop(); } catch (e) {} return; }
+        if (result && result.getText) {
+          onDecoded(result.getText());
+          try { controls.stop(); } catch (e) {}
+        }
+      };
+      try {
+        zxingControlsRef.current = await zxingReader.decodeFromVideoElement(video, cb);
       } catch (e) {
-        rafRef.current = requestAnimationFrame(frame);
+        // Video not ready yet - try once more shortly.
+        setTimeout(async () => {
+          if (scanningRef.current && videoRef.current && !zxingControlsRef.current) {
+            try { zxingControlsRef.current = await zxingReader.decodeFromVideoElement(videoRef.current, cb); } catch (e2) {}
+          }
+        }, 300);
       }
-    };
-    rafRef.current = requestAnimationFrame(frame);
+      return;
+    }
+
+    setStatus('error');
+    setError('No barcode decoder available on this browser. Try the "From Photo" option.');
   };
 
   // Start the live camera - MUST be called from a user tap on iOS.
