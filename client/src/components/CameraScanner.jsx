@@ -18,12 +18,14 @@ export default function CameraScanner({ onScan, onClose }) {
   const [lastCode, setLastCode] = useState('');
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [decoder, setDecoder] = useState(''); // which engine is decoding
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const detectorRef = useRef(null);
   const rafRef = useRef(0);
   const scanningRef = useRef(false);
   const zxingControlsRef = useRef(null);
+  const decodeStartedAtRef = useRef(0);
+  const switchedDecoderRef = useRef(false);
   const fileRef = useRef(null);
 
   const beep = () => {
@@ -62,6 +64,8 @@ export default function CameraScanner({ onScan, onClose }) {
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     if (videoRef.current) videoRef.current.srcObject = null;
     setTorchOn(false);
+    setDecoder('');
+    switchedDecoderRef.current = false;
   };
 
   // Decode loop: native BarcodeDetector first, ZXing fallback.
@@ -70,21 +74,26 @@ export default function CameraScanner({ onScan, onClose }) {
   // Calling decodeOnceFromVideoElement() repeatedly stacks unbounded parallel
   // decode loops that choke the browser. We start it once and let its callback
   // fire on every scan attempt.
+  //
+  // A watchdog guarantees a decode path always works: if the native
+  // BarcodeDetector produces nothing within 6s (some Android devices expose it
+  // but never actually detect), we switch to the ZXing continuous loop.
   const startDecodeLoop = async () => {
     const video = videoRef.current;
     if (!video) return;
 
     const BarcodeDetectorCtor = window.BarcodeDetector;
+    let detector = null;
     if (BarcodeDetectorCtor) {
       try {
-        detectorRef.current = await new BarcodeDetectorCtor({ formats: FORMATS });
+        detector = await new BarcodeDetectorCtor({ formats: FORMATS });
       } catch (e) {
-        try { detectorRef.current = new BarcodeDetectorCtor(); } catch (e2) { detectorRef.current = null; }
+        try { detector = new BarcodeDetectorCtor(); } catch (e2) { detector = null; }
       }
     }
 
     let zxingReader = null;
-    if (!detectorRef.current) {
+    if (!detector) {
       try {
         const { BrowserMultiFormatReader } = await import('@zxing/browser');
         zxingReader = new BrowserMultiFormatReader();
@@ -93,27 +102,9 @@ export default function CameraScanner({ onScan, onClose }) {
       }
     }
 
-    if (detectorRef.current) {
-      // Path 1 - native BarcodeDetector: light rAF loop, one detect() per frame.
-      const frame = async () => {
-        if (!scanningRef.current) return;
-        try {
-          const codes = await detectorRef.current.detect(video);
-          if (codes && codes.length > 0 && codes[0].rawValue) {
-            onDecoded(codes[0].rawValue);
-            return;
-          }
-          rafRef.current = requestAnimationFrame(frame);
-        } catch (e) {
-          rafRef.current = requestAnimationFrame(frame);
-        }
-      };
-      rafRef.current = requestAnimationFrame(frame);
-      return;
-    }
-
-    if (zxingReader) {
-      // Path 2 - ZXing: one continuous loop, callback fires after every attempt.
+    const startZxing = async () => {
+      const v = videoRef.current;
+      if (!v || !zxingReader || zxingControlsRef.current) return;
       const cb = (result, err, controls) => {
         if (!scanningRef.current) { try { controls.stop(); } catch (e) {} return; }
         if (result && result.getText) {
@@ -122,15 +113,42 @@ export default function CameraScanner({ onScan, onClose }) {
         }
       };
       try {
-        zxingControlsRef.current = await zxingReader.decodeFromVideoElement(video, cb);
+        zxingControlsRef.current = await zxingReader.decodeFromVideoElement(v, cb);
       } catch (e) {
-        // Video not ready yet - try once more shortly.
-        setTimeout(async () => {
-          if (scanningRef.current && videoRef.current && !zxingControlsRef.current) {
-            try { zxingControlsRef.current = await zxingReader.decodeFromVideoElement(videoRef.current, cb); } catch (e2) {}
-          }
-        }, 300);
+        setTimeout(() => { if (scanningRef.current && videoRef.current && !zxingControlsRef.current) startZxing(); }, 300);
       }
+    };
+
+    if (detector) {
+      // Path 1 - native BarcodeDetector: light rAF loop, one detect() per frame.
+      setDecoder('native (BarcodeDetector)');
+      // Watchdog: if nothing decoded within 6s, fall back to ZXing.
+      const switchAt = Date.now() + 6000;
+      const frame = async () => {
+        if (!scanningRef.current) return;
+        try {
+          const codes = await detector.detect(video);
+          if (codes && codes.length > 0 && codes[0].rawValue) {
+            onDecoded(codes[0].rawValue);
+            return;
+          }
+        } catch (e) {}
+        if (Date.now() >= switchAt && !switchedDecoderRef.current) {
+          switchedDecoderRef.current = true;
+          setDecoder('ZXing (continuous)');
+          startZxing();
+          return; // ZXing loop now owns decoding; stop the rAF loop
+        }
+        rafRef.current = requestAnimationFrame(frame);
+      };
+      rafRef.current = requestAnimationFrame(frame);
+      return;
+    }
+
+    if (zxingReader) {
+      // Path 2 - ZXing: one continuous loop, callback fires after every attempt.
+      setDecoder('ZXing (continuous)');
+      await startZxing();
       return;
     }
 
@@ -307,7 +325,7 @@ export default function CameraScanner({ onScan, onClose }) {
       </div>
 
       {status === 'running' && (
-        <p style={{ fontSize: 12, color: '#2ecc71', margin: '8px 0 0' }}>● Scanning - point the camera at the barcode…</p>
+        <p style={{ fontSize: 12, color: '#2ecc71', margin: '8px 0 0' }}>● Scanning - point the camera at the barcode…{decoder ? <span style={{ color: '#888' }}> (via {decoder})</span> : ''}</p>
       )}
       {error && <p style={{ color: '#e74c3c', fontSize: 13, margin: '8px 0' }}>{error}</p>}
 
