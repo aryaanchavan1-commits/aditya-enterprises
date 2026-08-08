@@ -92,14 +92,21 @@ export default function CameraScanner({ onScan, onClose }) {
       }
     }
 
+    // ZXing is ALWAYS loaded (even when BarcodeDetector exists) so the
+    // watchdog can fall back to it if native never produces a result.
     let zxingReader = null;
-    if (!detector) {
-      try {
-        const { BrowserMultiFormatReader } = await import('@zxing/browser');
-        zxingReader = new BrowserMultiFormatReader();
-      } catch (e) {
-        zxingReader = null;
-      }
+    try {
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const { DecodeHintType, BarcodeFormat } = await import('@zxing/library');
+      zxingReader = new BrowserMultiFormatReader(
+        new Map([
+          [DecodeHintType.TRY_HARDER, true],
+          [DecodeHintType.POSSIBLE_FORMATS, FORMATS.map(f => BarcodeFormat[f.toUpperCase()])]
+        ]),
+        200 // scan attempt every 200ms for snappier detection
+      );
+    } catch (e) {
+      zxingReader = null;
     }
 
     const startZxing = async () => {
@@ -179,8 +186,8 @@ export default function CameraScanner({ onScan, onClose }) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: facing },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
         },
         audio: false
       });

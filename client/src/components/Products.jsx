@@ -211,7 +211,6 @@ export default function Products() {
   const [labelQty, setLabelQty] = useState(1);
   const labelRef = useRef(null);
   const handlePrintLabel = useReactToPrint({ contentRef: labelRef, documentTitle: 'Product_Label' });
-
   const openLabel = (p) => {
     setLabelProduct(p);
     // One label per unit in stock by default, so multi-quantity products
@@ -220,6 +219,7 @@ export default function Products() {
   };
 
   const labelBarcode = labelProduct?.barcode ? barcodeDataUrl(labelProduct.barcode, { maxWidthPx: 900, heightPx: 300 }) : '';
+  const [zoomBarcode, setZoomBarcode] = useState(null);
 
   const [labelPrinting, setLabelPrinting] = useState(false);
 
@@ -501,7 +501,7 @@ export default function Products() {
                   <div className="label-name">{labelProduct.name}</div>
                   <div className="label-price">Rs. {Number(labelProduct.sell_price).toLocaleString('en-IN')}</div>
                   {labelBarcode
-                    ? <img src={labelBarcode} alt="barcode" className="label-barcode" />
+                    ? <img src={labelBarcode} alt="barcode" className="label-barcode" onClick={() => setZoomBarcode(labelBarcode)} style={{ cursor: 'zoom-in' }} />
                     : labelProduct.barcode
                       ? <div className="label-barcode-text">{labelProduct.barcode}</div>
                       : null}
@@ -518,6 +518,17 @@ export default function Products() {
                 {labelPrinting ? 'Printing...' : `Print ${labelQty} Label${labelQty > 1 ? 's' : ''}`}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {zoomBarcode && (
+        <div className="modal-overlay" onClick={() => setZoomBarcode(null)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="modal" style={{ textAlign: 'center', width: 'auto', maxWidth: '94vw', padding: 20 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>{labelProduct?.name}</h3>
+            <img src={zoomBarcode} alt="barcode" style={{ width: '100%', maxWidth: 900, display: 'block', background: '#fff', borderRadius: 4 }} />
+            <p style={{ fontSize: 12, color: '#666', margin: '10px 0 0' }}>Scan this with your phone camera, or tap outside to close.</p>
+            <button className="btn btn-outline" style={{ marginTop: 10 }} onClick={() => setZoomBarcode(null)}>Close</button>
           </div>
         </div>
       )}
