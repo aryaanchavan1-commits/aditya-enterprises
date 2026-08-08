@@ -4,7 +4,7 @@
 // Labels are laid out on an A4 grid of 62x35mm cells (3 cols x 7 rows).
 
 import { jsPDF } from 'jspdf';
-import { barcodeImageData } from './barcode';
+import { encodePattern } from './barcode';
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -43,16 +43,29 @@ function drawLabel(doc, x, y, p) {
   doc.text('Rs. ' + Number(p.sell_price || 0).toLocaleString('en-IN'), cx, priceY);
   doc.setTextColor(0, 0, 0);
 
-  // Barcode - centered, drawn at its TRUE aspect ratio (no stretching, so it
-  // stays perfectly scannable). Height is clamped so it never hits the SKU line.
-  const img = p.barcode ? barcodeImageData(String(p.barcode), { maxWidthPx: 900, heightPx: 190 }) : null;
-  if (img) {
+  // Barcode - drawn as vector bars directly into the PDF. No image embedding:
+  // jsPDF's PNG pipeline can silently collapse canvas images (and vectors are
+  // razor-sharp at any print DPI, so bars always stay scannable).
+  const pattern = p.barcode ? encodePattern(String(p.barcode)) : null;
+  if (pattern) {
     const skuTop = y + CELL_H - 2 - 3.2; // SKU baseline minus a margin
     const avail = skuTop - (priceY + 3);
-    const targetH = Math.min(14, Math.max(9, avail));
-    const drawW = Math.min(inner, targetH * (img.width / img.height));
-    const drawH = drawW * (img.height / img.width);
-    doc.addImage(img.dataUrl, 'PNG', cx + (inner - drawW) / 2, priceY + 3, drawW, drawH);
+    const barH = Math.min(14, Math.max(9, avail));
+    const quiet = 10; // modules of quiet zone each side
+    let moduleW = inner / (pattern.length + quiet * 2);
+    if (moduleW < 0.25) moduleW = 0.25; // never below a printable X-dimension
+    const totalW = (pattern.length + quiet * 2) * moduleW;
+    let barX = cx + (inner - totalW) / 2;
+    if (barX < x) barX = x; // very long codes may use the full card width
+    const barY = priceY + 3;
+    doc.setFillColor(0, 0, 0);
+    let bx = barX + quiet * moduleW;
+    let isBar = true;
+    for (const m of pattern) {
+      if (isBar) doc.rect(bx, barY, m * moduleW, barH, 'F');
+      bx += m * moduleW;
+      isBar = !isBar;
+    }
   }
 
   // SKU at the bottom, small gray.
