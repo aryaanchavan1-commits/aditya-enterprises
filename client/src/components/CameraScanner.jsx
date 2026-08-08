@@ -111,7 +111,14 @@ export default function CameraScanner({ onScan, onClose }) {
 
     const startZxing = async () => {
       const v = videoRef.current;
-      if (!v || !zxingReader || zxingControlsRef.current) return;
+      if (!v) return;
+      if (!zxingReader) {
+        // ZXing failed to load - surface it instead of scanning nothing.
+        setStatus('error');
+        setError('Barcode decoder could not be loaded. Try the "From Photo" option.');
+        return;
+      }
+      if (zxingControlsRef.current) return;
       const cb = (result, err, controls) => {
         if (!scanningRef.current) { try { controls.stop(); } catch (e) {} return; }
         if (result && result.getText) {
@@ -266,8 +273,16 @@ export default function CameraScanner({ onScan, onClose }) {
     setError('');
     setStatus('starting');
     try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const reader = new BrowserMultiFormatReader();
+      const [{ BrowserMultiFormatReader }, { DecodeHintType, BarcodeFormat }] = await Promise.all([
+        import('@zxing/browser'),
+        import('@zxing/library')
+      ]);
+      const reader = new BrowserMultiFormatReader(
+        new Map([
+          [DecodeHintType.TRY_HARDER, true],
+          [DecodeHintType.POSSIBLE_FORMATS, FORMATS.map(f => BarcodeFormat[f.toUpperCase()])]
+        ])
+      );
       const url = URL.createObjectURL(file);
       try {
         const result = await reader.decodeFromImageUrl(url);

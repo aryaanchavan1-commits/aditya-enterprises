@@ -95,7 +95,9 @@ router.post('/generate/:productId', async (req, res) => {
     // If the product has a barcode, use it as-is (never regenerate a
     // different code - otherwise printed labels won't match the DB).
     const raw = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
-    const code = safeCode(raw);
+    // safeCode can strip every character (e.g. a barcode of only special
+    // chars) - fall back to a fresh AE code instead of failing silently.
+    const code = safeCode(raw) || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const png = await new Promise((resolve, reject) => {
       bwipjs.toBuffer({ bcid: req.body.type || 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center' }, (err, buf) => err ? reject(err) : resolve(buf));
     });
@@ -112,17 +114,24 @@ router.post('/generate-bulk', async (req, res) => {
     const { product_ids } = req.body;
     const results = [];
     const barcodesDir = path.join(require('../db').dataDir, 'barcodes');
+    fs.mkdirSync(barcodesDir, { recursive: true });
     for (const pid of product_ids) {
-      const product = await get('SELECT * FROM products WHERE id = ?', [pid]);
-      if (!product) continue;
-      const raw = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
-      const code = safeCode(raw);
-      const png = await new Promise((resolve, reject) => {
-        bwipjs.toBuffer({ bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center' }, (e, b) => e ? reject(e) : resolve(b));
-      });
-      fs.writeFileSync(path.join(barcodesDir, `${code}.png`), png);
-      await run('UPDATE products SET barcode = ?, barcode_image = ? WHERE id = ?', [code, `/data/barcodes/${code}.png`, pid]);
-      results.push({ product_id: pid, barcode: code, image: `/data/barcodes/${code}.png` });
+      try {
+        const product = await get('SELECT * FROM products WHERE id = ?', [pid]);
+        if (!product) continue;
+        const raw = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
+        const code = safeCode(raw) || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
+        const png = await new Promise((resolve, reject) => {
+          bwipjs.toBuffer({ bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center' }, (e, b) => e ? reject(e) : resolve(b));
+        });
+        fs.writeFileSync(path.join(barcodesDir, `${code}.png`), png);
+        await run('UPDATE products SET barcode = ?, barcode_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [code, `/data/barcodes/${code}.png`, pid]);
+        results.push({ product_id: pid, barcode: code, image: `/data/barcodes/${code}.png` });
+      } catch (e) {
+        // One bad barcode must not kill the whole batch.
+        console.error('Barcode generate failed for product ' + pid + ':', e.message);
+        results.push({ product_id: pid, error: e.message });
+      }
     }
     res.json({ success: true, data: results });
   } catch (err) { res.json({ success: false, error: err.message }); }
