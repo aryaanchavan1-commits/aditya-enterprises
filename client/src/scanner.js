@@ -6,7 +6,7 @@
 // When a text field IS focused, we stay out of the way - the scanner types
 // into the field normally (e.g. the Scan & Add barcode input or POS search).
 
-const MAX_KEY_GAP_MS = 120;
+const MAX_KEY_GAP_MS = 180; // slower budget scanners can type at ~150-200ms/char
 const MIN_CODE_LEN = 3;
 
 export function startBarcodeScanner() {

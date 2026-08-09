@@ -20,42 +20,68 @@ const CODE128 = [
 
 const START_B = 104;
 const START_C = 105;
+const CODE_B_TO_C = 99;
+const CODE_C_TO_B = 100;
 const STOP = 106;
 
 // Encode text to a flat module-width pattern (numbers alternating bar/space,
-// starting with a bar). Uses subset C for even-length numeric codes (shorter
-// barcode) and subset B otherwise.
+// starting with a bar). Uses optimal subset switching (B <-> C): runs of 4+
+// digits go into subset C (2 digits per symbol) which makes the barcode up to
+// 40% shorter - the same encoding the server (bwip-js) produces, so labels
+// always fit and scanners read the client barcode exactly like the server one.
 export function encodePattern(text) {
   const t = String(text);
   if (!t) return null;
 
-  const useC = /^\d+$/.test(t) && t.length % 2 === 0;
-  const start = useC ? START_C : START_B;
   const values = [];
+  let mode = 'B';
+  if (/^\d+$/.test(t) && t.length % 2 === 0) { values.push(START_C); mode = 'C'; }
+  else values.push(START_B);
 
-  if (useC) {
-    for (let i = 0; i < t.length; i += 2) values.push(parseInt(t.slice(i, i + 2), 10));
-  } else {
-    for (let i = 0; i < t.length; i++) {
-      const code = t.charCodeAt(i);
-      if (code < 32 || code > 126) return null;
-      values.push(code - 32);
+  let i = 0;
+  while (i < t.length) {
+    if (mode === 'C') {
+      if (i + 1 < t.length && /\d/.test(t[i]) && /\d/.test(t[i + 1])) {
+        values.push(parseInt(t.slice(i, i + 2), 10));
+        i += 2;
+      } else {
+        values.push(CODE_C_TO_B);
+        mode = 'B';
+      }
+    } else {
+      const run = t.slice(i).match(/^\d+/);
+      if (run && run[0].length >= 4) {
+        let r = run[0];
+        if (r.length % 2 === 1) r = r.slice(0, -1);
+        values.push(CODE_B_TO_C);
+        mode = 'C';
+        for (let j = 0; j < r.length; j += 2) values.push(parseInt(r.slice(j, j + 2), 10));
+        i += r.length;
+      } else {
+        const c = t.charCodeAt(i);
+        if (c < 32 || c > 126) return null;
+        values.push(c - 32);
+        i++;
+      }
     }
   }
 
-  let checksum = start;
-  values.forEach((v, i) => { checksum += v * (i + 1); });
+  let checksum = values[0];
+  for (let k = 1; k < values.length; k++) checksum += values[k] * k;
   checksum %= 103;
 
   const pattern = [];
-  for (const v of [start, ...values, checksum, STOP]) {
+  for (const v of [...values, checksum, STOP]) {
     pattern.push(...CODE128[v].split('').map(Number));
   }
   return pattern;
 }
 
 // Render barcode as a data-URL PNG sized to fit `maxWidthPx`, with a
-// "module" of at least 2px (quiet zone = 10 modules each side).
+// "module" of at least 2px (quiet zone = 10 modules each side). Height is
+// PROPORTIONAL to the width (~30% + text strip), never a fixed pixel height -
+// a fixed height makes short codes come out as giant square images that
+// overflow 58mm labels when scaled to a fixed mm width.
 export function barcodeDataUrl(text, { maxWidthPx = 900, heightPx = 320, showText = true } = {}) {
   const img = barcodeImageData(text, { maxWidthPx, heightPx, showText });
   return img ? img.dataUrl : '';
@@ -69,19 +95,21 @@ export function barcodeImageData(text, { maxWidthPx = 900, heightPx = 320, showT
   if (!pattern) return null;
 
   const quiet = 10;
-  const totalModules = quiet * 2 + pattern.length;
+  const moduleCount = pattern.reduce((a, b) => a + b, 0);
+  const totalModules = quiet * 2 + moduleCount;
   const quietPx = Math.max(20, Math.floor(maxWidthPx * 0.03));
   const module = Math.max(2, Math.floor((maxWidthPx - quietPx * 2) / totalModules));
 
   const canvas = document.createElement('canvas');
-  canvas.width = quietPx * 2 + pattern.length * module;
-  canvas.height = heightPx;
+  canvas.width = quietPx * 2 + moduleCount * module;
+  const ratio = showText ? 0.30 : 0.26;
+  canvas.height = Math.min(heightPx, Math.max(60, Math.round(canvas.width * ratio)));
   const ctx = canvas.getContext('2d');
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const barHeight = showText ? heightPx - Math.floor(heightPx * 0.09) : heightPx;
+  const barHeight = showText ? canvas.height - Math.floor(canvas.height * 0.09) : canvas.height;
   ctx.fillStyle = '#000000';
   let x = quietPx;
   let isBar = true;
@@ -96,7 +124,7 @@ export function barcodeImageData(text, { maxWidthPx = 900, heightPx = 320, showT
     ctx.font = `${Math.max(10, Math.floor(module * 3))}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(String(text), canvas.width / 2, heightPx - 4);
+    ctx.fillText(String(text), canvas.width / 2, canvas.height - 4);
   }
 
   return { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };

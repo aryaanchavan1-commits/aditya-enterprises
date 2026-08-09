@@ -8,7 +8,7 @@ const fs = require('fs');
 function generateBarcodeImage(code) {
   return new Promise((resolve, reject) => {
     bwipjs.toBuffer({
-      bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center',
+      bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF',
     }, (err, png) => { if (err) return reject(err); resolve(png); });
   });
 }

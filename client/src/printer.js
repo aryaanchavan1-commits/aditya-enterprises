@@ -784,7 +784,7 @@ function encodeCode128(text) {
 
 function rasterBitmap(pattern, maxWidthPx, heightPx) {
   const quiet = 10;
-  const totalModules = quiet * 2 + pattern.length;
+  const totalModules = quiet * 2 + pattern.reduce((a, b) => a + b, 0);
   const module = Math.max(1, Math.floor(maxWidthPx / totalModules));
   const widthPx = totalModules * module;
   const widthBytes = Math.ceil(widthPx / 8);

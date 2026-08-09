@@ -1,16 +1,75 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-// Mobile barcode scanning - three independent decode paths, so it works on
-// virtually every phone:
+// Mobile barcode scanning - two independent decode engines plus photo
+// fallback, so it works on virtually every phone:
 //   1. Native BarcodeDetector API (instant, built into Android Chrome)
-//   2. ZXing (https://github.com/zxing-js/browser, Apache-2.0) - decodes
-//      Code128/EAN/UPC/QR on iOS Safari and any other browser
+//   2. ZXing (@zxing/library, Apache-2.0) - decodes Code128/EAN/UPC/QR on
+//      iOS Safari and any other browser. Run through our OWN frame pipeline
+//      (not the browser wrapper): adaptive multi-resolution decode, so small
+//      screen barcodes and distant labels both resolve.
 //   3. Photo/gallery fallback - snap the barcode and it is decoded from the
 //      image, for cases where live camera permission is impossible.
 // Camera MUST be started from a tap (iOS Safari blocks getUserMedia outside a
 // user gesture) - the big "Start Camera" button guarantees that.
 
 const FORMATS = ['code_128', 'ean_13', 'ean_8', 'code_39', 'code_93', 'upc_a', 'upc_e', 'qr_code'];
+
+// Decode resolution ladder: start small + fast, escalate to hi-res so both
+// close-up labels and distant screen barcodes get resolved.
+const LEVELS = [
+  { maxW: 480, attempts: 3 },       // fast pass - close labels
+  { maxW: 800, attempts: 5 },       // mid pass - typical framing
+  { maxW: 0, attempts: Infinity }   // native res - small/screen barcodes
+];
+
+const DECODE_INTERVAL_MS = 100;     // max ~10 decode attempts per second
+const NATIVE_SWITCH_MS = 4000;      // native BarcodeDetector gets 4s, then ZXing takes over
+const VIDEO_STALL_MS = 12000;       // if the stream never produces frames, fail loudly
+
+// One shared ZXing decoder (cached module promise so both camera and photo
+// paths use the exact same decoder + hints). The returned object is a plain
+// decode(text => rgba frame) function - no per-call import overhead.
+let decoderPromise = null;
+const getDecoder = () => {
+  if (!decoderPromise) {
+    decoderPromise = import('@zxing/library').then(({ MultiFormatReader, DecodeHintType, BarcodeFormat, RGBLuminanceSource, HybridBinarizer, BinaryBitmap }) => {
+      // MultiFormatReader takes NO constructor args - hints must go through
+      // setHints(), otherwise the reader runs unhinted (no TRY_HARDER / no
+      // format filter) and silently fails on every frame.
+      const reader = new MultiFormatReader();
+      reader.setHints(new Map([
+        [DecodeHintType.TRY_HARDER, true],
+        [DecodeHintType.POSSIBLE_FORMATS, FORMATS.map(f => BarcodeFormat[f.toUpperCase()])]
+      ]));
+      // Decode one RGBA frame. Returns the text or null. reader.reset() after
+      // each attempt is required - some decoders keep state between frames.
+      // RGBLuminanceSource needs GRAYSCALE bytes (1B/px) or an Int32Array of
+      // ARGB ints - a raw RGBA buffer silently decodes nothing. Conversion is
+      // the standard Rec.601 luma formula (fast: ~4 adds + shift per px).
+      // Alpha is flattened to WHITE: many barcode PNGs (e.g. bwip-js output)
+      // have transparent backgrounds that decode as black-on-black otherwise.
+      return (rgba, width, height) => {
+        try {
+          const size = width * height;
+          const luma = new Uint8ClampedArray(size);
+          for (let i = 0, p = 0; i < size; i++, p += 4) {
+            if (rgba[p + 3] < 128) { luma[i] = 255; continue; }
+            luma[i] = ((306 * rgba[p] + 601 * rgba[p + 1] + 117 * rgba[p + 2] + 0x200) >> 10) & 0xff;
+          }
+          const luminance = new RGBLuminanceSource(luma, width, height);
+          const bitmap = new BinaryBitmap(new HybridBinarizer(luminance));
+          const result = reader.decode(bitmap);
+          reader.reset();
+          return result && result.getText ? result.getText() : (result && result.text) || null;
+        } catch (e) {
+          try { reader.reset(); } catch (e2) {}
+          return null;
+        }
+      };
+    });
+  }
+  return decoderPromise;
+};
 
 export default function CameraScanner({ onScan, onClose }) {
   const [status, setStatus] = useState('idle'); // idle | starting | running | error
@@ -23,9 +82,9 @@ export default function CameraScanner({ onScan, onClose }) {
   const streamRef = useRef(null);
   const rafRef = useRef(0);
   const scanningRef = useRef(false);
-  const zxingControlsRef = useRef(null);
-  const decodeStartedAtRef = useRef(0);
+  const foundRef = useRef(false); // true once a code has been reported this session
   const switchedDecoderRef = useRef(false);
+  const startedAtRef = useRef(0);
   const fileRef = useRef(null);
 
   const beep = () => {
@@ -44,8 +103,8 @@ export default function CameraScanner({ onScan, onClose }) {
 
   const onDecoded = (text) => {
     const clean = String(text || '').trim();
-    if (!clean || scanningRef.current) return;
-    scanningRef.current = true;
+    if (!clean || foundRef.current) return;
+    foundRef.current = true;
     try { if (navigator.vibrate) navigator.vibrate(120); } catch (e) {}
     beep();
     setLastCode(clean);
@@ -57,31 +116,18 @@ export default function CameraScanner({ onScan, onClose }) {
   const stopCamera = () => {
     cancelAnimationFrame(rafRef.current);
     rafRef.current = 0;
-    if (zxingControlsRef.current) {
-      try { zxingControlsRef.current.stop(); } catch (e) {}
-      zxingControlsRef.current = null;
-    }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     if (videoRef.current) videoRef.current.srcObject = null;
     setTorchOn(false);
     setDecoder('');
     switchedDecoderRef.current = false;
+    foundRef.current = false;
   };
 
-  // Decode loop: native BarcodeDetector first, ZXing fallback.
-  // NOTE: ZXing's decodeFromVideoElement() manages its own internal continuous
-  // decode loop - it MUST be started only once and stopped via its controls.
-  // Calling decodeOnceFromVideoElement() repeatedly stacks unbounded parallel
-  // decode loops that choke the browser. We start it once and let its callback
-  // fire on every scan attempt.
-  //
-  // A watchdog guarantees a decode path always works: if the native
-  // BarcodeDetector produces nothing within 6s (some Android devices expose it
-  // but never actually detect), we switch to the ZXing continuous loop.
-  const startDecodeLoop = async () => {
-    const video = videoRef.current;
-    if (!video) return;
-
+  // Own decode loop: native BarcodeDetector first (rAF + detect per frame),
+  // ZXing fallback through the adaptive resolution ladder. No external loop
+  // wrappers - every frame we control.
+  const startDecodeLoop = async (video) => {
     const BarcodeDetectorCtor = window.BarcodeDetector;
     let detector = null;
     if (BarcodeDetectorCtor) {
@@ -92,82 +138,90 @@ export default function CameraScanner({ onScan, onClose }) {
       }
     }
 
-    // ZXing is ALWAYS loaded (even when BarcodeDetector exists) so the
-    // watchdog can fall back to it if native never produces a result.
-    let zxingReader = null;
-    try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const { DecodeHintType, BarcodeFormat } = await import('@zxing/library');
-      zxingReader = new BrowserMultiFormatReader(
-        new Map([
-          [DecodeHintType.TRY_HARDER, true],
-          [DecodeHintType.POSSIBLE_FORMATS, FORMATS.map(f => BarcodeFormat[f.toUpperCase()])]
-        ]),
-        200 // scan attempt every 200ms for snappier detection
-      );
-    } catch (e) {
-      zxingReader = null;
+    let decode = null;
+    try { decode = await getDecoder(); } catch (e) { decode = null; }
+
+    if (!detector && !decode) {
+      setStatus('error');
+      setError('No barcode decoder available on this browser. Try the "From Photo" option.');
+      return;
     }
 
-    const startZxing = async () => {
-      const v = videoRef.current;
-      if (!v) return;
-      if (!zxingReader) {
-        // ZXing failed to load - surface it instead of scanning nothing.
-        setStatus('error');
-        setError('Barcode decoder could not be loaded. Try the "From Photo" option.');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const switchAt = Date.now() + NATIVE_SWITCH_MS;
+    let level = 0;
+    let missCount = 0;
+    let decodeAt = 0;
+
+    const frame = async () => {
+      if (!scanningRef.current) return;
+
+      // Stream not producing frames yet - stall watchdog.
+      if (video.readyState < 2 || !video.videoWidth) {
+        if (Date.now() - startedAtRef.current > VIDEO_STALL_MS) {
+          setStatus('error');
+          setError('Camera opened but no frames are coming. Tap the lock icon in the address bar, allow Camera, reload, and retry. Or use "From Photo".');
+          return;
+        }
+        rafRef.current = requestAnimationFrame(frame);
         return;
       }
-      if (zxingControlsRef.current) return;
-      const cb = (result, err, controls) => {
-        if (!scanningRef.current) { try { controls.stop(); } catch (e) {} return; }
-        if (result && result.getText) {
-          onDecoded(result.getText());
-          try { controls.stop(); } catch (e) {}
-        }
-      };
-      try {
-        zxingControlsRef.current = await zxingReader.decodeFromVideoElement(v, cb);
-      } catch (e) {
-        setTimeout(() => { if (scanningRef.current && videoRef.current && !zxingControlsRef.current) startZxing(); }, 300);
-      }
-    };
 
-    if (detector) {
-      // Path 1 - native BarcodeDetector: light rAF loop, one detect() per frame.
-      setDecoder('native (BarcodeDetector)');
-      // Watchdog: if nothing decoded within 6s, fall back to ZXing.
-      const switchAt = Date.now() + 6000;
-      const frame = async () => {
-        if (!scanningRef.current) return;
+      const now = performance.now();
+      if (now < decodeAt) {
+        rafRef.current = requestAnimationFrame(frame);
+        return;
+      }
+
+      // Path 1 - native BarcodeDetector (until the switch deadline).
+      if (detector && !switchedDecoderRef.current) {
+        setDecoder('native (BarcodeDetector)');
         try {
           const codes = await detector.detect(video);
+          if (!scanningRef.current) return; // stopped while this frame was in flight
           if (codes && codes.length > 0 && codes[0].rawValue) {
             onDecoded(codes[0].rawValue);
             return;
           }
         } catch (e) {}
-        if (Date.now() >= switchAt && !switchedDecoderRef.current) {
+        if (Date.now() >= switchAt) {
           switchedDecoderRef.current = true;
           setDecoder('ZXing (continuous)');
-          startZxing();
-          return; // ZXing loop now owns decoding; stop the rAF loop
+        } else {
+          decodeAt = now + 60;
+          rafRef.current = requestAnimationFrame(frame);
+          return;
         }
-        rafRef.current = requestAnimationFrame(frame);
-      };
+      }
+
+      // Path 2 - ZXing on a downscaled/upscaled canvas frame.
+      if (decode) {
+        const cfg = LEVELS[Math.min(level, LEVELS.length - 1)];
+        const scaleW = cfg.maxW > 0 ? Math.min(cfg.maxW, video.videoWidth) : video.videoWidth;
+        const scaleH = Math.max(1, Math.round(scaleW * video.videoHeight / video.videoWidth));
+        if (canvas.width !== scaleW || canvas.height !== scaleH) { canvas.width = scaleW; canvas.height = scaleH; }
+        try {
+          ctx.drawImage(video, 0, 0, scaleW, scaleH);
+          const img = ctx.getImageData(0, 0, scaleW, scaleH);
+          const text = decode(img.data, scaleW, scaleH);
+          if (!scanningRef.current) return; // stopped while this frame was in flight
+          if (text) { onDecoded(text); return; }
+        } catch (e) {}
+
+        missCount++;
+        if (missCount >= cfg.attempts && level < LEVELS.length - 1) {
+          level++;
+          missCount = 0;
+          setDecoder('ZXing (hi-res)');
+        }
+        decodeAt = now + DECODE_INTERVAL_MS;
+      } else {
+        decodeAt = now + 120;
+      }
       rafRef.current = requestAnimationFrame(frame);
-      return;
-    }
-
-    if (zxingReader) {
-      // Path 2 - ZXing: one continuous loop, callback fires after every attempt.
-      setDecoder('ZXing (continuous)');
-      await startZxing();
-      return;
-    }
-
-    setStatus('error');
-    setError('No barcode decoder available on this browser. Try the "From Photo" option.');
+    };
+    rafRef.current = requestAnimationFrame(frame);
   };
 
   // Start the live camera - MUST be called from a user tap on iOS.
@@ -175,6 +229,8 @@ export default function CameraScanner({ onScan, onClose }) {
     setError('');
     setStatus('starting');
     scanningRef.current = true;
+    foundRef.current = false;
+    startedAtRef.current = Date.now();
     const video = videoRef.current;
     if (!video) { setStatus('error'); setError('Scanner view not ready - tap Start again.'); return; }
 
@@ -189,16 +245,36 @@ export default function CameraScanner({ onScan, onClose }) {
       return;
     }
 
+    // Try progressively simpler constraint sets: some Android browsers reject
+    // the whole request if ANY advanced constraint is unsupported (e.g.
+    // focusMode), so we peel options off one at a time and only give up on
+    // the rear camera when every variant has failed.
     const tryFace = async (facing) => {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: facing },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+      const variants = [
+        {
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: 'continuous' }]
+          },
+          audio: false
         },
-        audio: false
-      });
-      return stream;
+        {
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        },
+        { video: { facingMode: { ideal: facing } }, audio: false }
+      ];
+      let lastErr = null;
+      for (const c of variants) {
+        try { return await navigator.mediaDevices.getUserMedia(c); } catch (e) { lastErr = e; }
+      }
+      throw lastErr || new Error('camera unavailable');
     };
 
     let stream = null;
@@ -246,7 +322,7 @@ export default function CameraScanner({ onScan, onClose }) {
     } catch (e) {}
 
     setStatus('running');
-    await startDecodeLoop();
+    await startDecodeLoop(video);
   };
 
   const toggleTorch = async () => {
@@ -266,33 +342,34 @@ export default function CameraScanner({ onScan, onClose }) {
     stopCamera();
   };
 
-  // Decode a photo/gallery image as a fallback.
+  // Decode a photo/gallery image as a fallback - same decoder + same hints as
+  // the live camera, decoded at up to 1600px wide (big enough for tiny bars).
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setError('');
     setStatus('starting');
+    let decode = null;
+    try { decode = await getDecoder(); } catch (err) {}
     try {
-      const [{ BrowserMultiFormatReader }, { DecodeHintType, BarcodeFormat }] = await Promise.all([
-        import('@zxing/browser'),
-        import('@zxing/library')
-      ]);
-      const reader = new BrowserMultiFormatReader(
-        new Map([
-          [DecodeHintType.TRY_HARDER, true],
-          [DecodeHintType.POSSIBLE_FORMATS, FORMATS.map(f => BarcodeFormat[f.toUpperCase()])]
-        ])
-      );
       const url = URL.createObjectURL(file);
-      try {
-        const result = await reader.decodeFromImageUrl(url);
-        if (result && result.getText) {
-          onDecoded(result.getText());
-          return;
-        }
-      } finally {
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
+      const img = new Image();
+      img.src = url;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('not an image'));
+      });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const maxW = 1600;
+      const w = Math.max(1, Math.min(img.naturalWidth || maxW, maxW));
+      const h = Math.max(1, Math.round(w * (img.naturalHeight || w) / (img.naturalWidth || w)));
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h);
+      const text = decode ? decode(data.data, w, h) : null;
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (text) { onDecoded(text); return; }
       setStatus('error');
       setError('No barcode could be read from that photo. Retake it in sharp, bright light, filling the frame.');
     } catch (err) {

@@ -52,14 +52,30 @@ function drawLabel(doc, x, y, p) {
     const avail = skuTop - (priceY + 3);
     const barH = Math.min(14, Math.max(9, avail));
     const quiet = 10; // modules of quiet zone each side
-    let moduleW = inner / (pattern.length + quiet * 2);
-    if (moduleW < 0.25) moduleW = 0.25; // never below a printable X-dimension
-    const totalW = (pattern.length + quiet * 2) * moduleW;
-    let barX = cx + (inner - totalW) / 2;
+    const moduleCount = pattern.reduce((a, b) => a + b, 0);
+    // Cap the bar width at 0.45mm so short codes stay slim and centered
+    // instead of spreading fat bars across the whole label; for long codes
+    // shrink the quiet zone first, and only then allow a sub-0.25mm module -
+    // the barcode must never bleed off the label edge.
+    let quietM = quiet;
+    let moduleW = Math.min(0.45, inner / (moduleCount + quietM * 2));
+    while (moduleW < 0.25 && quietM >= 2) {
+      quietM -= 2;
+      moduleW = Math.min(0.45, inner / (moduleCount + quietM * 2));
+    }
+    const totalW = (moduleCount + quietM * 2) * moduleW;
+    if (totalW > inner) {
+      // last resort: fit the label at any cost - shrink the module below the
+      // printable minimum rather than let the barcode bleed off the label
+      quietM = 0;
+      moduleW = inner / (moduleCount + quietM * 2);
+    }
+    const finalTotal = (moduleCount + quietM * 2) * moduleW;
+    let barX = cx + (inner - finalTotal) / 2;
     if (barX < x) barX = x; // very long codes may use the full card width
     const barY = priceY + 3;
     doc.setFillColor(0, 0, 0);
-    let bx = barX + quiet * moduleW;
+    let bx = barX + quietM * moduleW;
     let isBar = true;
     for (const m of pattern) {
       if (isBar) doc.rect(bx, barY, m * moduleW, barH, 'F');
