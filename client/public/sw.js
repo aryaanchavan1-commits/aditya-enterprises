@@ -1,4 +1,4 @@
-const CACHE = 'aditya-erp-v20260815';
+const CACHE = 'aditya-erp-v20260815-wasm';
 const STATIC = [
   '/',
   '/index.html',

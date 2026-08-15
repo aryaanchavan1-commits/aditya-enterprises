@@ -131,9 +131,18 @@ export default function CameraScanner({ onScan, onClose }) {
   const startDecodeLoop = async (video) => {
     let polyfillDetector = null;
     try {
-      const { BarcodeDetector: PolyfillBD } = await import('@sec-ant/barcode-detector');
-      if (PolyfillBD) {
-        polyfillDetector = new PolyfillBD({ formats: FORMATS });
+      const mod = await import('@sec-ant/barcode-detector');
+      // Point ZXing-WASM at OUR bundled copy so it never depends on the
+      // jsDelivr CDN (which fails on phones with blocked/unreachable CDNs).
+      // We serve zxing_reader.wasm ourselves from /wasm/ so the WASM always
+      // loads and Code128 decoding actually works on-device.
+      if (mod.setZXingModuleOverrides) {
+        mod.setZXingModuleOverrides({
+          locateFile: (f) => `/wasm/${f.split('/').pop()}`
+        });
+      }
+      if (mod.BarcodeDetector) {
+        polyfillDetector = new mod.BarcodeDetector({ formats: FORMATS });
       }
     } catch (e) { polyfillDetector = null; }
 
@@ -375,8 +384,13 @@ export default function CameraScanner({ onScan, onClose }) {
     try { decode = await getDecoder(); } catch (err) {}
     let polyfillDetector = null;
     try {
-      const { BarcodeDetector: PolyfillBD } = await import('@sec-ant/barcode-detector');
-      if (PolyfillBD) polyfillDetector = new PolyfillBD({ formats: FORMATS });
+      const mod = await import('@sec-ant/barcode-detector');
+      if (mod.setZXingModuleOverrides) {
+        mod.setZXingModuleOverrides({
+          locateFile: (f) => `/wasm/${f.split('/').pop()}`
+        });
+      }
+      if (mod.BarcodeDetector) polyfillDetector = new mod.BarcodeDetector({ formats: FORMATS });
     } catch (err) {}
     try {
       const url = URL.createObjectURL(file);
