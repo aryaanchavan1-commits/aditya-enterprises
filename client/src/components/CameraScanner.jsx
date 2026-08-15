@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-// Mobile barcode scanning - two independent decode engines plus photo
+// Mobile barcode scanning - three independent decode engines plus photo
 // fallback, so it works on virtually every phone:
-//   1. Native BarcodeDetector API (instant, built into Android Chrome)
-//   2. ZXing (@zxing/library, Apache-2.0) - decodes Code128/EAN/UPC/QR on
-//      iOS Safari and any other browser. Run through our OWN frame pipeline
-//      (not the browser wrapper): adaptive multi-resolution decode, so small
-//      screen barcodes and distant labels both resolve.
-//   3. Photo/gallery fallback - snap the barcode and it is decoded from the
+//   1. BarcodeDetector polyfill (@sec-ant/barcode-detector, ZXing-WASM) - a
+//      drop-in for the native BarcodeDetector that accepts the live video
+//      element directly and decodes Code128/EAN/UPC/QR on ALL browsers,
+//      including iOS Safari and older Android. This is the primary engine.
+//   2. Native BarcodeDetector API (instant, built into modern Android Chrome).
+//   3. ZXing (@zxing/library) frame pipeline as a final fallback.
+//   4. Photo/gallery fallback - snap the barcode and it is decoded from the
 //      image, for cases where live camera permission is impossible.
 // Camera MUST be started from a tap (iOS Safari blocks getUserMedia outside a
 // user gesture) - the big "Start Camera" button guarantees that.
@@ -124,24 +125,32 @@ export default function CameraScanner({ onScan, onClose }) {
     foundRef.current = false;
   };
 
-  // Own decode loop: native BarcodeDetector first (rAF + detect per frame),
-  // ZXing fallback through the adaptive resolution ladder. No external loop
-  // wrappers - every frame we control.
+  // Own decode loop: BarcodeDetector polyfill first (accepts the live video
+  // element directly - ZXing-WASM handles multi-frame binarization), then the
+  // native BarcodeDetector, then our ZXing resolution ladder as a last resort.
   const startDecodeLoop = async (video) => {
+    let polyfillDetector = null;
+    try {
+      const { BarcodeDetector: PolyfillBD } = await import('@sec-ant/barcode-detector');
+      if (PolyfillBD) {
+        polyfillDetector = new PolyfillBD({ formats: FORMATS });
+      }
+    } catch (e) { polyfillDetector = null; }
+
     const BarcodeDetectorCtor = window.BarcodeDetector;
-    let detector = null;
+    let nativeDetector = null;
     if (BarcodeDetectorCtor) {
       try {
-        detector = await new BarcodeDetectorCtor({ formats: FORMATS });
+        nativeDetector = await new BarcodeDetectorCtor({ formats: FORMATS });
       } catch (e) {
-        try { detector = new BarcodeDetectorCtor(); } catch (e2) { detector = null; }
+        try { nativeDetector = new BarcodeDetectorCtor(); } catch (e2) { nativeDetector = null; }
       }
     }
 
     let decode = null;
     try { decode = await getDecoder(); } catch (e) { decode = null; }
 
-    if (!detector && !decode) {
+    if (!polyfillDetector && !nativeDetector && !decode) {
       setStatus('error');
       setError('No barcode decoder available on this browser. Try the "From Photo" option.');
       return;
@@ -174,11 +183,24 @@ export default function CameraScanner({ onScan, onClose }) {
         return;
       }
 
-      // Path 1 - native BarcodeDetector (until the switch deadline).
-      if (detector && !switchedDecoderRef.current) {
+      // Path 1 - BarcodeDetector polyfill on the live video element.
+      if (polyfillDetector) {
+        setDecoder('BarcodeDetector');
+        try {
+          const codes = await polyfillDetector.detect(video);
+          if (!scanningRef.current) return; // stopped while this frame was in flight
+          if (codes && codes.length > 0 && codes[0].rawValue) {
+            onDecoded(codes[0].rawValue);
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // Path 2 - native BarcodeDetector.
+      if (nativeDetector && !switchedDecoderRef.current) {
         setDecoder('native (BarcodeDetector)');
         try {
-          const codes = await detector.detect(video);
+          const codes = await nativeDetector.detect(video);
           if (!scanningRef.current) return; // stopped while this frame was in flight
           if (codes && codes.length > 0 && codes[0].rawValue) {
             onDecoded(codes[0].rawValue);
@@ -195,7 +217,7 @@ export default function CameraScanner({ onScan, onClose }) {
         }
       }
 
-      // Path 2 - ZXing on a downscaled/upscaled canvas frame.
+      // Path 3 - ZXing on a downscaled/upscaled canvas frame.
       if (decode) {
         const cfg = LEVELS[Math.min(level, LEVELS.length - 1)];
         const scaleW = cfg.maxW > 0 ? Math.min(cfg.maxW, video.videoWidth) : video.videoWidth;
@@ -351,6 +373,11 @@ export default function CameraScanner({ onScan, onClose }) {
     setStatus('starting');
     let decode = null;
     try { decode = await getDecoder(); } catch (err) {}
+    let polyfillDetector = null;
+    try {
+      const { BarcodeDetector: PolyfillBD } = await import('@sec-ant/barcode-detector');
+      if (PolyfillBD) polyfillDetector = new PolyfillBD({ formats: FORMATS });
+    } catch (err) {}
     try {
       const url = URL.createObjectURL(file);
       const img = new Image();
@@ -359,6 +386,19 @@ export default function CameraScanner({ onScan, onClose }) {
         img.onload = resolve;
         img.onerror = () => reject(new Error('not an image'));
       });
+
+      // Polyfill accepts the image element directly - most reliable path.
+      if (polyfillDetector) {
+        try {
+          const codes = await polyfillDetector.detect(img);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          if (codes && codes.length > 0 && codes[0].rawValue) {
+            onDecoded(codes[0].rawValue);
+            return;
+          }
+        } catch (err2) {}
+      }
+
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       const maxW = 1600;
@@ -453,7 +493,7 @@ export default function CameraScanner({ onScan, onClose }) {
       </div>
 
       <p style={{ fontSize: 11, color: '#999', marginTop: 8 }}>
-        Works on Chrome/Edge/Safari (Android & iPhone) over HTTPS. Powered by the browser's native BarcodeDetector and ZXing (open-source).
+        Works on Chrome/Edge/Safari (Android & iPhone) over HTTPS. Powered by BarcodeDetector (ZXing-WASM) and the native Barcode Detection API.
       </p>
     </div>
   );
