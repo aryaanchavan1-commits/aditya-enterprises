@@ -94,16 +94,16 @@ export function barcodeImageData(text, { maxWidthPx = 900, heightPx = 320, showT
   const pattern = encodePattern(text);
   if (!pattern) return null;
 
-  const quiet = 10;
-  const moduleCount = pattern.reduce((a, b) => a + b, 0);
-  const totalModules = quiet * 2 + moduleCount;
-  const quietPx = Math.max(20, Math.floor(maxWidthPx * 0.03));
-  const module = Math.max(3, Math.floor((maxWidthPx - quietPx * 2) / totalModules));
+const quiet = 10;
+   const moduleCount = pattern.reduce((a, b) => a + b, 0);
+   const totalModules = quiet * 2 + moduleCount;
+   const quietPx = Math.max(20, Math.floor(maxWidthPx * 0.05));
+   const module = Math.max(4, Math.floor((maxWidthPx - quietPx * 2) / totalModules));
 
-  const canvas = document.createElement('canvas');
-  canvas.width = quietPx * 2 + moduleCount * module;
-  const ratio = showText ? 0.30 : 0.26;
-  canvas.height = Math.min(heightPx, Math.max(60, Math.round(canvas.width * ratio)));
+   const canvas = document.createElement('canvas');
+   canvas.width = quietPx * 2 + moduleCount * module;
+   const ratio = showText ? 0.40 : 0.35;
+   canvas.height = Math.min(heightPx, Math.max(60, Math.round(canvas.width * ratio)));
   const ctx = canvas.getContext('2d');
 
   ctx.fillStyle = '#ffffff';
