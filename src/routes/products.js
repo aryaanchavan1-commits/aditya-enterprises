@@ -6,12 +6,12 @@ const path = require('path');
 const fs = require('fs');
 
 function generateBarcodeImage(code) {
-  return new Promise((resolve, reject) => {
-    bwipjs.toBuffer({
-      bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF',
-    }, (err, png) => { if (err) return reject(err); resolve(png); });
-  });
-}
+   return new Promise((resolve, reject) => {
+     bwipjs.toBuffer({
+       bcid: 'code128', text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF',
+     }, (err, png) => { if (err) return reject(err); resolve(png); });
+   });
+ }
 
 // Normalize a barcode for storage + filename (no control chars, no path
 // separators - same rules as the barcode route so lookups always line up).

@@ -98,7 +98,7 @@ export function barcodeImageData(text, { maxWidthPx = 900, heightPx = 320, showT
   const moduleCount = pattern.reduce((a, b) => a + b, 0);
   const totalModules = quiet * 2 + moduleCount;
   const quietPx = Math.max(20, Math.floor(maxWidthPx * 0.03));
-  const module = Math.max(2, Math.floor((maxWidthPx - quietPx * 2) / totalModules));
+  const module = Math.max(3, Math.floor((maxWidthPx - quietPx * 2) / totalModules));
 
   const canvas = document.createElement('canvas');
   canvas.width = quietPx * 2 + moduleCount * module;

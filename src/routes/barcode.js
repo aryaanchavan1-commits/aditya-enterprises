@@ -98,9 +98,9 @@ router.post('/generate/:productId', async (req, res) => {
     // safeCode can strip every character (e.g. a barcode of only special
     // chars) - fall back to a fresh AE code instead of failing silently.
     const code = safeCode(raw) || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
-    const png = await new Promise((resolve, reject) => {
-      bwipjs.toBuffer({ bcid: req.body.type || 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (err, buf) => err ? reject(err) : resolve(buf));
-    });
+const png = await new Promise((resolve, reject) => {
+       bwipjs.toBuffer({ bcid: req.body.type || 'code128', text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (err, buf) => err ? reject(err) : resolve(buf));
+     });
     const barcodesDir = path.join(require('../db').dataDir, 'barcodes');
     fs.mkdirSync(barcodesDir, { recursive: true });
     fs.writeFileSync(path.join(barcodesDir, `${code}.png`), png);
@@ -121,9 +121,9 @@ router.post('/generate-bulk', async (req, res) => {
         if (!product) continue;
         const raw = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
         const code = safeCode(raw) || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
-        const png = await new Promise((resolve, reject) => {
-          bwipjs.toBuffer({ bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (e, b) => e ? reject(e) : resolve(b));
-        });
+const png = await new Promise((resolve, reject) => {
+           bwipjs.toBuffer({ bcid: 'code128', text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (e, b) => e ? reject(e) : resolve(b));
+         });
         fs.writeFileSync(path.join(barcodesDir, `${code}.png`), png);
         await run('UPDATE products SET barcode = ?, barcode_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [code, `/data/barcodes/${code}.png`, pid]);
         results.push({ product_id: pid, barcode: code, image: `/data/barcodes/${code}.png` });

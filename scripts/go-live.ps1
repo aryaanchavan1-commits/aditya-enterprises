@@ -12,7 +12,7 @@ if (-not $env:VERCEL_TOKEN) { throw 'VERCEL_TOKEN not found in .env' }
 
 # 1. Unpause the project FIRST (deploys are blocked while paused)
 Write-Host '[1/5] Unpausing the Vercel project...' -ForegroundColor Cyan
-Invoke-RestMethod -Method Delete -Uri 'https://api.vercel.com/v9/projects/prj_L5I2lAwuOoSesoTm7JM1EUpztcCi/pause' -Headers @{ Authorization = "Bearer $env:VERCEL_TOKEN" } -ErrorAction SilentlyContinue | Out-Null
+Invoke-RestMethod -Method Post -Uri 'https://api.vercel.com/v9/projects/prj_L5I2lAwuOoSesoTm7JM1EUpztcCi/unpause' -Headers @{ Authorization = "Bearer $env:VERCEL_TOKEN" } -ContentType 'application/json' -Body '{}' -ErrorAction SilentlyContinue | Out-Null
 
 # 2. Restore the real app entry page (undo the fake database-error page if present)
 git checkout -- client/index.html 2>$null
@@ -35,7 +35,7 @@ vercel --prod --yes
 if ($LASTEXITCODE -ne 0) { throw 'Deploy failed' }
 
 # 5. Reconnect git so future pushes auto-deploy again
-vercel git connect https://github.com/aryaanchavan1-commits/aditya-enterprises.git 2>$null
+vercel git connect https://github.com/aryaanchavan1-commits/aditya-enterprises.git --yes 2>$null
 Write-Host '[5/5] Git reconnected - future pushes auto-deploy.' -ForegroundColor Green
 
 Write-Host ''
