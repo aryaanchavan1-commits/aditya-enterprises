@@ -66,8 +66,8 @@ export function encodePattern(text) {
     }
   }
 
-  let checksum = values[0];
-  for (let k = 1; k < values.length; k++) checksum += values[k] * k;
+  let checksum = 0;
+  for (let k = 0; k < values.length; k++) checksum += values[k] * (k + 1);
   checksum %= 103;
 
   const pattern = [];
