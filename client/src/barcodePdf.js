@@ -4,7 +4,7 @@
 // Labels are laid out on an A4 grid of 62x35mm cells (3 cols x 7 rows).
 
 import { jsPDF } from 'jspdf';
-import { encodePattern } from './barcode';
+import { barcodeImageData } from './barcode';
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -43,35 +43,39 @@ function drawLabel(doc, x, y, p) {
   doc.text('Rs. ' + Number(p.sell_price || 0).toLocaleString('en-IN'), cx, priceY);
   doc.setTextColor(0, 0, 0);
 
-  // Barcode - drawn as vector bars directly into the PDF. No image embedding:
-  // jsPDF's PNG pipeline can silently collapse canvas images (and vectors are
-  // razor-sharp at any print DPI, so bars always stay scannable).
-  const pattern = p.barcode ? encodePattern(String(p.barcode)) : null;
-  if (pattern) {
+  // Barcode - embedded as a high-resolution raster image for reliable scanning.
+  // Vector-drawn bars via jsPDF rect() suffer from PDF viewer anti-aliasing,
+  // sub-pixel coordinate rounding, and inconsistent rendering across viewers,
+  // making thin bars unscannable by camera. The canvas renderer produces a
+  // bitmap where each module is >= 4 px wide, preserving exact bar widths at
+  // any zoom level and print DPI (~500 DPI at label scale).
+  const imgData = p.barcode ? barcodeImageData(String(p.barcode), {
+    maxWidthPx: 1200,
+    heightPx: 400,
+    showText: false
+  }) : null;
+
+  if (imgData) {
     const skuTop = y + CELL_H - 2 - 3.2;
     const avail = skuTop - (priceY + 3);
     const barH = Math.min(15, Math.max(12, avail));
-    const MIN_QUIET = 10;
-    const MIN_MODULE_W = 0.3;
-    const moduleCount = pattern.reduce((a, b) => a + b, 0);
-    // Start with a comfortable module width, capped to keep short codes slim.
-    // Never shrink the quiet zone below MIN_QUIET or the module below
-    // MIN_MODULE_W - cameras need sufficient bar width and quiet zone to
-    // detect and decode Code128 reliably.
-    let moduleW = Math.min(0.45, inner / (moduleCount + MIN_QUIET * 2));
-    if (moduleW < MIN_MODULE_W) moduleW = MIN_MODULE_W;
-    const totalW = (moduleCount + MIN_QUIET * 2) * moduleW;
-    let barX = cx + (inner - totalW) / 2;
-    if (barX < x) barX = x;
-    const barY = priceY + 3;
-    doc.setFillColor(0, 0, 0);
-    let bx = barX + MIN_QUIET * moduleW;
-    let isBar = true;
-    for (const m of pattern) {
-      if (isBar) doc.rect(bx, barY, m * moduleW, barH, 'F');
-      bx += m * moduleW;
-      isBar = !isBar;
+
+    // Scale image to fill available width, maintaining aspect ratio.
+    const aspectRatio = imgData.height / imgData.width;
+    let finalW = inner;
+    let finalH = finalW * aspectRatio;
+
+    // Cap height to available space so barcode doesn't overlap SKU text.
+    if (finalH > barH) {
+      finalH = barH;
+      finalW = finalH / aspectRatio;
     }
+
+    // Center horizontally within the label.
+    const imgX = cx + (inner - finalW) / 2;
+    const imgY = priceY + 3;
+
+    doc.addImage(imgData.dataUrl, 'PNG', imgX, imgY, finalW, finalH);
   }
 
   // SKU at the bottom, small gray.
