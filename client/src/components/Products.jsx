@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api, exportToExcel, readExcelFile } from '../api';
 import { useReactToPrint } from 'react-to-print';
-import { barcodeDataUrl } from '../barcode';
+import { barcodeDataUrl, isUpca, upcaFromId } from '../barcode';
 import { printSmartLabel } from '../printer';
 import { downloadBarcodesPdf } from '../barcodePdf';
 import { confirmAction } from '../confirm';
@@ -218,7 +218,13 @@ export default function Products() {
     setLabelQty(Math.max(1, Math.min(500, Number(p.quantity) || 1)));
   };
 
-  const labelBarcode = labelProduct?.barcode ? barcodeDataUrl(labelProduct.barcode, { maxWidthPx: 900, heightPx: 300 }) : '';
+  // For the label preview, always show UPC-A. If the product has a legacy
+  // barcode, derive a deterministic UPC-A from its ID so the preview matches
+  // what the PDF will print.
+  const labelBarcodeValue = labelProduct?.barcode
+    ? (isUpca(labelProduct.barcode) ? labelProduct.barcode : upcaFromId(labelProduct.id))
+    : '';
+  const labelBarcode = labelBarcodeValue ? barcodeDataUrl(labelBarcodeValue, { maxWidthPx: 900, heightPx: 300 }) : '';
   const [zoomBarcode, setZoomBarcode] = useState(null);
 
   const [labelPrinting, setLabelPrinting] = useState(false);
@@ -311,17 +317,42 @@ export default function Products() {
     loadProducts();
   };
 
+  const [migrating, setMigrating] = useState(false);
+  const handleMigrateUpca = async () => {
+    const nonUpca = products.filter(p => p.barcode && !/^\d{12}$/.test(p.barcode));
+    if (!nonUpca.length) return showToast('All barcodes are already UPC-A');
+    if (!(await confirmAction({ title: 'Migrate to UPC-A?', message: `Replace ${nonUpca.length} legacy barcode(s) with scannable UPC-A codes? Existing labels will need to be reprinted.` }))) return;
+    setMigrating(true);
+    try {
+      const d = await api('/barcode/migrate-upca', { method: 'POST', body: {} });
+      if (d.success) showToast(d.message || `Migrated ${d.data.migrated} barcode(s) to UPC-A`);
+      else showToast(d.error || 'Migration failed', 'error');
+      loadProducts();
+    } catch (err) {
+      showToast('Migration failed: ' + err.message, 'error');
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   const handleDownloadAllBarcodes = async () => {
     setPdfBusyAll(true);
     try {
+      // First, migrate any legacy barcodes to UPC-A so the PDF shows real,
+      // scannable codes that match the database.
+      const nonUpca = products.filter(p => p.barcode && !/^\d{12}$/.test(p.barcode));
+      if (nonUpca.length > 0) {
+        showToast(`Migrating ${nonUpca.length} legacy barcode(s) to UPC-A...`);
+        await api('/barcode/migrate-upca', { method: 'POST', body: {} });
+        // Reload products so we get the new UPC-A barcodes.
+        const refreshed = await api('/products');
+        if (refreshed && refreshed.success) setProducts(refreshed.data);
+      }
       // Fetch ALL products - the visible list may be filtered by search/category.
       const d = await api('/products');
       const allProducts = (d && d.success && d.data) || [];
       const withBarcode = allProducts.filter(p => p.barcode);
       if (withBarcode.length === 0) return showToast('No products with barcodes yet - generate them first', 'error');
-      // Quantity-wise (same rule as the single-product Label modal): every product
-      // gets one label per unit of current stock, grouped by category, so the PDF
-      // can be printed and cut straight onto stock.
       const list = withBarcode.map(p => ({ ...p, quantity: Math.max(1, Math.min(500, Number(p.quantity) || 1)) }));
       const count = downloadBarcodesPdf(list);
       showToast(`PDF downloaded - ${count} barcode label${count > 1 ? 's' : ''} for ${withBarcode.length} product${withBarcode.length > 1 ? 's' : ''}, grouped by category`);
@@ -384,6 +415,7 @@ export default function Products() {
           <button className="btn btn-sm btn-outline hide-mobile" onClick={() => fileRefProducts.current?.click()}>Import</button>
           <input ref={fileRefProducts} type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={handleImportProducts} />
           <button className="btn btn-sm btn-outline hide-mobile" onClick={handleGenerateAllBarcodes} title="Generate barcodes for products without one">Barcode</button>
+          <button className="btn btn-sm btn-outline hide-mobile" onClick={handleMigrateUpca} disabled={migrating} title="Convert all legacy barcodes to scannable UPC-A format">{migrating ? 'Migrating...' : 'UPC-A'}</button>
           <button className="btn btn-sm btn-outline" onClick={handleDownloadAllBarcodes} disabled={pdfBusyAll} title="Download one barcode label per unit of stock for every product in a PDF, grouped by category">{pdfBusyAll ? 'Generating...' : 'All Barcodes PDF'}</button>
           <button className="btn btn-sm btn-info" onClick={startScanAdd} title="Scan a barcode with the camera or a Bluetooth scanner to add the product">Scan & Add</button>
           <button className="btn btn-primary btn-sm hide-mobile" onClick={openAdd}>+ Add Product</button>

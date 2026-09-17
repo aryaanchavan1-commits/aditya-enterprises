@@ -4,7 +4,7 @@
 // Labels are laid out on an A4 grid of 62x35mm cells (3 cols x 7 rows).
 
 import { jsPDF } from 'jspdf';
-import { barcodeImageData } from './barcode';
+import { barcodeImageData, isUpca, upcaFromId } from './barcode';
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -44,12 +44,12 @@ function drawLabel(doc, x, y, p) {
   doc.setTextColor(0, 0, 0);
 
   // Barcode - embedded as a high-resolution raster image for reliable scanning.
-  // Vector-drawn bars via jsPDF rect() suffer from PDF viewer anti-aliasing,
-  // sub-pixel coordinate rounding, and inconsistent rendering across viewers,
-  // making thin bars unscannable by camera. The canvas renderer produces a
-  // bitmap where each module is >= 4 px wide, preserving exact bar widths at
-  // any zoom level and print DPI (~500 DPI at label scale).
-  const imgData = p.barcode ? barcodeImageData(String(p.barcode), {
+  // If the product has a legacy non-UPC-A barcode, generate a deterministic
+  // UPC-A from the product ID so the PDF always shows scannable UPC-A labels.
+  const barcodeValue = p.barcode
+    ? (isUpca(p.barcode) ? p.barcode : upcaFromId(p.id))
+    : null;
+  const imgData = barcodeValue ? barcodeImageData(barcodeValue, {
     maxWidthPx: 1200,
     heightPx: 400,
     showText: false
@@ -78,11 +78,12 @@ function drawLabel(doc, x, y, p) {
     doc.addImage(imgData.dataUrl, 'PNG', imgX, imgY, finalW, finalH);
   }
 
-  // SKU at the bottom, small gray.
+  // SKU at the bottom, small gray — show the actual UPC-A value so the user
+  // can verify the barcode number matches the printed bars.
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(110, 110, 110);
-  const sku = String(p.serial_number || p.barcode || '');
+  const sku = String(barcodeValue || p.serial_number || p.barcode || '');
   doc.text(sku.slice(0, 30), cx, y + CELL_H - 2);
   doc.setTextColor(0, 0, 0);
 }

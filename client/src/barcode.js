@@ -43,6 +43,17 @@ export function isUpca(text) {
   return /^\d{12}$/.test(String(text));
 }
 
+// Generate a deterministic UPC-A code from a product ID.
+// Used when a product has a legacy (non-UPC-A) barcode — the PDF and label
+// renderer can produce a scannable UPC-A without waiting for server migration.
+// Format: 0 + 9-digit padded ID + check digit.
+export function upcaFromId(id) {
+  const n = Math.abs(Number(id) || 0);
+  const idStr = String(n).padStart(9, '0').slice(-9);
+  const d = '0' + idStr;
+  return d + upcaCheckDigit(d);
+}
+
 // Encode a 12-digit UPC-A string into a flat module-width pattern
 // (alternating bar/space widths starting with a bar).  Returns null on
 // invalid input.

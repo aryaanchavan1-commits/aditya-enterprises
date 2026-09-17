@@ -22,6 +22,8 @@ function safeCode(code) {
   return String(code || '').replace(/[^A-Za-z0-9.\-_]/g, '');
 }
 
+// ── UPC-A helpers ──────────────────────────────────────────────────
+
 // UPC-A check digit: 11 data digits → 1 check digit (0-9).
 function upcaCheckDigit(digits11) {
   const d = String(digits11).split('').map(Number);
@@ -45,6 +47,38 @@ function isUpca(code) {
   return Number(s[11]) === upcaCheckDigit(s.slice(0, 11));
 }
 
+// Generate a unique UPC-A code that doesn't collide with any existing product.
+// Retries up to 50 times — with 900 million possible codes, collision is
+// essentially impossible but we guard against it anyway.
+async function uniqueUpca(excludeId) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const code = randomUpca();
+    const dup = await get('SELECT id FROM products WHERE barcode = ? AND id != ?', [code, excludeId || 0]);
+    if (!dup) return code;
+  }
+  throw new Error('Could not generate unique UPC-A barcode after 50 attempts');
+}
+
+// Generate a UPC-A barcode PNG via bwip-js.
+async function generateUpcaPng(code) {
+  return new Promise((resolve, reject) => {
+    bwipjs.toBuffer(
+      { bcid: 'upca', text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' },
+      (err, buf) => err ? reject(err) : resolve(buf)
+    );
+  });
+}
+
+// Write barcode PNG to disk, return the web path.
+function saveBarcodePng(code, png) {
+  const barcodesDir = path.join(require('../db').dataDir, 'barcodes');
+  fs.mkdirSync(barcodesDir, { recursive: true });
+  fs.writeFileSync(path.join(barcodesDir, `${code}.png`), png);
+  return `/data/barcodes/${code}.png`;
+}
+
+// ── Lookup ─────────────────────────────────────────────────────────
+
 // Lookup by barcode OR serial, case-insensitive, whitespace-tolerant.
 async function findProductByCode(code) {
   const clean = cleanCode(code);
@@ -61,8 +95,6 @@ router.get('/scan/:code', async (req, res) => {
 });
 
 // Add stock to an existing product found by scanning its barcode/serial.
-// Used by the Products page "Scan & Add": scan -> product found -> add to
-// inventory instead of creating a duplicate.
 router.post('/stock-in', async (req, res) => {
   try {
     const { barcode, quantity } = req.body;
@@ -108,6 +140,8 @@ router.post('/scan-sale', async (req, res) => {
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
+// ── Generate / regenerate UPC-A barcode for one product ─────────────
+
 router.post('/generate/:productId', async (req, res) => {
   try {
     if (!req.params.productId || req.params.productId === 'undefined' || req.params.productId === 'null') {
@@ -115,47 +149,35 @@ router.post('/generate/:productId', async (req, res) => {
     }
     const product = await get('SELECT * FROM products WHERE id = ?', [req.params.productId]);
     if (!product) { res.json({ success: false, error: 'Not found' }); return; }
-    // If the product already has a valid UPC-A barcode, reuse it.
-    // Otherwise generate a fresh UPC-A code (12 numeric digits).
+
+    // If already a valid UPC-A, keep it — just regenerate the image.
     let code = product.barcode;
-    if (!isUpca(code)) code = randomUpca();
-    // Ensure uniqueness: if another product already has this UPC-A, retry.
-    const existing = await get('SELECT id FROM products WHERE barcode = ? AND id != ?', [code, product.id]);
-    if (existing) code = randomUpca();
-    const bcid = isUpca(code) ? 'upca' : 'code128';
-    const png = await new Promise((resolve, reject) => {
-       bwipjs.toBuffer({ bcid, text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (err, buf) => err ? reject(err) : resolve(buf));
-     });
-    const barcodesDir = path.join(require('../db').dataDir, 'barcodes');
-    fs.mkdirSync(barcodesDir, { recursive: true });
-    fs.writeFileSync(path.join(barcodesDir, `${code}.png`), png);
-    await run('UPDATE products SET barcode = ?, barcode_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [code, `/data/barcodes/${code}.png`, product.id]);
-    res.json({ success: true, data: { barcode: code, image: `/data/barcodes/${code}.png` } });
+    if (!isUpca(code)) code = await uniqueUpca(product.id);
+
+    const png = await generateUpcaPng(code);
+    const image = saveBarcodePng(code, png);
+    await run('UPDATE products SET barcode = ?, barcode_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [code, image, product.id]);
+    res.json({ success: true, data: { barcode: code, image } });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
+
+// ── Bulk generate UPC-A for many products at once ───────────────────
 
 router.post('/generate-bulk', async (req, res) => {
   try {
     const { product_ids } = req.body;
     const results = [];
-    const barcodesDir = path.join(require('../db').dataDir, 'barcodes');
-    fs.mkdirSync(barcodesDir, { recursive: true });
     for (const pid of product_ids) {
       try {
         const product = await get('SELECT * FROM products WHERE id = ?', [pid]);
         if (!product) continue;
         let code = product.barcode;
-        if (!isUpca(code)) code = randomUpca();
-        const dup = await get('SELECT id FROM products WHERE barcode = ? AND id != ?', [code, pid]);
-        if (dup) code = randomUpca();
-        const png = await new Promise((resolve, reject) => {
-           bwipjs.toBuffer({ bcid: 'upca', text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (e, b) => e ? reject(e) : resolve(b));
-         });
-        fs.writeFileSync(path.join(barcodesDir, `${code}.png`), png);
-        await run('UPDATE products SET barcode = ?, barcode_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [code, `/data/barcodes/${code}.png`, pid]);
-        results.push({ product_id: pid, barcode: code, image: `/data/barcodes/${code}.png` });
+        if (!isUpca(code)) code = await uniqueUpca(pid);
+        const png = await generateUpcaPng(code);
+        const image = saveBarcodePng(code, png);
+        await run('UPDATE products SET barcode = ?, barcode_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [code, image, pid]);
+        results.push({ product_id: pid, barcode: code, image });
       } catch (e) {
-        // One bad barcode must not kill the whole batch.
         console.error('Barcode generate failed for product ' + pid + ':', e.message);
         results.push({ product_id: pid, error: e.message });
       }
@@ -163,6 +185,35 @@ router.post('/generate-bulk', async (req, res) => {
     res.json({ success: true, data: results });
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
+
+// ── Migrate ALL products to UPC-A (one-click fix for legacy barcodes) ─
+
+router.post('/migrate-upca', async (req, res) => {
+  try {
+    const allProducts = await all('SELECT id, barcode FROM products');
+    const results = { migrated: 0, skipped: 0, errors: 0 };
+
+    for (const product of allProducts) {
+      try {
+        if (isUpca(product.barcode)) {
+          results.skipped++;
+          continue; // already UPC-A
+        }
+        const code = await uniqueUpca(product.id);
+        const png = await generateUpcaPng(code);
+        const image = saveBarcodePng(code, png);
+        await run('UPDATE products SET barcode = ?, barcode_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [code, image, product.id]);
+        results.migrated++;
+      } catch (e) {
+        console.error('Migration failed for product ' + product.id + ':', e.message);
+        results.errors++;
+      }
+    }
+    res.json({ success: true, data: results, message: `Migrated ${results.migrated} barcodes to UPC-A. ${results.skipped} already valid. ${results.errors} errors.` });
+  } catch (err) { res.json({ success: false, error: err.message }); }
+});
+
+// ── Print helper ───────────────────────────────────────────────────
 
 router.get('/print/:productId', async (req, res) => {
   try {
