@@ -27,7 +27,7 @@ export function upcaCheckDigit(digits11) {
 // Generate a random 12-digit UPC-A code (number system 0).
 export function randomUpca() {
   let d = '0';
-  for (let i = 0; i < 9; i++) d += Math.floor(Math.random() * 10);
+  for (let i = 0; i < 10; i++) d += Math.floor(Math.random() * 10);
   d += upcaCheckDigit(d);
   return d;
 }
@@ -46,10 +46,10 @@ export function isUpca(text) {
 // Generate a deterministic UPC-A code from a product ID.
 // Used when a product has a legacy (non-UPC-A) barcode — the PDF and label
 // renderer can produce a scannable UPC-A without waiting for server migration.
-// Format: 0 + 9-digit padded ID + check digit.
+// Format: 0 + 10-digit padded ID + check digit.
 export function upcaFromId(id) {
   const n = Math.abs(Number(id) || 0);
-  const idStr = String(n).padStart(9, '0').slice(-9);
+  const idStr = String(n).padStart(10, '0').slice(-10);
   const d = '0' + idStr;
   return d + upcaCheckDigit(d);
 }

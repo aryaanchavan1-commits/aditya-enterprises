@@ -15,3 +15,6 @@ desktop.ini
 print-bridge/bridge.exe
 print-bridge/bridge.blob
 
+# generated barcode images
+data/barcodes/
+

@@ -35,7 +35,7 @@ function upcaCheckDigit(digits11) {
 // Generate a random 12-digit UPC-A code (number system 0).
 function randomUpca() {
   let d = '0';
-  for (let i = 0; i < 9; i++) d += Math.floor(Math.random() * 10);
+  for (let i = 0; i < 10; i++) d += Math.floor(Math.random() * 10);
   d += upcaCheckDigit(d);
   return d;
 }
