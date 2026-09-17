@@ -183,7 +183,8 @@ function serveBarcode(req, res, next) {
   if (fs.existsSync(filePath)) return res.sendFile(filePath);
   const code = fileName.replace(/\.png$/i, '');
   if (!code) return next();
-  bwipjs.toBuffer({ bcid: 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (err, png) => {
+  const isUpca = /^\d{12}$/.test(code);
+  bwipjs.toBuffer({ bcid: isUpca ? 'upca' : 'code128', text: code, scale: 3, height: 10, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (err, png) => {
     if (err) { console.error('Barcode regen failed:', err.message); return next(); }
     try { fs.mkdirSync(barcodesDir, { recursive: true }); fs.writeFileSync(filePath, png); } catch (e) {}
     res.set('Content-Type', 'image/png');

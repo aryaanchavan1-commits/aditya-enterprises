@@ -1,9 +1,78 @@
-// Client-side Code128 barcode renderer.
-// Generates a crisp barcode as a data-URL PNG so labels always show and
-// print perfectly - no web fonts, no network, no server files needed.
+// Client-side barcode renderer.
+// Generates crisp UPC-A (12-digit) barcodes as data-URL PNGs for labels.
+// Falls back to Code128 for non-UPC-A barcodes.
 
-// Canonical Code 128 symbol table (index = symbol value, string = bar/space
-// widths, alternating starting with a bar). Index 106 is the stop symbol.
+// ── UPC-A encoding ──────────────────────────────────────────────────
+
+// L-codes (left half, odd parity): each entry is [space, bar, space, bar] widths
+const UPCA_L = [
+  [3,2,1,1], [2,2,2,1], [2,1,2,2], [1,4,1,1], [1,1,3,2],
+  [1,2,3,1], [1,1,1,4], [1,3,1,2], [1,2,1,3], [3,1,1,2],
+];
+
+// R-codes (right half, even parity): each entry is [bar, space, bar, space] widths
+const UPCA_R = [
+  [3,2,1,1], [2,2,2,1], [2,1,2,2], [1,4,1,1], [1,1,3,2],
+  [1,2,3,1], [1,1,1,4], [1,3,1,2], [1,2,1,3], [3,1,1,2],
+];
+
+// Calculate UPC-A check digit for 11 data digits.
+export function upcaCheckDigit(digits11) {
+  const d = String(digits11).split('').map(Number);
+  let sum = 0;
+  for (let i = 0; i < 11; i++) sum += d[i] * (i % 2 === 0 ? 3 : 1);
+  return (10 - (sum % 10)) % 10;
+}
+
+// Generate a random 12-digit UPC-A code (number system 0).
+export function randomUpca() {
+  let d = '0';
+  for (let i = 0; i < 9; i++) d += Math.floor(Math.random() * 10);
+  d += upcaCheckDigit(d);
+  return d;
+}
+
+// Validate a 12-digit UPC-A string (digits only, correct check digit).
+export function isValidUpca(code) {
+  if (!/^\d{12}$/.test(code)) return false;
+  return Number(code[11]) === upcaCheckDigit(code.slice(0, 11));
+}
+
+// Check if a barcode value should be rendered as UPC-A.
+export function isUpca(text) {
+  return /^\d{12}$/.test(String(text));
+}
+
+// Encode a 12-digit UPC-A string into a flat module-width pattern
+// (alternating bar/space widths starting with a bar).  Returns null on
+// invalid input.
+export function encodeUpca(text) {
+  const t = String(text);
+  if (!/^\d{12}$/.test(t)) return null;
+
+  const digits = t.split('').map(Number);
+  const pattern = [];
+
+  // Start guard: 101
+  pattern.push(1, 1, 1);
+
+  // Left 6 digits (L-codes, start with space)
+  for (let i = 0; i < 6; i++) pattern.push(...UPCA_L[digits[i]]);
+
+  // Center guard: 01010
+  pattern.push(1, 1, 1, 1, 1);
+
+  // Right 6 digits (R-codes, start with bar)
+  for (let i = 6; i < 12; i++) pattern.push(...UPCA_R[digits[i]]);
+
+  // End guard: 101
+  pattern.push(1, 1, 1);
+
+  return pattern;
+}
+
+// ── Code128 encoding (fallback for non-UPC-A barcodes) ──────────────
+
 const CODE128 = [
   '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
   '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
@@ -24,11 +93,6 @@ const CODE_B_TO_C = 99;
 const CODE_C_TO_B = 100;
 const STOP = 106;
 
-// Encode text to a flat module-width pattern (numbers alternating bar/space,
-// starting with a bar). Uses optimal subset switching (B <-> C): runs of 4+
-// digits go into subset C (2 digits per symbol) which makes the barcode up to
-// 40% shorter - the same encoding the server (bwip-js) produces, so labels
-// always fit and scanners read the client barcode exactly like the server one.
 export function encodePattern(text) {
   const t = String(text);
   if (!t) return null;
@@ -77,33 +141,34 @@ export function encodePattern(text) {
   return pattern;
 }
 
-// Render barcode as a data-URL PNG sized to fit `maxWidthPx`, with a
-// "module" of at least 2px (quiet zone = 10 modules each side). Height is
-// PROPORTIONAL to the width (~30% + text strip), never a fixed pixel height -
-// a fixed height makes short codes come out as giant square images that
-// overflow 58mm labels when scaled to a fixed mm width.
+// ── Unified renderer ────────────────────────────────────────────────
+
+// Render barcode as a data-URL PNG.  Auto-detects UPC-A (12 digits)
+// and renders with the correct structure; falls back to Code128.
 export function barcodeDataUrl(text, { maxWidthPx = 900, heightPx = 320, showText = true } = {}) {
   const img = barcodeImageData(text, { maxWidthPx, heightPx, showText });
   return img ? img.dataUrl : '';
 }
 
 // Like barcodeDataUrl but also returns the real pixel size, so callers
-// (e.g. the PDF generator) can draw it at its true aspect ratio without
-// stretching - critical for scannable barcodes.
+// (e.g. the PDF generator) can draw it at its true aspect ratio.
 export function barcodeImageData(text, { maxWidthPx = 900, heightPx = 320, showText = true } = {}) {
-  const pattern = encodePattern(text);
+  const t = String(text || '');
+  const pattern = isUpca(t) ? encodeUpca(t) : encodePattern(t);
   if (!pattern) return null;
 
-const QUIET_MODULES = 10;
-   const moduleCount = pattern.reduce((a, b) => a + b, 0);
-   const totalModules = QUIET_MODULES * 2 + moduleCount;
-   const module = Math.max(4, Math.floor(maxWidthPx / totalModules));
-   const quietPx = QUIET_MODULES * module;
+  // UPC-A quiet zone: 11 modules each side (spec minimum 9, use 11 for safety)
+  // Code128 quiet zone: 10 modules each side
+  const QUIET_MODULES = isUpca(t) ? 11 : 10;
+  const moduleCount = pattern.reduce((a, b) => a + b, 0);
+  const totalModules = QUIET_MODULES * 2 + moduleCount;
+  const module = Math.max(4, Math.floor(maxWidthPx / totalModules));
+  const quietPx = QUIET_MODULES * module;
 
-   const canvas = document.createElement('canvas');
-   canvas.width = quietPx * 2 + moduleCount * module;
-   const ratio = showText ? 0.40 : 0.35;
-   canvas.height = Math.min(heightPx, Math.max(60, Math.round(canvas.width * ratio)));
+  const canvas = document.createElement('canvas');
+  canvas.width = quietPx * 2 + moduleCount * module;
+  const ratio = showText ? 0.40 : 0.35;
+  canvas.height = Math.min(heightPx, Math.max(60, Math.round(canvas.width * ratio)));
   const ctx = canvas.getContext('2d');
 
   ctx.fillStyle = '#ffffff';

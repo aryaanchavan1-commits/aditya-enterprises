@@ -429,7 +429,8 @@ function wrapLines(text, maxLen) {
 
 // Print a label through the Windows driver: text via GDI fonts + barcode bitmap.
 function printLabelViaGdi(printerName, { name = '', price = 0, barcode = '', sku = '', copies = 1 }) {
-  const pattern = barcode ? encodeCode128(barcode) : null;
+  const isUpca = /^\d{12}$/.test(String(barcode));
+  const pattern = barcode ? (isUpca ? encodeUpca(barcode) : encodeCode128(barcode)) : null;
   let bmpPath = null;
   if (pattern) {
     const built = buildBarcodeBmp(pattern, 60);
@@ -625,6 +626,29 @@ function encodeCode128(text) {
   return pattern;
 }
 
+// UPC-A encoding (12 digits → module pattern)
+const UPCA_L = [
+  [3,2,1,1], [2,2,2,1], [2,1,2,2], [1,4,1,1], [1,1,3,2],
+  [1,2,3,1], [1,1,1,4], [1,3,1,2], [1,2,1,3], [3,1,1,2],
+];
+const UPCA_R = [
+  [3,2,1,1], [2,2,2,1], [2,1,2,2], [1,4,1,1], [1,1,3,2],
+  [1,2,3,1], [1,1,1,4], [1,3,1,2], [1,2,1,3], [3,1,1,2],
+];
+
+function encodeUpca(text) {
+  const t = String(text);
+  if (!/^\d{12}$/.test(t)) return null;
+  const digits = t.split('').map(Number);
+  const pattern = [];
+  pattern.push(1, 1, 1); // start guard
+  for (let i = 0; i < 6; i++) pattern.push(...UPCA_L[digits[i]]);
+  pattern.push(1, 1, 1, 1, 1); // center guard
+  for (let i = 6; i < 12; i++) pattern.push(...UPCA_R[digits[i]]);
+  pattern.push(1, 1, 1); // end guard
+  return pattern;
+}
+
 function rasterBitmap(pattern, maxWidthPx, heightPx) {
   const quiet = 10;
   const totalModules = quiet * 2 + pattern.length;
@@ -699,7 +723,8 @@ function buildReceiptBytes({ companyName = '', invoiceNumber = '', date = '', cu
 
 function buildLabelBytes({ name = '', price = 0, barcode = '', sku = '', copies = 1 }) {
   const parts = [];
-  const pattern = barcode ? encodeCode128(barcode) : null;
+  const isUpca = /^\d{12}$/.test(String(barcode));
+  const pattern = barcode ? (isUpca ? encodeUpca(barcode) : encodeCode128(barcode)) : null;
 
   for (let c = 0; c < Math.max(1, Number(copies) || 1); c++) {
     const b = [];
@@ -713,9 +738,17 @@ function buildLabelBytes({ name = '', price = 0, barcode = '', sku = '', copies 
     if (pattern) {
       b.push(ESC, 0x61, 1);
       const code = String(barcode);
-      if (code && /^[\x20-\x7e]+$/.test(code)) {
-        // Native Code128 (GS k 73) - every thermal printer supports this,
-        // unlike raster images which cheap printers silently drop.
+      if (isUpca) {
+        // Native UPC-A (GS k 0) - most reliable for UPC-A on thermal printers.
+        b.push(GS, 0x68, 80);              // barcode height 80 dots
+        b.push(GS, 0x77, 2);               // 2x wide
+        b.push(GS, 0x48, 2);               // HRI text below
+        b.push(GS, 0x6b, 0);               // GS k 0 = UPC-A
+        b.push(...code.split('').map(c => c.charCodeAt(0)));
+        b.push(0x00);                       // NUL terminator
+        b.push(0x0a);
+      } else if (code && /^[\x20-\x7e]+$/.test(code)) {
+        // Native Code128 (GS k 73) - every thermal printer supports this.
         b.push(GS, 0x68, 80);              // barcode height 80 dots
         b.push(GS, 0x77, 2);               // 2x wide
         b.push(GS, 0x48, 2);               // HRI text below

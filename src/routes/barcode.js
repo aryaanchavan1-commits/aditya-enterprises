@@ -22,6 +22,29 @@ function safeCode(code) {
   return String(code || '').replace(/[^A-Za-z0-9.\-_]/g, '');
 }
 
+// UPC-A check digit: 11 data digits → 1 check digit (0-9).
+function upcaCheckDigit(digits11) {
+  const d = String(digits11).split('').map(Number);
+  let sum = 0;
+  for (let i = 0; i < 11; i++) sum += d[i] * (i % 2 === 0 ? 3 : 1);
+  return (10 - (sum % 10)) % 10;
+}
+
+// Generate a random 12-digit UPC-A code (number system 0).
+function randomUpca() {
+  let d = '0';
+  for (let i = 0; i < 9; i++) d += Math.floor(Math.random() * 10);
+  d += upcaCheckDigit(d);
+  return d;
+}
+
+// Check if a string is a valid 12-digit UPC-A code.
+function isUpca(code) {
+  const s = String(code || '');
+  if (!/^\d{12}$/.test(s)) return false;
+  return Number(s[11]) === upcaCheckDigit(s.slice(0, 11));
+}
+
 // Lookup by barcode OR serial, case-insensitive, whitespace-tolerant.
 async function findProductByCode(code) {
   const clean = cleanCode(code);
@@ -92,14 +115,16 @@ router.post('/generate/:productId', async (req, res) => {
     }
     const product = await get('SELECT * FROM products WHERE id = ?', [req.params.productId]);
     if (!product) { res.json({ success: false, error: 'Not found' }); return; }
-    // If the product has a barcode, use it as-is (never regenerate a
-    // different code - otherwise printed labels won't match the DB).
-    const raw = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
-    // safeCode can strip every character (e.g. a barcode of only special
-    // chars) - fall back to a fresh AE code instead of failing silently.
-    const code = safeCode(raw) || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
-const png = await new Promise((resolve, reject) => {
-       bwipjs.toBuffer({ bcid: req.body.type || 'code128', text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (err, buf) => err ? reject(err) : resolve(buf));
+    // If the product already has a valid UPC-A barcode, reuse it.
+    // Otherwise generate a fresh UPC-A code (12 numeric digits).
+    let code = product.barcode;
+    if (!isUpca(code)) code = randomUpca();
+    // Ensure uniqueness: if another product already has this UPC-A, retry.
+    const existing = await get('SELECT id FROM products WHERE barcode = ? AND id != ?', [code, product.id]);
+    if (existing) code = randomUpca();
+    const bcid = isUpca(code) ? 'upca' : 'code128';
+    const png = await new Promise((resolve, reject) => {
+       bwipjs.toBuffer({ bcid, text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (err, buf) => err ? reject(err) : resolve(buf));
      });
     const barcodesDir = path.join(require('../db').dataDir, 'barcodes');
     fs.mkdirSync(barcodesDir, { recursive: true });
@@ -119,10 +144,12 @@ router.post('/generate-bulk', async (req, res) => {
       try {
         const product = await get('SELECT * FROM products WHERE id = ?', [pid]);
         if (!product) continue;
-        const raw = product.barcode || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
-        const code = safeCode(raw) || `AE${Date.now()}${Math.floor(Math.random() * 1000)}`;
-const png = await new Promise((resolve, reject) => {
-           bwipjs.toBuffer({ bcid: 'code128', text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (e, b) => e ? reject(e) : resolve(b));
+        let code = product.barcode;
+        if (!isUpca(code)) code = randomUpca();
+        const dup = await get('SELECT id FROM products WHERE barcode = ? AND id != ?', [code, pid]);
+        if (dup) code = randomUpca();
+        const png = await new Promise((resolve, reject) => {
+           bwipjs.toBuffer({ bcid: 'upca', text: code, scale: 4, height: 15, includetext: true, textxalign: 'center', backgroundcolor: 'FFFFFF' }, (e, b) => e ? reject(e) : resolve(b));
          });
         fs.writeFileSync(path.join(barcodesDir, `${code}.png`), png);
         await run('UPDATE products SET barcode = ?, barcode_image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [code, `/data/barcodes/${code}.png`, pid]);

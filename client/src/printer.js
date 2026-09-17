@@ -812,6 +812,7 @@ function rasterBitmap(pattern, maxWidthPx, heightPx) {
 export function buildLabelEscPos({ name = '', price = 0, barcode = '', sku = '', copies = 1 }) {
   const parts = [];
   const pattern = barcode ? encodeCode128(barcode) : null;
+  const isUpca = /^\d{12}$/.test(String(barcode));
 
   for (let c = 0; c < Math.max(1, Number(copies) || 1); c++) {
     const b = [];
@@ -825,9 +826,17 @@ export function buildLabelEscPos({ name = '', price = 0, barcode = '', sku = '',
     if (pattern) {
       b.push(ESC, 0x61, 1);
       const code = String(barcode);
-      if (code && /^[\x20-\x7e]+$/.test(code)) {
-        // Native Code128 (GS k 73) - every thermal printer supports this,
-        // unlike raster images which cheap printers silently drop.
+      if (isUpca) {
+        // Native UPC-A (GS k 0) - most reliable for UPC-A on thermal printers.
+        b.push(GS, 0x68, 80);
+        b.push(GS, 0x77, 2);
+        b.push(GS, 0x48, 2);
+        b.push(GS, 0x6b, 0);
+        b.push(...code.split('').map(c => c.charCodeAt(0)));
+        b.push(0x00);
+        b.push(0x0a);
+      } else if (code && /^[\x20-\x7e]+$/.test(code)) {
+        // Native Code128 (GS k 73) - every thermal printer supports this.
         b.push(GS, 0x68, 80);
         b.push(GS, 0x77, 2);
         b.push(GS, 0x48, 2);
