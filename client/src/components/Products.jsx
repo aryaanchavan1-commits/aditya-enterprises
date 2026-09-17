@@ -338,24 +338,27 @@ export default function Products() {
   const handleDownloadAllBarcodes = async () => {
     setPdfBusyAll(true);
     try {
-      // First, migrate any legacy barcodes to UPC-A so the PDF shows real,
-      // scannable codes that match the database.
+      // Step 1: Generate UPC-A barcodes for products that don't have one yet.
+      const without = products.filter(p => !p.barcode);
+      if (without.length > 0) {
+        showToast(`Generating barcodes for ${without.length} product(s)...`);
+        await api('/barcode/generate-bulk', { method: 'POST', body: { product_ids: without.map(p => p.id) } });
+      }
+      // Step 2: Migrate any legacy (non-UPC-A) barcodes to scannable UPC-A.
       const nonUpca = products.filter(p => p.barcode && !/^\d{12}$/.test(p.barcode));
       if (nonUpca.length > 0) {
         showToast(`Migrating ${nonUpca.length} legacy barcode(s) to UPC-A...`);
         await api('/barcode/migrate-upca', { method: 'POST', body: {} });
-        // Reload products so we get the new UPC-A barcodes.
-        const refreshed = await api('/products');
-        if (refreshed && refreshed.success) setProducts(refreshed.data);
       }
-      // Fetch ALL products - the visible list may be filtered by search/category.
+      // Step 3: Fetch ALL fresh products and build the PDF.
       const d = await api('/products');
       const allProducts = (d && d.success && d.data) || [];
       const withBarcode = allProducts.filter(p => p.barcode);
-      if (withBarcode.length === 0) return showToast('No products with barcodes yet - generate them first', 'error');
+      if (withBarcode.length === 0) return showToast('Could not generate barcodes for any products', 'error');
       const list = withBarcode.map(p => ({ ...p, quantity: Math.max(1, Math.min(500, Number(p.quantity) || 1)) }));
       const count = downloadBarcodesPdf(list);
       showToast(`PDF downloaded - ${count} barcode label${count > 1 ? 's' : ''} for ${withBarcode.length} product${withBarcode.length > 1 ? 's' : ''}, grouped by category`);
+      loadProducts();
     } catch (err) {
       showToast('PDF failed: ' + (err.message || 'could not load products'), 'error');
     } finally {
